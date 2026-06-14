@@ -1,0 +1,78 @@
+name: Build and Release LMMs Engine binaries
+
+on:
+  push:
+    tags:
+      - 'v*'  # Push events to matching v*, i.e. v1.0, v20.15.10
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install System Dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc
+        
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+        pip install llama-cpp-python
+        
+    - name: Build Linux Binary
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        python -m PyInstaller --onefile --name lmms-engine-linux-amd64 --hidden-import "llama_cpp" --hidden-import "requests" --hidden-import "rich" --collect-all "llama_cpp" --exclude-module "torch" --exclude-module "tensorflow" --exclude-module "pandas" --exclude-module "scipy" --exclude-module "django" --exclude-module "matplotlib" --exclude-module "PyQt5" --exclude-module "tkinter" main.py
+        
+    - name: Build Windows Binary
+      if: matrix.os == 'windows-latest'
+      run: |
+        python -m PyInstaller --onefile --name lmms-engine-windows-amd64.exe --hidden-import "llama_cpp" --hidden-import "requests" --hidden-import "rich" --collect-all "llama_cpp" --exclude-module "torch" --exclude-module "tensorflow" --exclude-module "pandas" --exclude-module "scipy" --exclude-module "django" --exclude-module "matplotlib" --exclude-module "PyQt5" --exclude-module "tkinter" main.py
+        
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: binary-${{ matrix.os }}
+        path: dist/*
+        
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: binaries
+        merge-multiple: true
+        
+    - name: Create GitHub Release and Upload Binaries
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "latest"
+        name: "LMMs Engine Latest Build"
+        draft: false
+        prerelease: false
+        files: binaries/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

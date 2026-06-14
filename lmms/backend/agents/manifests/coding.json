@@ -1,0 +1,9 @@
+{
+    "name": "CodingAgent",
+    "version": "1.0",
+    "capabilities": ["Coding", "Refactoring", "ToolCalling"],
+    "permissions": ["ReadFile", "WriteFile", "Terminal"],
+    "required_tools": ["view_file", "write_to_file", "run_command", "grep_search"],
+    "supported_intents": ["Coding"],
+    "priority": 100
+}

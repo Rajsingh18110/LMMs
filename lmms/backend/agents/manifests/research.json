@@ -1,0 +1,9 @@
+{
+    "name": "ResearchAgent",
+    "version": "1.0",
+    "capabilities": ["Text", "Reasoning", "ToolCalling"],
+    "permissions": ["WebSearch", "ReadFile"],
+    "required_tools": ["search_web", "view_file"],
+    "supported_intents": ["Research", "GeneralChat"],
+    "priority": 50
+}

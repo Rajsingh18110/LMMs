@@ -1,0 +1,97 @@
+name: Build and Release LMMs Engine Binaries
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: lmms-engine-linux-amd64
+            executable_name: lmms-engine-linux-amd64
+          - os: windows-latest
+            artifact_name: lmms-engine-windows-amd64.exe
+            executable_name: lmms-engine-windows-amd64.exe
+          - os: macos-latest
+            artifact_name: lmms-engine-darwin-amd64
+            executable_name: lmms-engine-darwin-amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install pyinstaller cython
+          pip install --prefer-binary -r requirements.txt
+
+      - name: Build Binary with PyInstaller
+        run: |
+          pyinstaller --onefile --collect-all llama_cpp --name ${{ matrix.executable_name }} main.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.executable_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lmms-engine-linux-amd64
+          path: dist
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lmms-engine-windows-amd64.exe
+          path: dist
+
+      - name: Download Mac Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lmms-engine-darwin-amd64
+          path: dist
+
+      - name: Delete old release (if exists)
+        uses: dev-drprasad/delete-tag-and-release@v0.2.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: latest
+          delete_release: true
+        continue-on-error: true
+
+      - name: Create New Latest Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "LMMs Engine Latest Build"
+          tag_name: "latest"
+          files: |
+            dist/lmms-engine-linux-amd64
+            dist/lmms-engine-windows-amd64.exe
+            dist/lmms-engine-darwin-amd64
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

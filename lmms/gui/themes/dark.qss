@@ -1,0 +1,139 @@
+/* dark.qss - LM Studio / Cursor inspired dark theme */
+
+QMainWindow {
+    background-color: #0e1116; /* Very dark background */
+}
+
+QWidget {
+    color: #e5e7eb; /* Light gray text */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+}
+
+#Sidebar {
+    background-color: #161b22;
+    border-right: 1px solid #30363d;
+}
+
+#NavButton {
+    background-color: transparent;
+    color: #8b949e;
+    text-align: left;
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+#NavButton:hover {
+    background-color: #21262d;
+    color: #c9d1d9;
+}
+
+#NavButton:checked {
+    background-color: #1f6feb; /* Accent blue */
+    color: #ffffff;
+}
+
+#ContentArea {
+    background-color: #0e1116;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    border: none;
+    background: transparent;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #30363d;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #484f58;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+}
+
+/* Chat Input Area */
+QTextEdit, QPlainTextEdit, QLineEdit {
+    background-color: #161b22;
+    color: #e5e7eb;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px;
+    selection-background-color: #1f6feb;
+}
+
+QTextEdit:focus, QPlainTextEdit:focus, QLineEdit:focus {
+    border: 1px solid #1f6feb;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+
+QPushButton:hover {
+    background-color: #30363d;
+    border: 1px solid #8b949e;
+}
+
+QPushButton:pressed {
+    background-color: #21262d;
+}
+
+/* Primary Button */
+QPushButton#PrimaryButton {
+    background-color: #238636;
+    color: #ffffff;
+    border: 1px solid #2ea043;
+}
+
+QPushButton#PrimaryButton:hover {
+    background-color: #2ea043;
+}
+
+/* Dock Widgets & Separators (VS Code style boundaries) */
+QMainWindow::separator {
+    background: #30363d;
+    width: 2px;
+    height: 2px;
+}
+
+QMainWindow::separator:hover {
+    background: #58a6ff;
+}
+
+QSplitter::handle {
+    background: #30363d;
+}
+
+QSplitter::handle:hover {
+    background: #58a6ff;
+}
+
+QDockWidget {
+    color: #8b949e;
+}
+
+QDockWidget::title {
+    text-align: left;
+    background: #0d1117;
+    padding-left: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: bold;
+    border-bottom: 1px solid #30363d;
+}

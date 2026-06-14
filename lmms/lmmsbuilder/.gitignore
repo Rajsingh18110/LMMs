@@ -1,0 +1,20 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Build files
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Cython compiled files
+*.so
+*.pyd
+*.c
+*.cpp
+
+# Venvs
+venv/
+.env
