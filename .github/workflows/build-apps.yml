@@ -26,22 +26,23 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller rich requests
+        pip install -r requirements.txt
 
     - name: Build All-in-One Application
       run: |
-        pyinstaller --onefile --name LMMs-${{ matrix.os }} lmms_launcher.py
+        pyinstaller --onefile --name LMMs-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi --hidden-import PyQt6 --hidden-import qasync lmms_launcher.py
 
     - name: Build Engine Application
       run: |
-        pyinstaller --onefile --name LMMs-Engine-${{ matrix.os }} lmms/lmmsengine/main.py
+        pyinstaller --onefile --name LMMs-Engine-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi lmms/lmmsengine/main.py
 
     - name: Build Backend Application
       run: |
-        pyinstaller --onefile --name LMMs-Backend-${{ matrix.os }} lmms/backend/main.py
+        pyinstaller --onefile --name LMMs-Backend-${{ matrix.os }} --hidden-import nest_asyncio lmms/backend/main.py
 
     - name: Build GUI Application
       run: |
-        pyinstaller --onefile --name LMMs-GUI-${{ matrix.os }} lmms_gui_entry.py
+        pyinstaller --onefile --name LMMs-GUI-${{ matrix.os }} --hidden-import PyQt6 --hidden-import qasync lmms_gui_entry.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
