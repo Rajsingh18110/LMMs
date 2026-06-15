@@ -324,15 +324,15 @@ def download_model_task(model_name: str):
                 models = list(api.list_models(search=search_term, filter="gguf", limit=1))
                 if models:
                     repo_id = models[0].id
-            else:
-                downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
-                try:
-                    with open(downloads_file, "r") as f: state = json.load(f)
-                    state[model_name] = {"status": "failed (not found)", "repo": model_name, "file": ""}
-                    with open(downloads_file, "w") as f: json.dump(state, f)
-                except Exception: pass
-                print(f"Could not find any GGUF repo matching {model_name}")
-                return
+                else:
+                    downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
+                    try:
+                        with open(downloads_file, "r") as f: state = json.load(f)
+                        state[model_name] = {"status": "failed (not found)", "repo": model_name, "file": ""}
+                        with open(downloads_file, "w") as f: json.dump(state, f)
+                    except Exception: pass
+                    print(f"Could not find any GGUF repo matching {model_name}")
+                    return
                 
         files = api.list_repo_files(repo_id=repo_id)
         gguf_files = [f for f in files if f.endswith(".gguf")]
