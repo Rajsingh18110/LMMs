@@ -38,11 +38,11 @@ jobs:
 
     - name: Build Backend Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-Backend-${{ matrix.os }} --hidden-import nest_asyncio lmms/backend/main.py
+        pyinstaller --onefile --paths . --name LMMs-Backend-${{ matrix.os }} --hidden-import nest_asyncio --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate lmms/backend/main.py
 
     - name: Build GUI Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-GUI-${{ matrix.os }} --hidden-import PyQt6 --hidden-import qasync lmms_gui_entry.py
+        pyinstaller --onefile --paths . --name LMMs-GUI-${{ matrix.os }} --hidden-import PyQt6 --hidden-import qasync --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate lmms_gui_entry.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
