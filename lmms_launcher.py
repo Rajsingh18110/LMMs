@@ -118,13 +118,13 @@ def main():
         launch(args[0], args[1:])
         return
         
-    if args[0] in ["-g", "-c", "-e"]:
-        mode_map = {"-g": "gui", "-c": "cli", "-e": "engine"}
+    if args[0] in ["-g", "-c", "-e", "--gui", "--cli", "--engine"]:
+        mode_map = {"-g": "gui", "-c": "cli", "-e": "engine", "--gui": "gui", "--cli": "cli", "--engine": "engine"}
         launch(mode_map[args[0]], args[1:])
         return
 
     # Engine commands should be routed directly to the engine
-    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server"]
+    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]
     if args[0] in engine_commands or args[0] in ["--air", "-air"]:
         launch("engine", args)
         return
@@ -163,8 +163,6 @@ def launch(mode, forward_args=None):
         
         if forward_args:
             cmd.extend(forward_args)
-        else:
-            cmd.append("server")
             
     try:
         subprocess.run(cmd, env=env)

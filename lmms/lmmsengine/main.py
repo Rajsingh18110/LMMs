@@ -302,7 +302,7 @@ def main():
     clean_args = [a for a in args if a not in ["--air", "-air"]]
     
     # Engine CLI Commands Bypass
-    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server"]:
+    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]:
         import requests, json, sys, os
         cmd = clean_args[0]
         try:
@@ -1076,9 +1076,16 @@ def main():
                 else:
                     print("Usage: lmms air [ps|stats|cache]")
                     sys.exit(1)
-            elif cmd == "server":
+            elif cmd in ["server", "-server", "--server"]:
                 from lmms.api.server import run_server
-                run_server(11435)
+                port = 11435
+                if "-port" in clean_args:
+                    try:
+                        port_idx = clean_args.index("-port")
+                        port = int(clean_args[port_idx + 1])
+                    except (ValueError, IndexError):
+                        print("Invalid port specified. Defaulting to 11435.")
+                run_server(port)
                 sys.exit(0)
             else:
                 print(f"Unknown command: {cmd}")
