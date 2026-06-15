@@ -126,13 +126,16 @@ def download_binary(component_name):
         reporter.print_error(f"Download failed: {e}")
         return False
 
-def install_component(component_name):
+def install_component(component_name, force=False):
     installed = get_installed_components()
-    if installed.get(component_name):
-        reporter.print_success(f"✓ {component_name.capitalize()} is already installed. Skipping.")
+    if installed.get(component_name) and not force:
+        reporter.print_success(f"✓ {component_name.capitalize()} is already installed. Skipping. (Use update to force)")
         return True, ""
 
-    reporter.print_step(f"Installing {component_name.capitalize()}...")
+    if force:
+        reporter.print_step(f"Updating {component_name.capitalize()} to the latest version...")
+    else:
+        reporter.print_step(f"Installing {component_name.capitalize()}...")
     
     if component_name in ["engine", "backend", "gui", "cli", "all"]:
         # We now download the compiled binary for ALL components instead of git cloning

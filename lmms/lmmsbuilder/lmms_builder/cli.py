@@ -20,6 +20,7 @@ def print_help():
     print("  LMMs-builder -check                 : Automatically detects OS, hardware compatibility, and installed LMMs components.")
     print("  LMMs-builder install --<component>  : Downloads and installs a specific component (e.g., --engine, --gui). Automatically installs dependencies.")
     print("  LMMs-builder install --all          : Downloads and installs the entire LMMs ecosystem.")
+    print("  LMMs-builder update --all           : Forces a download of the latest code/binary version from GitHub Releases.")
     
     print("\n[bold cyan]2) Repair & Rebuild[/bold cyan]")
     print("  LMMs-repair LMMs -<component>       : Repairs a corrupted component without deleting your saved data (chats, persona, models).")
@@ -50,7 +51,8 @@ def builder_main():
             print("  - None")
         return
 
-    if "install" in sys.argv:
+    if "install" in sys.argv or "update" in sys.argv:
+        force_update = "update" in sys.argv
         components_to_install = []
         if "--all" in sys.argv:
             components_to_install = ["all"]
@@ -65,7 +67,7 @@ def builder_main():
             components_to_install.append("backend")
             
         for comp in components_to_install:
-            installer.install_component(comp)
+            installer.install_component(comp, force=force_update)
         return
         
     print_help()
