@@ -347,7 +347,7 @@ def main():
                 sys.exit(0)
                 
             elif cmd == "pull" and len(clean_args) > 1:
-                model_name = clean_args[1]
+                model_name = "-".join(clean_args[1:])
                 print(f"Pulling {model_name}...")
                 
                 from huggingface_hub import HfApi, hf_hub_download
