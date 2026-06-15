@@ -24,7 +24,7 @@ for cuda_path in cuda_paths:
 
 def check_for_updates():
     try:
-        engine_dir = os.path.join(os.getcwd(), "lmms", "lmmsengine")
+        engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine")
         if os.path.exists(engine_dir):
             subprocess.run(["git", "fetch", "origin", "main"], cwd=engine_dir, capture_output=True, timeout=3)
             res = subprocess.run(["git", "status", "-sb"], cwd=engine_dir, capture_output=True, text=True)
@@ -47,13 +47,13 @@ def ensure_engine_running():
         log_file = os.path.join(log_dir, "server.log")
         
         env = os.environ.copy()
-        env["PYTHONPATH"] = os.getcwd()
+        env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
         
         with open(log_file, "a") as f:
             if getattr(sys, 'frozen', False):
                 p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
             else:
-                engine_script = os.path.join(os.getcwd(), "lmms", "lmmsengine", "main.py")
+                engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine", "main.py")
                 p = subprocess.Popen([sys.executable, engine_script, "server"], stdout=f, stderr=f, env=env, start_new_session=True)
         
         # Give it a moment to boot
@@ -84,8 +84,8 @@ def main():
 
     if args[0] in ["--update", "update"]:
         print("\033[96m[INFO]\033[0m Checking for updates...")
-        subprocess.run(["git", "pull", "origin", "main"], cwd=os.getcwd())
-        engine_dir = os.path.join(os.getcwd(), "lmms", "lmmsengine")
+        subprocess.run(["git", "pull", "origin", "main"], cwd=os.path.dirname(os.path.abspath(__file__)))
+        engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine")
         if os.path.exists(engine_dir):
             print("\033[96m[INFO]\033[0m Updating LMMs Engine...")
             subprocess.run(["git", "pull", "origin", "main"], cwd=engine_dir)
@@ -137,7 +137,7 @@ def launch(mode, forward_args=None):
         forward_args = []
         
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.getcwd()
+    env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
 
     # In a compiled environment, this would call ./lmms-backend or ./lmms-engine
     # For now, we call the python scripts.
@@ -158,7 +158,7 @@ def launch(mode, forward_args=None):
         if getattr(sys, 'frozen', False):
             cmd = [sys.executable, "--internal-engine"]
         else:
-            engine_script = os.path.join(os.getcwd(), "lmms", "lmmsengine", "main.py")
+            engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine", "main.py")
             cmd = [sys.executable, engine_script]
         
         if forward_args:
