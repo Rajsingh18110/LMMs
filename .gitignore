@@ -17,3 +17,4 @@ recovered_*.txt
 dist/
 build/
 *.spec
+*.zip
