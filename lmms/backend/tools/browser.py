@@ -14,6 +14,9 @@ class BrowserTool:
         if not self.playwright:
             self.playwright = sync_playwright().start()
             
+        if user_data_dir is None:
+            user_data_dir = os.path.expanduser("~/.lmms/browser_profile")
+            
         if not self.browser:
             if user_data_dir:
                 try:

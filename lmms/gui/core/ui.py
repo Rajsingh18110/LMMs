@@ -145,6 +145,7 @@ def stream_response(generator, model_name: str = "Assistant", show_load_time: bo
                     stream_callback(full_text)
         return full_text
 
+    import re
     with Live(spinner, console=console, auto_refresh=True, refresh_per_second=15) as live:
         for chunk in generator:
             if load_time is None:
@@ -153,9 +154,13 @@ def stream_response(generator, model_name: str = "Assistant", show_load_time: bo
             token = chunk.get("message", {}).get("content", "")
             if token:
                 full_text += token
+                
+                # Filter out thinking tags for display
+                display_text = re.sub(r'<think>.*?(</think>|$)', '', full_text, flags=re.DOTALL).strip()
+                
                 live.update(
                     Panel(
-                        Markdown(full_text),
+                        Markdown(display_text),
                         title=f"[bold]{model_name}[/bold]",
                         title_align="left",
                         border_style="cyan"
@@ -171,8 +176,9 @@ def stream_response(generator, model_name: str = "Assistant", show_load_time: bo
         else:
             footer = f"⚡ {total_time:.1f}s | ~{tokens} tokens | [dim][c] copy[/dim]"
             
+        display_text = re.sub(r'<think>.*?(</think>|$)', '', full_text, flags=re.DOTALL).strip()
         live.update(Panel(
-            Markdown(full_text),
+            Markdown(display_text),
             title=f"[bold]{model_name}[/bold]",
             title_align="left",
             subtitle=footer,

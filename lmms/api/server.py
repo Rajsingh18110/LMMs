@@ -309,10 +309,21 @@ def download_model_task(model_name: str):
             repo_id = model_name
         else:
             # Map ollama tags to HF search
-            search_term = model_name.replace(":", "-")
-            models = list(api.list_models(search=search_term, filter="gguf", limit=1))
-            if models:
-                repo_id = models[0].id
+            search_term = model_name.replace(":", "-").lower()
+            KNOWN_MODELS = {
+                "qwen3-8b": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+                "qwen3": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+                "gemma4": "bartowski/gemma-2-2b-it-GGUF",
+                "gemma": "bartowski/gemma-2-2b-it-GGUF",
+                "llama3": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF",
+                "llama3-8b": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF"
+            }
+            if search_term in KNOWN_MODELS:
+                repo_id = KNOWN_MODELS[search_term]
+            else:
+                models = list(api.list_models(search=search_term, filter="gguf", limit=1))
+                if models:
+                    repo_id = models[0].id
             else:
                 downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
                 try:
