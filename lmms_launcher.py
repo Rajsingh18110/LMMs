@@ -45,8 +45,8 @@ def ensure_engine_running():
             if getattr(sys, 'frozen', False):
                 p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
             else:
-                engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine", "main.py")
-                p = subprocess.Popen([sys.executable, engine_script, "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+                cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
+                p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
         
         # Give it a moment to boot
         time.sleep(2)
@@ -146,8 +146,8 @@ def launch(mode, forward_args=None):
         if getattr(sys, 'frozen', False):
             cmd = [sys.executable, "--internal-engine"]
         else:
-            engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine", "main.py")
-            cmd = [sys.executable, engine_script]
+            cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
+            # cmd already set
         
         if forward_args:
             cmd.extend(forward_args)
