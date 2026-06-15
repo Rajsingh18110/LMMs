@@ -1,6 +1,6 @@
 import os
 import json
-import faiss
+
 import numpy as np
 import requests
 
@@ -17,10 +17,12 @@ class VectorDB:
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
         
         if os.path.exists(self.index_path):
+            import faiss
             self.index = faiss.read_index(self.index_path)
             with open(self.meta_path, 'r') as f:
                 self.metadata = json.load(f)
         else:
+            import faiss
             self.index = faiss.IndexFlatL2(self.dim)
             self.metadata = {}
 
@@ -66,6 +68,7 @@ class VectorDB:
         return results
 
     def save(self):
+        import faiss
         faiss.write_index(self.index, self.index_path)
         with open(self.meta_path, 'w') as f:
             json.dump(self.metadata, f)
