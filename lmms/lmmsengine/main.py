@@ -11,8 +11,9 @@ import json
 import site
 
 ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
-if ENGINE_DIR not in sys.path:
-    sys.path.insert(0, ENGINE_DIR)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(ENGINE_DIR))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # Allow PyInstaller executable to load heavy modules (like torch) installed on the host system
 try:
