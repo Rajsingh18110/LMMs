@@ -123,6 +123,12 @@ def main():
         launch(mode_map[args[0]], args[1:])
         return
 
+    # Engine commands should be routed directly to the engine
+    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server"]
+    if args[0] in engine_commands or args[0] in ["--air", "-air"]:
+        launch("engine", args)
+        return
+
     # Pass everything else to the CLI (Backend OS)
     launch("cli", args)
 
