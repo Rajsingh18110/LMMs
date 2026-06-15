@@ -4,6 +4,7 @@ import os
 import shutil
 import platform
 import subprocess
+import json
 from pathlib import Path
 
 from . import hardware
