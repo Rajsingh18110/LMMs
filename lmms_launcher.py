@@ -5,6 +5,14 @@ import subprocess
 import time
 import urllib.request
 import threading
+import site
+
+# Allow PyInstaller executable to load heavy modules (like torch) installed on the host system
+try:
+    sys.path.extend(site.getsitepackages())
+    sys.path.append(site.getusersitepackages())
+except Exception:
+    pass
 
 # FIX for CUDA 12 libcudart.so.12 missing in llama_cpp
 cuda_paths = ["/usr/local/cuda-12.6/lib64", "/usr/local/cuda-12.4/lib64", "/usr/local/lib/ollama/cuda_v12"]

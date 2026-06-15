@@ -8,10 +8,18 @@ import sys
 import os
 import subprocess
 import json
+import site
 
 ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
 if ENGINE_DIR not in sys.path:
     sys.path.insert(0, ENGINE_DIR)
+
+# Allow PyInstaller executable to load heavy modules (like torch) installed on the host system
+try:
+    sys.path.extend(site.getsitepackages())
+    sys.path.append(site.getusersitepackages())
+except Exception:
+    pass
 
 API_URL = "http://localhost:11435/v1"
 def is_root():
@@ -647,7 +655,7 @@ def main():
                         choice = input("Would you like to DOWNLOAD the Support Engine package? (y/n): ")
                         if choice.strip().lower() == "y":
                             print("\033[92mTo install the support package, please run:\033[0m")
-                            print(f"{sys.executable} -m pip install torch torchvision torchaudio transformers accelerate soundfile kokoro --break-system-packages")
+                            print("python3 -m pip install torch torchvision torchaudio transformers accelerate soundfile kokoro --break-system-packages")
                             sys.exit(0)
                         else:
                             print("\033[91mAborted.\033[0m")
