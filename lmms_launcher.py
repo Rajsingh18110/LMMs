@@ -118,8 +118,8 @@ def main():
         launch(args[0], args[1:])
         return
         
-    if args[0] in ["-g", "-c", "-e", "--gui", "--cli", "--engine"]:
-        mode_map = {"-g": "gui", "-c": "cli", "-e": "engine", "--gui": "gui", "--cli": "cli", "--engine": "engine"}
+    if args[0] in ["gui", "cli", "engine", "-g", "-c", "-e", "--gui", "--cli", "--engine"]:
+        mode_map = {"gui": "gui", "cli": "cli", "engine": "engine", "-g": "gui", "-c": "cli", "-e": "engine", "--gui": "gui", "--cli": "cli", "--engine": "engine"}
         launch(mode_map[args[0]], args[1:])
         return
 
