@@ -23,16 +23,8 @@ for cuda_path in cuda_paths:
             os.environ["LD_LIBRARY_PATH"] = f"{cuda_path}:{current_ld}" if current_ld else cuda_path
 
 def check_for_updates():
-    try:
-        engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine")
-        if os.path.exists(engine_dir):
-            subprocess.run(["git", "fetch", "origin", "main"], cwd=engine_dir, capture_output=True, timeout=3)
-            res = subprocess.run(["git", "status", "-sb"], cwd=engine_dir, capture_output=True, text=True)
-            if "behind" in res.stdout:
-                print("\n\033[93m[Update Available]\033[0m A new version of LMMs Engine is available on GitHub!")
-                print("Run 'lmms --update' or 'python3 lmms_launcher.py --update' to install it.\n")
-    except Exception:
-        pass
+    # Note: LMMs-builder handles updates via GitHub releases/zip now
+    pass
 
 CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
 
@@ -83,13 +75,9 @@ def main():
         return
 
     if args[0] in ["--update", "update"]:
-        print("\033[96m[INFO]\033[0m Checking for updates...")
-        subprocess.run(["git", "pull", "origin", "main"], cwd=os.path.dirname(os.path.abspath(__file__)))
-        engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms", "lmmsengine")
-        if os.path.exists(engine_dir):
-            print("\033[96m[INFO]\033[0m Updating LMMs Engine...")
-            subprocess.run(["git", "pull", "origin", "main"], cwd=engine_dir)
-        print("\033[92m[SUCCESS]\033[0m Update complete! Please restart LMMs.")
+        print("\033[96m[INFO]\033[0m LMMs updates are now managed by the LMMs-builder.")
+        print("Running: LMMs-builder update --all")
+        subprocess.run(["LMMs-builder", "update", "--all"])
         return
         
     if args[0] in ["--stop", "stop"]:
