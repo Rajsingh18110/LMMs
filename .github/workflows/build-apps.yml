@@ -30,19 +30,19 @@ jobs:
 
     - name: Build All-in-One Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi --hidden-import PyQt6 --hidden-import qasync --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --exclude-module llama_cpp --exclude-module llama_cpp_python lmms_launcher.py
+        pyinstaller --onefile --paths . --name LMMs-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi --hidden-import PyQt6 --hidden-import qasync --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --collect-all llama_cpp --collect-all llama_cpp_python lmms_launcher.py
 
     - name: Build Engine Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-Engine-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --exclude-module llama_cpp --exclude-module llama_cpp_python lmms/lmmsengine/main.py
+        pyinstaller --onefile --paths . --name LMMs-Engine-${{ matrix.os }} --hidden-import nest_asyncio --hidden-import uvicorn --hidden-import fastapi --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --collect-all llama_cpp --collect-all llama_cpp_python lmms/lmmsengine/main.py
 
     - name: Build Backend Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-Backend-${{ matrix.os }} --hidden-import nest_asyncio --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --exclude-module llama_cpp --exclude-module llama_cpp_python lmms/backend/main.py
+        pyinstaller --onefile --paths . --name LMMs-Backend-${{ matrix.os }} --hidden-import nest_asyncio --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --collect-all llama_cpp --collect-all llama_cpp_python lmms/backend/main.py
 
     - name: Build GUI Application
       run: |
-        pyinstaller --onefile --paths . --name LMMs-GUI-${{ matrix.os }} --hidden-import PyQt6 --hidden-import qasync --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --exclude-module llama_cpp --exclude-module llama_cpp_python lmms_gui_entry.py
+        pyinstaller --onefile --paths . --name LMMs-GUI-${{ matrix.os }} --hidden-import PyQt6 --hidden-import qasync --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module accelerate --collect-all llama_cpp --collect-all llama_cpp_python lmms_gui_entry.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
