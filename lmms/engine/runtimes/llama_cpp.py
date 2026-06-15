@@ -48,7 +48,7 @@ class LlamaCppRuntime(RuntimeContract):
             model_instance = Llama(
                 model_path=full_path,
                 n_gpu_layers=-1, # All layers to GPU
-                n_ctx=4096,
+                n_ctx=32768,
                 flash_attn=True,
                 chat_format="chatml",
                 verbose=False

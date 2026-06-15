@@ -77,12 +77,14 @@ class CacheManager:
     def can_fit(self, model_size_gb: float) -> bool:
         """Simple boolean check before loading."""
         if torch and torch.cuda.is_available():
-            _, _, available = self._get_cuda_info()
+            _, _, vram_available = self._get_cuda_info()
+            _, _, ram_available = self._get_ram_info()
+            available = vram_available + ram_available
         else:
             _, _, available = self._get_ram_info()
             
-        # 0.5 GB safety margin
-        return (available - model_size_gb - 0.5) > 0
+        # 1.0 GB safety margin
+        return (available - model_size_gb - 1.0) > 0
 
     def load_model(self, model_name: str, model_size_gb: float):
         """Check memory, load model if fits, else raise VRAMInsufficientError."""

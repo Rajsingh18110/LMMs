@@ -806,6 +806,16 @@ lmms update
 
             # Chat Prompt Fallback
             else:
+                if cmd.startswith("@problem"):
+                    console.print("[dim][Autonomous] @problem macro activated. Commencing automated debugging...[/dim]")
+                    cmd = (
+                        "I am encountering a problem in my codebase. "
+                        "Please immediately use terminal.run to check `git status`, `git log -n 3`, "
+                        "and use `grep` or view files to find any recent syntax errors, tracebacks, or bugs. "
+                        "Once you find the issue, fix it autonomously using files.write or files.read, and test it. "
+                        "After fixing, use git to commit the changes. "
+                        f"User's extra context: {cmd.replace('@problem', '').strip()}"
+                    )
                 if not check_engine_health():
                     console.print("[red]Engine is offline. Cannot generate response.[/red]")
                     continue
