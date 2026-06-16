@@ -1,7 +1,7 @@
 import httpx
 import subprocess
 import os
-from lmms.backend.tools.core_tools.base import ToolResult
+from lmms.backend.tools.core_tools.tools.base import ToolResult
 from lmms.backend.logic.manager import backend_manager
 
 def get_github_token():

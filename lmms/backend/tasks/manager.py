@@ -3,7 +3,7 @@ import uuid
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
-from lmms.backend.services.core_services.events import EventManager
+from lmms.backend.services.core_services.services.events import EventManager
 
 class TaskManager:
     """

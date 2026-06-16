@@ -1,7 +1,7 @@
 import os
 from typing import List, Dict, Any
 from lmms.backend.contracts.provider import ProviderContract
-from lmms.backend.models.manifest import ModelManifest
+
 
 class LMStudioProvider(ProviderContract):
     def scan_models(self) -> List[Dict[str, Any]]:
@@ -15,15 +15,15 @@ class LMStudioProvider(ProviderContract):
                         rel_path = os.path.relpath(path, lm_studio_dir)
                         model_id = f"lmstudio/{rel_path}"
                         size = os.path.getsize(path)
-                        manifest = ModelManifest(
-                            model_id=model_id,
-                            provider="LM Studio",
-                            path=path,
-                            format="GGUF" if f.endswith(".gguf") else "Safetensors",
-                            size=size,
-                            source="Imported (LM Studio)"
-                        )
-                        manifests.append(manifest.to_dict())
+                        manifest = {
+                            "model_id": model_id,
+                            "provider": "LM Studio",
+                            "path": path,
+                            "format": "GGUF" if f.endswith(".gguf") else "Safetensors",
+                            "size": size,
+                            "source": "Imported (LM Studio)"
+                        }
+                        manifests.append(manifest)
         return manifests
 
     def fetch_model(self, model_id: str) -> bool:

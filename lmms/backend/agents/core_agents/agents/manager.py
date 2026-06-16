@@ -1,9 +1,9 @@
 import os
 from typing import Dict, Any, List, Optional, AsyncGenerator
 
-from lmms.backend.agents.core_agents.base import BaseAgent
+from lmms.backend.agents.core_agents.agents.base import BaseAgent
 from lmms.backend.agents.core_agents.agents.context import ExecutionContext
-from lmms.backend.agents.core_agents.history import ActionHistory
+from lmms.backend.agents.core_agents.agents.history import ActionHistory
 
 class AgentManager:
     """
@@ -21,8 +21,8 @@ class AgentManager:
 
     def _register_default_agents(self):
         try:
-            from lmms.backend.agents.core_agents.specialized.coding import CodingAgent
-            from lmms.backend.agents.core_agents.specialized.vision import VisionAgent
+            from lmms.backend.agents.core_agents.agents.specialized.coding import CodingAgent
+            from lmms.backend.agents.core_agents.agents.specialized.vision import VisionAgent
             
             self.register_agent(CodingAgent())
             self.register_agent(VisionAgent())

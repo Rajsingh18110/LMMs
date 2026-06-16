@@ -1,7 +1,7 @@
 import os
 from typing import List, Dict, Any
 from lmms.backend.contracts.provider import ProviderContract
-from lmms.backend.models.manifest import ModelManifest
+
 
 class HuggingFaceProvider(ProviderContract):
     def scan_models(self) -> List[Dict[str, Any]]:
@@ -13,14 +13,14 @@ class HuggingFaceProvider(ProviderContract):
                     parts = repo_dir.split("--")
                     if len(parts) >= 3:
                         model_id = f"{parts[1]}/{parts[2]}"
-                        manifest = ModelManifest(
-                            model_id=model_id,
-                            provider="Hugging Face",
-                            path=os.path.join(hf_dir, repo_dir),
-                            format="Unknown",
-                            source="Imported (HF Cache)"
-                        )
-                        manifests.append(manifest.to_dict())
+                        manifest = {
+                            "model_id": model_id,
+                            "provider": "Hugging Face",
+                            "path": os.path.join(hf_dir, repo_dir),
+                            "format": "Unknown",
+                            "source": "Imported (HF Cache)"
+                        }
+                        manifests.append(manifest)
         return manifests
 
     def fetch_model(self, model_id: str) -> bool:

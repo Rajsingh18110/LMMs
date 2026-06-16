@@ -1,5 +1,5 @@
 from typing import Dict, Any, AsyncGenerator
-from lmms.backend.agents.core_agents.base import BaseAgent
+from lmms.backend.agents.core_agents.agents.base import BaseAgent
 from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 
 class VisionAgent(BaseAgent):

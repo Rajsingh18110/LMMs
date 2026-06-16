@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 from lmms.backend.tasks.core_tasks.tasks.task import Task
-from lmms.backend.tools.core_tools.base import ToolDefinition
+from lmms.backend.tools.core_tools.tools.base import ToolDefinition
 
 @dataclass
 class ExecutionContext:

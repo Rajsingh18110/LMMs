@@ -4,8 +4,8 @@ from pathlib import Path
 
 from .cache_manager import CacheManager, CachedModel
 from .profiles import ProfileManager
-from lmms.core.services.events import EventManager
-from lmms.core.services.connection import ConnectionManager
+from lmms.backend.services.core_services.services.events import EventManager
+from lmms.engine.connection import ConnectionManager
 
 class LoadWorker(QThread):
     """Loads a GGUF model off the UI thread."""

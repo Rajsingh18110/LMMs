@@ -1,8 +1,8 @@
 import os
 import time
 import sqlite3
-from lmms.backend.tools.core_tools.base import ToolResult
-from lmms.backend.config.config.permissions import get_permission_level
+from lmms.backend.tools.core_tools.tools.base import ToolResult
+from lmms.backend.config.permissions import get_permission_level
 
 def init_ledger_db():
     db_path = os.path.expanduser("~/.lmms/action_ledger.db")

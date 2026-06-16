@@ -75,7 +75,7 @@ class BackendManager:
 
     @property
     def events(self):
-        from lmms.backend.services.core_services.events import event_bus
+        from lmms.backend.services.core_services.services.events import event_bus
         return event_bus
 
     @property
@@ -157,9 +157,9 @@ class BackendManager:
     @property
     def tools(self):
         if self._tool_executor is None:
-            from lmms.backend.tools.core_tools.registry import ToolRegistry
-            from lmms.backend.tools.core_tools.key_manager import KeyManager
-            from lmms.backend.tools.core_tools.executor import ToolExecutor
+            from lmms.backend.tools.core_tools.tools.registry import ToolRegistry
+            from lmms.backend.tools.core_tools.tools.key_manager import KeyManager
+            from lmms.backend.tools.core_tools.tools.executor import ToolExecutor
             km = KeyManager()
             registry = ToolRegistry(km)
             self._tool_executor = ToolExecutor(registry, km)

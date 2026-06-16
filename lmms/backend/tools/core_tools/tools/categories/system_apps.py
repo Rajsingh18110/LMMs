@@ -1,7 +1,7 @@
 import subprocess
 import shutil
-from lmms.backend.tools.core_tools.base import ToolResult
-from lmms.backend.config.config.permissions import get_permission_level
+from lmms.backend.tools.core_tools.tools.base import ToolResult
+from lmms.backend.config.permissions import get_permission_level
 
 async def execute_apt_search(params: dict) -> ToolResult:
     package_name = params.get("package_name")

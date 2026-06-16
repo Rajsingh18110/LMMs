@@ -71,7 +71,7 @@ class DownloadManager:
                     capabilities=["Text"]
                 )
                 
-                from lmms.backend.services.core_services.events import event_bus
+                from lmms.backend.services.core_services.services.events import event_bus
                 event_bus.publish("ModelDownloaded", {"model_id": model_id, "path": save_path})
                 
                 if complete_callback:

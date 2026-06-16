@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 
 from .lmstudio.provider import LMStudioProvider
 from .huggingface.provider import HuggingFaceProvider
-from lmms.core.services.events import event_bus
+from lmms.backend.services.core_services.services.events import event_bus
 
 class ProviderManager:
     """

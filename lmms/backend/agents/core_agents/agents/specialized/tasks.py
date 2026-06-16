@@ -1,4 +1,4 @@
-from lmms.backend.agents.core_agents.base import BaseAgent
+from lmms.backend.agents.core_agents.agents.base import BaseAgent
 
 class TaskAgent(BaseAgent):
     """Placeholder for specialized task agent."""

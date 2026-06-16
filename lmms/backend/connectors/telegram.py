@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from lmms.backend.tools.core_tools.base import ToolResult
+from lmms.backend.tools.core_tools.tools.base import ToolResult
 
 DB_PATH = os.path.expanduser("~/.lmms/connectors.db")
 

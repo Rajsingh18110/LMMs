@@ -1,5 +1,5 @@
 import subprocess
-from lmms.backend.tools.core_tools.base import ToolResult
+from lmms.backend.tools.core_tools.tools.base import ToolResult
 
 async def list_kali_tools(params: dict) -> ToolResult:
     """Runs dpkg -l filtered for Kali tools."""

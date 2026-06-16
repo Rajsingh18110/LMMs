@@ -1,7 +1,7 @@
 import time
 from typing import Dict
-from lmms.core.services.registry import RegistryService
-from lmms.core.services.events import event_bus
+from lmms.backend.core.registry.service import RegistryService
+from lmms.backend.services.core_services.services.events import event_bus
 
 class ConnectionManager:
     """
