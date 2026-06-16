@@ -49,15 +49,15 @@ class MainWindow(QMainWindow):
         self.command_context = CommandContext(self)
         CommandRegistry.set_context(self.command_context)
         
+        # Setup Menu Bar
+        menu_bar = LMMsMenuBar(self)
+        self.menu_bar_widget = menu_bar
+        
         self.init_ui()
         
         # Notification Overlay
         self.notifications = NotificationManager(self)
         self.notifications.setGeometry(0, 0, self.width(), self.height())
-        
-        # Setup Menu Bar
-        menu_bar = LMMsMenuBar(self)
-        self.menu_bar_widget = menu_bar
         
         # Restore State
         state = WorkspaceService.load_workspace_state()
