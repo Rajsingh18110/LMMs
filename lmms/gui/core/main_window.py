@@ -105,17 +105,22 @@ class MainWindow(QMainWindow):
             self.file_model = QFileSystemModel()
             self.file_model.setIconProvider(CustomIconProvider())
             cwd = os.getcwd()
-            self.file_model.setRootPath(cwd)
+            
+            self.is_empty_workspace = (cwd == os.path.expanduser("~"))
+            
+            if not self.is_empty_workspace:
+                self.file_model.setRootPath(cwd)
+                project_name = os.path.basename(cwd)
+                if not project_name: project_name = cwd
+            else:
+                self.file_model.setRootPath("")
+                project_name = "NO FOLDER OPENED"
             
             # Explorer Toolbar
             self.explorer_toolbar = QWidget()
             toolbar_layout = QHBoxLayout(self.explorer_toolbar)
             toolbar_layout.setContentsMargins(15, 8, 10, 8)
             
-            project_name = os.path.basename(cwd)
-            if not project_name:
-                project_name = cwd
-                
             self.project_label = QLabel(project_name.upper())
             self.project_label.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; letter-spacing: 1px;")
             
@@ -147,27 +152,39 @@ class MainWindow(QMainWindow):
             
             explorer_layout.addWidget(self.explorer_toolbar)
             
+            # The Empty State "Open Folder" button
+            self.open_folder_btn = QPushButton("Open Folder")
+            self.open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.open_folder_btn.setStyleSheet("""
+                QPushButton { background-color: #0e639c; color: #ffffff; border-radius: 4px; padding: 6px 14px; font-weight: bold; font-size: 13px; margin: 20px; }
+                QPushButton:hover { background-color: #1177bb; }
+            """)
+            self.open_folder_btn.clicked.connect(self.prompt_open_folder)
+            explorer_layout.addWidget(self.open_folder_btn)
+            explorer_layout.setAlignment(self.open_folder_btn, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            
             self.tree_view = QTreeView()
             self.tree_view.setObjectName("explorerTree")
             self.tree_view.setModel(self.file_model)
-            self.tree_view.setRootIndex(self.file_model.index(cwd))
             self.tree_view.setHeaderHidden(True)
-            # Hide size, type, date columns
             for i in range(1, 4):
                 self.tree_view.hideColumn(i)
-            
-            # Disable auto-expand on double click
             self.tree_view.setExpandsOnDoubleClick(False)
-            
-            # Connect clicks
             self.tree_view.doubleClicked.connect(self.on_file_double_clicked)
             self.tree_view.clicked.connect(self.on_file_clicked)
-            
-            # Enable custom context menu
             self.tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.tree_view.customContextMenuRequested.connect(self.show_explorer_context_menu)
             
             explorer_layout.addWidget(self.tree_view)
+            
+            if self.is_empty_workspace:
+                self.tree_view.hide()
+                self.btn_new_file.hide()
+                self.btn_new_folder.hide()
+                self.btn_refresh.hide()
+            else:
+                self.open_folder_btn.hide()
+                self.tree_view.setRootIndex(self.file_model.index(cwd))
         else:
             placeholder = QLabel("File Explorer unavailable\n(QFileSystemModel missing)")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -483,15 +500,37 @@ class MainWindow(QMainWindow):
             self.editor_manager.open_file(file_path)
             self.status_file_info.setText(f"Opened: {os.path.basename(file_path)}")
 
+    def prompt_open_folder(self):
+        from PyQt6.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self, "Open Folder", os.path.expanduser("~"))
+        if folder:
+            self.is_empty_workspace = False
+            self.file_model.setRootPath(folder)
+            project_name = os.path.basename(folder)
+            if not project_name: project_name = folder
+            self.project_label.setText(project_name.upper())
+            
+            self.open_folder_btn.hide()
+            self.tree_view.show()
+            self.btn_new_file.show()
+            self.btn_new_folder.show()
+            self.btn_refresh.show()
+            self.tree_view.setRootIndex(self.file_model.index(folder))
+            
+            # Change actual working directory so terminal and new files default to it
+            os.chdir(folder)
+
     def get_selected_explorer_path(self):
         if not hasattr(self, 'tree_view'): return os.getcwd()
         idx = self.tree_view.currentIndex()
         if idx.isValid() and hasattr(self, 'file_model'):
             return self.file_model.filePath(idx)
+        if hasattr(self, 'file_model') and self.file_model.rootPath():
+            return self.file_model.rootPath()
         return os.getcwd()
 
     def create_new_file(self):
-        from PyQt6.QtWidgets import QInputDialog
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
         path = self.get_selected_explorer_path()
         if os.path.isfile(path): path = os.path.dirname(path)
         name, ok = QInputDialog.getText(self, "New File", "Enter file name:")
@@ -501,10 +540,10 @@ class MainWindow(QMainWindow):
                 open(file_path, 'w').close()
                 self.editor_manager.open_file(file_path)
             except Exception as e:
-                print(f"Error creating file: {e}")
+                QMessageBox.critical(self, "Error", f"Error creating file: {e}")
                 
     def create_new_folder(self):
-        from PyQt6.QtWidgets import QInputDialog
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
         path = self.get_selected_explorer_path()
         if os.path.isfile(path): path = os.path.dirname(path)
         name, ok = QInputDialog.getText(self, "New Folder", "Enter folder name:")
@@ -512,7 +551,7 @@ class MainWindow(QMainWindow):
             try:
                 os.makedirs(os.path.join(path, name), exist_ok=True)
             except Exception as e:
-                print(f"Error creating folder: {e}")
+                QMessageBox.critical(self, "Error", f"Error creating folder: {e}")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

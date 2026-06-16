@@ -205,8 +205,9 @@ QTabBar::close-button:hover {
 QTreeView#explorerTree {
     background-color: #181818;
     border: none;
-    border-bottom: none; /* Fixes intersection with status bar */
+    border-bottom: none;
     outline: none;
+    show-decoration-selected: 1;
 }
 QTreeView#explorerTree::item {
     padding: 2px 0px;
@@ -216,6 +217,13 @@ QTreeView#explorerTree::item:hover {
 }
 QTreeView#explorerTree::item:selected {
     background-color: #30363d;
+    color: #ffffff;
+}
+QTreeView#explorerTree::item:selected:active {
+    background-color: #30363d;
+}
+QTreeView#explorerTree::item:selected:!active {
+    background-color: #21262d;
 }
 QTreeView#explorerTree::branch {
     background-color: transparent;

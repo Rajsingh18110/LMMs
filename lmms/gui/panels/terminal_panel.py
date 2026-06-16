@@ -46,6 +46,9 @@ class TerminalEdit(QTextEdit):
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.setTextCursor(cursor)
         
+        # Remove OSC (Operating System Command) sequences like window title
+        text = re.sub(r'\x1b\].*?(?:\x07|\x1b\\)', '', text)
+        
         # Extremely basic ANSI color parser
         # \x1b[31;1m etc
         parts = re.split(r'\x1b\[([0-9;]*)m', text)
@@ -126,14 +129,20 @@ class TerminalPanel(QWidget):
         self.tabs.setStyleSheet("""
             QTabWidget::pane { border-top: 1px solid #30363d; background-color: #0d1117; }
             QTabBar::tab {
-                background: #0e1116;
+                background: transparent;
                 color: #8b949e;
-                padding: 6px 12px;
+                padding: 6px 15px;
                 border: none;
+                font-size: 12px;
+                text-transform: uppercase;
+                border-bottom: 1px solid transparent;
             }
             QTabBar::tab:selected {
                 color: #c9d1d9;
-                border-bottom: 2px solid #58a6ff;
+                border-bottom: 1px solid #58a6ff;
+            }
+            QTabBar::tab:hover {
+                color: #c9d1d9;
             }
         """)
         

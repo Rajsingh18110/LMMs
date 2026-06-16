@@ -61,7 +61,7 @@ class EditorManager(QWidget):
         
         # Empty State Container (Overlay)
         self.empty_state_widget = QWidget(self.tabs)
-        self.empty_state_widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        # Removed WA_TransparentForMouseEvents to allow clicking the links
         empty_state_layout = QVBoxLayout(self.empty_state_widget)
         empty_state_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_state_layout.setSpacing(20)
