@@ -501,8 +501,22 @@ class MainWindow(QMainWindow):
             self.status_file_info.setText(f"Opened: {os.path.basename(file_path)}")
 
     def prompt_open_folder(self):
-        from PyQt6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(self, "Open Folder", os.path.expanduser("~"))
+        folder = ""
+        import sys
+        if sys.platform.startswith("linux"):
+            import subprocess
+            try:
+                # Use zenity to force native Kali/GTK file dialog
+                result = subprocess.run(['zenity', '--file-selection', '--directory', '--title=Open Folder'], capture_output=True, text=True)
+                if result.returncode == 0 and result.stdout.strip():
+                    folder = result.stdout.strip()
+            except Exception:
+                pass
+                
+        if not folder:
+            from PyQt6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(self, "Open Folder", os.path.expanduser("~"))
+            
         if folder:
             self.is_empty_workspace = False
             self.file_model.setRootPath(folder)

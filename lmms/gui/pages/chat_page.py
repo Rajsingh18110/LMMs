@@ -167,7 +167,22 @@ class ChatPage(QWidget):
         main_layout.addWidget(self.chat_container)
 
     def attach_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Attach", "", "All Files (*)")
+        files = []
+        import sys
+        if sys.platform.startswith("linux"):
+            import subprocess
+            try:
+                # Use zenity to force native Kali/GTK file dialog
+                result = subprocess.run(['zenity', '--file-selection', '--multiple', '--title=Select Files to Attach'], capture_output=True, text=True)
+                if result.returncode == 0 and result.stdout.strip():
+                    files = result.stdout.strip().split('|')
+            except Exception:
+                pass
+                
+        if not files:
+            files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Attach", "", "All Files (*)")
+            
+
         if files:
             for f in files:
                 if len(self.attached_files) >= 20:
