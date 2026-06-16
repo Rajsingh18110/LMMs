@@ -1,60 +1,116 @@
 import re
+import subprocess
+import sys
 from PyQt6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit
 from PyQt6.QtGui import QColor, QPainter, QFont, QSyntaxHighlighter, QTextCharFormat, QTextFormat
-from PyQt6.QtCore import Qt, QRect, QSize
+from PyQt6.QtCore import Qt, QRect, QSize, QTimer, QThread, pyqtSignal
 
-class PythonSyntaxHighlighter(QSyntaxHighlighter):
-    def __init__(self, document):
+try:
+    import pygments
+    from pygments.lexers import get_lexer_for_filename
+    from pygments.lexers.special import TextLexer
+    import pygments.token as Token
+except ImportError:
+    pygments = None
+
+class PygmentsHighlighter(QSyntaxHighlighter):
+    def __init__(self, document, file_path):
         super().__init__(document)
-        self.highlightingRules = []
-        
-        # Keyword format
-        keywordFormat = QTextCharFormat()
-        keywordFormat.setForeground(QColor("#ff7b72")) # VS Code dark keyword color
-        keywordFormat.setFontWeight(QFont.Weight.Bold)
-        keywords = [
-            "\\band\\b", "\\bas\\b", "\\bassert\\b", "\\bbreak\\b",
-            "\\bclass\\b", "\\bcontinue\\b", "\\bdef\\b", "\\bdel\\b",
-            "\\belif\\b", "\\belse\\b", "\\bexcept\\b", "\\bFalse\\b",
-            "\\bfinally\\b", "\\bfor\\b", "\\bfrom\\b", "\\bglobal\\b",
-            "\\bif\\b", "\\bimport\\b", "\\bin\\b", "\\bis\\b",
-            "\\blambda\\b", "\\bNone\\b", "\\bnonlocal\\b", "\\bnot\\b",
-            "\\bor\\b", "\\bpass\\b", "\\braise\\b", "\\breturn\\b",
-            "\\bTrue\\b", "\\btry\\b", "\\bwhile\\b", "\\bwith\\b", "\\byield\\b"
-        ]
-        for pattern in keywords:
-            self.highlightingRules.append((re.compile(pattern), keywordFormat))
+        if pygments is None:
+            self.lexer = None
+            return
             
-        # Class/Function name format
-        classFormat = QTextCharFormat()
-        classFormat.setForeground(QColor("#d2a8ff"))
-        self.highlightingRules.append((re.compile("\\bclass\\s+([A-Za-z_]+)"), classFormat))
-        
-        funcFormat = QTextCharFormat()
-        funcFormat.setForeground(QColor("#d2a8ff"))
-        self.highlightingRules.append((re.compile("\\bdef\\s+([A-Za-z_]+)"), funcFormat))
+        try:
+            self.lexer = get_lexer_for_filename(file_path)
+        except Exception:
+            self.lexer = TextLexer()
+            
+        self.formats = {}
+        def _add_format(token_type, color_hex, bold=False):
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor(color_hex))
+            if bold: fmt.setFontWeight(QFont.Weight.Bold)
+            self.formats[token_type] = fmt
 
-        # String format
-        stringFormat = QTextCharFormat()
-        stringFormat.setForeground(QColor("#a5d6ff"))
-        self.highlightingRules.append((re.compile("\".*?\""), stringFormat))
-        self.highlightingRules.append((re.compile("'.*?'"), stringFormat))
-        
-        # Comment format
-        commentFormat = QTextCharFormat()
-        commentFormat.setForeground(QColor("#8b949e"))
-        self.highlightingRules.append((re.compile("#[^\n]*"), commentFormat))
-
-        # Builtins and Magic
-        builtinFormat = QTextCharFormat()
-        builtinFormat.setForeground(QColor("#79c0ff"))
-        self.highlightingRules.append((re.compile("\\bself\\b"), builtinFormat))
+        # One Dark Pro inspired theme
+        _add_format(Token.Keyword, "#c678dd", bold=True)
+        _add_format(Token.Keyword.Constant, "#d19a66")
+        _add_format(Token.Keyword.Declaration, "#c678dd")
+        _add_format(Token.Keyword.Namespace, "#c678dd")
+        _add_format(Token.Keyword.Type, "#e5c07b")
+        _add_format(Token.Name.Builtin, "#56b6c2")
+        _add_format(Token.Name.Function, "#61afef")
+        _add_format(Token.Name.Class, "#e5c07b")
+        _add_format(Token.Name.Namespace, "#e5c07b")
+        _add_format(Token.Name.Exception, "#e06c75")
+        _add_format(Token.Name.Decorator, "#61afef")
+        _add_format(Token.String, "#98c379")
+        _add_format(Token.String.Doc, "#5c6370")
+        _add_format(Token.Number, "#d19a66")
+        _add_format(Token.Comment, "#5c6370")
+        _add_format(Token.Operator, "#56b6c2")
+        _add_format(Token.Operator.Word, "#c678dd")
+        _add_format(Token.Punctuation, "#abb2bf")
+        _add_format(Token.Text, "#abb2bf")
 
     def highlightBlock(self, text):
-        for pattern, format in self.highlightingRules:
-            for match in pattern.finditer(text):
-                start, end = match.span()
-                self.setFormat(start, end - start, format)
+        if not text or self.lexer is None: return
+        try:
+            tokens = pygments.lex(text, self.lexer)
+            current_pos = 0
+            for token, value in tokens:
+                length = len(value)
+                fmt = None
+                t = token
+                while t is not None:
+                    if t in self.formats:
+                        fmt = self.formats[t]
+                        break
+                    t = t.parent
+                
+                if fmt:
+                    self.setFormat(current_pos, length, fmt)
+                current_pos += length
+        except Exception:
+            pass
+
+class LinterThread(QThread):
+    result_ready = pyqtSignal(list)
+    
+    def __init__(self, text, file_path):
+        super().__init__()
+        self.text = text
+        self.file_path = file_path
+        
+    def run(self):
+        if not self.file_path.endswith('.py'):
+            self.result_ready.emit([])
+            return
+            
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "flake8", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate(input=self.text)
+            
+            errors = []
+            for line in stdout.splitlines():
+                parts = line.split(":", 3)
+                if len(parts) >= 4:
+                    try:
+                        line_num = int(parts[1])
+                        col_num = int(parts[2])
+                        msg = parts[3].strip()
+                        errors.append({'line': line_num, 'col': col_num, 'msg': msg})
+                    except ValueError:
+                        pass
+            self.result_ready.emit(errors)
+        except Exception as e:
+            self.result_ready.emit([])
 
 class LineNumberArea(QWidget):
     def __init__(self, editor):
@@ -95,14 +151,35 @@ class CodeEditor(QPlainTextEdit):
             }
         """)
 
-        # Add syntax highlighter placeholder
         self.highlighter = None
+        self.linter_errors = []
+        
+        # Add Timer for linting
+        self.lint_timer = QTimer(self)
+        self.lint_timer.setSingleShot(True)
+        self.lint_timer.setInterval(1000)
+        self.lint_timer.timeout.connect(self.run_linter)
+        self.textChanged.connect(self.on_text_changed)
 
-    def load_file(self, file_path, content):
+    def load_file(self, file_path, content, disable_highlighting=False):
+        self.file_path = file_path
         self.setPlainText(content)
-        # Only highlight python files smaller than 150KB to avoid UI freezing
-        if file_path.endswith('.py') and len(content) < 150000:
-            self.highlighter = PythonSyntaxHighlighter(self.document())
+        if not disable_highlighting:
+            self.highlighter = PygmentsHighlighter(self.document(), file_path)
+        self.run_linter()
+
+    def on_text_changed(self):
+        self.lint_timer.start()
+        
+    def run_linter(self):
+        if hasattr(self, 'file_path') and self.file_path.endswith('.py'):
+            self.linter_thread = LinterThread(self.toPlainText(), self.file_path)
+            self.linter_thread.result_ready.connect(self.on_linter_results)
+            self.linter_thread.start()
+            
+    def on_linter_results(self, errors):
+        self.linter_errors = errors
+        self.highlightCurrentLine()
 
     def lineNumberAreaWidth(self):
         digits = 1
@@ -133,6 +210,8 @@ class CodeEditor(QPlainTextEdit):
 
     def highlightCurrentLine(self):
         extraSelections = []
+        
+        # 1. Add current line highlight
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
             lineColor = QColor("#161b22")
@@ -141,11 +220,31 @@ class CodeEditor(QPlainTextEdit):
             selection.cursor = self.textCursor()
             selection.cursor.clearSelection()
             extraSelections.append(selection)
+            
+        # 2. Add Linter zigzag red lines
+        for err in self.linter_errors:
+            line_num = err['line'] - 1
+            col_num = err['col'] - 1
+            
+            sel = QTextEdit.ExtraSelection()
+            sel.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SpellCheckUnderline)
+            sel.format.setUnderlineColor(QColor("#f14c4c")) # Red zigzag line
+            
+            block = self.document().findBlockByNumber(line_num)
+            if block.isValid():
+                cursor = self.textCursor()
+                cursor.setPosition(block.position() + col_num)
+                cursor.select(cursor.SelectionType.WordUnderCursor)
+                if not cursor.hasSelection():
+                    cursor.movePosition(cursor.MoveOperation.Right, cursor.MoveMode.KeepAnchor)
+                sel.cursor = cursor
+                extraSelections.append(sel)
+
         self.setExtraSelections(extraSelections)
 
     def lineNumberAreaPaintEvent(self, event):
         painter = QPainter(self.lineNumberArea)
-        painter.fillRect(event.rect(), QColor("#0d1117")) # matches editor background
+        painter.fillRect(event.rect(), QColor("#0d1117"))
 
         block = self.firstVisibleBlock()
         blockNumber = block.blockNumber()

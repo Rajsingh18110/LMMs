@@ -81,14 +81,29 @@ class EditorManager(QWidget):
             self.tabs.setCurrentWidget(self.open_files[file_path])
             return
             
+        import os
+        from PyQt6.QtWidgets import QMessageBox
+        
+        disable_highlighting = False
         try:
+            size_bytes = os.path.getsize(file_path)
+            size_mb = size_bytes / (1024 * 1024)
+            
+            if size_mb > 256:
+                QMessageBox.warning(self, "File Too Large", f"The file is {size_mb:.1f} MB, which exceeds the 256 MB limit. Opening this could crash the editor.")
+                return
+                
+            if size_mb > 5:
+                disable_highlighting = True
+                
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
             content = f"Error opening file: {e}"
+            disable_highlighting = True
             
         editor = CodeEditor()
-        editor.load_file(file_path, content)
+        editor.load_file(file_path, content, disable_highlighting=disable_highlighting)
         editor.setProperty("file_path", file_path)
         
         # Track changes
