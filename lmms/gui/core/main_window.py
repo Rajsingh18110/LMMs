@@ -1,11 +1,12 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QStackedWidget, QPushButton, QLabel, QSplitter,
-    QTreeView, QTabWidget, QTextEdit, QDockWidget, QMenu, QStatusBar
+    QTreeView, QTabWidget, QTextEdit, QDockWidget, QMenu, QStatusBar, QFrame
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize, QPoint, QPropertyAnimation, QEasingCurve, QTimer
+from PyQt6.QtGui import QIcon, QFont, QCursor, QColor, QPixmap, QPainter
+from PyQt6.QtSvg import QSvgRenderer
 import os
-from PyQt6.QtGui import QPixmap, QIcon
 try:
     from PyQt6.QtGui import QFileSystemModel
 except ImportError:
@@ -180,16 +181,27 @@ class MainWindow(QMainWindow):
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
         logo_path = os.path.join(assets_dir, "lmms_logo.png")
         nav_items = [
-            ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.png")),
-            ("🔍", "Search", os.path.join(assets_dir, "icon_search.png")),
+            ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.svg")),
+            ("🔍", "Search", os.path.join(assets_dir, "icon_search.svg")),
             ("📋", "Tasks", None),
             ("🧠", "Memory", None),
             ("🌳", "Git", None),
-            ("📦", "Models", os.path.join(assets_dir, "icon_models.png")),
+            ("📦", "Models", os.path.join(assets_dir, "icon_models.svg")),
             ("💬", "Chats", None),
             ("Terminal", "Terminal", None),
-            ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.png")),
+            ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]
+        
+        def load_svg_icon(path, size=64):
+            renderer = QSvgRenderer(path)
+            if not renderer.isValid():
+                return None
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            painter.end()
+            return QIcon(pixmap)
 
         for text_icon, name, custom_icon_path in nav_items:
             # Fallback for settings if svg doesn't exist
@@ -202,7 +214,11 @@ class MainWindow(QMainWindow):
                 
             btn = QPushButton(text_icon if not custom_icon_path else "")
             if custom_icon_path and os.path.exists(custom_icon_path):
-                btn.setIcon(QIcon(custom_icon_path))
+                svg_icon = load_svg_icon(custom_icon_path)
+                if svg_icon:
+                    btn.setIcon(svg_icon)
+                else:
+                    btn.setIcon(QIcon(custom_icon_path))
                 # Make icon bigger
                 from PyQt6.QtCore import QSize
                 btn.setIconSize(QSize(28, 28))
