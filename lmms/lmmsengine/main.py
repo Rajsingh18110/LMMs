@@ -42,6 +42,23 @@ def ensure_server_running():
 def main():
     import sys
     import os
+    import platform
+
+    # ── Windows UTF-8 fix ──────────────────────────────────────────────────────
+    # On Windows, stdout defaults to cp1252 which crashes on ANY Unicode output
+    # from the AI (emojis, arrows, etc.), causing Python to exit and CMD to
+    # replay the user's buffered input ('hello') as a shell command.
+    if platform.system() == "Windows":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except AttributeError:
+            # Python < 3.7 fallback
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    # ──────────────────────────────────────────────────────────────────────────
+
     base_dir = os.path.expanduser("~/.lmms")
     for subdir in ["models", "cache", "logs", "manifests", "workspaces"]:
         os.makedirs(os.path.join(base_dir, subdir), exist_ok=True)
@@ -817,7 +834,11 @@ def main():
                         pass
                         
                     while True:
-                        user_input = input(f"[{model_name}]> ")
+                        try:
+                            user_input = input(f"[{model_name}]> ")
+                        except (EOFError, KeyboardInterrupt):
+                            print("\nExiting.")
+                            break
                         if not user_input.strip() and not is_audio: continue
                         if user_input.lower() in ["/exit", "/quit", "exit"]: break
                         
@@ -975,19 +996,35 @@ def main():
                                 if not is_audio_input:
                                     messages.append({"role": "user", "content": user_input})
 
-                        sys.stdout.write(f"[{model_name}] ")
-                        sys.stdout.flush()
-                        
-                        response_content = ""
-                        for chunk in runtime.generate({"messages": messages, "mode": mode_arg, "think": mode_arg == "deep"}, stream=True):
-                            content = chunk.get("message", {}).get("content", "")
-                            if "<think>" in content: content = content.replace("<think>", "\n\033[90m<think>\n")
-                            if "</think>" in content: content = content.replace("</think>", "\n</think>\033[0m\n")
-                            sys.stdout.write(content)
+                        # ── Per-turn try/except: one bad response never crashes the session ──
+                        try:
+                            sys.stdout.write(f"[{model_name}] ")
                             sys.stdout.flush()
-                            response_content += content
-                        print()
-                        messages.append({"role": "assistant", "content": response_content})
+                            
+                            response_content = ""
+                            for chunk in runtime.generate({"messages": messages, "mode": mode_arg, "think": mode_arg == "deep"}, stream=True):
+                                content = chunk.get("message", {}).get("content", "")
+                                if "<think>" in content: content = content.replace("<think>", "\n\033[90m<think>\n")
+                                if "</think>" in content: content = content.replace("</think>", "\n</think>\033[0m\n")
+                                try:
+                                    sys.stdout.write(content)
+                                    sys.stdout.flush()
+                                except (UnicodeEncodeError, UnicodeDecodeError):
+                                    # Windows encoding fallback: replace unencodable chars
+                                    sys.stdout.write(content.encode("ascii", errors="replace").decode("ascii"))
+                                    sys.stdout.flush()
+                                response_content += content
+                            print()
+                            messages.append({"role": "assistant", "content": response_content})
+                        except KeyboardInterrupt:
+                            print("\n[Interrupted]")
+                            # Don't exit — stay in the REPL for next message
+                            continue
+                        except Exception as turn_err:
+                            print(f"\n\033[91m[Turn Error]\033[0m {turn_err}")
+                            # Stay in REPL — don't crash the whole session
+                            continue
+                        # ──────────────────────────────────────────────────────────────────
                 except KeyboardInterrupt:
                     print("\nExiting.")
                 except Exception as e:
