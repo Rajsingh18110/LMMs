@@ -177,22 +177,23 @@ class MainWindow(QMainWindow):
 
         # Sidebar Buttons
         self.nav_buttons = {}
-        logo_path = os.path.join(os.path.dirname(__file__), "assets", "lmms_logo.png")
+        assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+        logo_path = os.path.join(assets_dir, "lmms_logo.png")
         nav_items = [
-            ("📁", "Explorer", os.path.join(os.path.dirname(__file__), "assets", "icon_explorer.png")),
-            ("🔍", "Search", os.path.join(os.path.dirname(__file__), "assets", "icon_search.png")),
+            ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.png")),
+            ("🔍", "Search", os.path.join(assets_dir, "icon_search.png")),
             ("📋", "Tasks", None),
             ("🧠", "Memory", None),
             ("🌳", "Git", None),
-            ("📦", "Models", os.path.join(os.path.dirname(__file__), "assets", "icon_models.png")),
+            ("📦", "Models", os.path.join(assets_dir, "icon_models.png")),
             ("💬", "Chats", None),
             ("Terminal", "Terminal", None),
-            ("⚙", "Settings", os.path.join(os.path.dirname(__file__), "assets", "icon_settings.png")),
+            ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.png")),
         ]
 
         for text_icon, name, custom_icon_path in nav_items:
             # Fallback for settings if svg doesn't exist
-            if name == "Settings" and not os.path.exists(custom_icon_path):
+            if name == "Settings" and not (custom_icon_path and os.path.exists(custom_icon_path)):
                 custom_icon_path = None
                 text_icon = "⚙"
             # Fallback for terminal
@@ -204,7 +205,7 @@ class MainWindow(QMainWindow):
                 btn.setIcon(QIcon(custom_icon_path))
                 # Make icon bigger
                 from PyQt6.QtCore import QSize
-                btn.setIconSize(QSize(24, 24))
+                btn.setIconSize(QSize(28, 28))
                 
             btn.setToolTip(name)
             btn.setObjectName("NavButton")
