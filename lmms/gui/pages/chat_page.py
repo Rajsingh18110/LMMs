@@ -177,28 +177,28 @@ class ChatPage(QWidget):
             if role == "user":
                 html += f"""
                 <div style="text-align: right; margin: 10px 0;">
-                    <div style="background-color: #2b2d31; color: white; padding: 10px 15px; border-radius: 8px; display: inline-block; text-align: left;">
+                    <span style="background-color: #2b2d31; color: white; padding: 10px 15px; border-radius: 8px; display: inline-block;">
                         <b style="color: #58a6ff;">You</b><br>
                         <div style="margin-top: 5px;">{html_content}</div>
-                    </div>
+                    </span>
                 </div>
                 """
             elif role == "system":
                 html += f"""
                 <div style="text-align: center; margin: 10px 0;">
-                    <div style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block; text-align: left;">
+                    <span style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block;">
                         <b style="color: #58a6ff;">System</b><br>
                         <div style="margin-top: 5px;">{html_content}</div>
-                    </div>
+                    </span>
                 </div>
                 """
             else:
                 html += f"""
                 <div style="text-align: left; margin: 10px 0;">
-                    <div style="background-color: transparent; color: #cccccc; padding: 10px 15px; display: inline-block; text-align: left;">
+                    <span style="background-color: transparent; color: #cccccc; padding: 10px 15px; display: inline-block;">
                         <b style="color: #58a6ff;">Assistant</b><br>
                         <div style="margin-top: 5px;">{html_content}</div>
-                    </div>
+                    </span>
                 </div>
                 """
                 

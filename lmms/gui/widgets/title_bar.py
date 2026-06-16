@@ -9,8 +9,9 @@ class CustomTitleBar(QWidget):
         self.main_window = main_window
         self.menu_bar = menu_bar
         self.setFixedHeight(35)
-        # We will apply the background-color and border-bottom here or in monolithic QSS
-        self.setStyleSheet("background-color: #181818; color: #c9d1d9; border-bottom: 1px solid #30363d;")
+        # Apply style only to CustomTitleBar to avoid overriding children
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("CustomTitleBar { background-color: #181818; color: #c9d1d9; border-bottom: 1px solid #30363d; }")
         self._is_dragging = False
         self._drag_start_pos = None
 
