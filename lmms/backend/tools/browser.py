@@ -215,7 +215,7 @@ class BrowserTool:
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
-            return f"[AUTHENTICATED SESSION STARTED (Headless={headless})]\n{content[:4000]}"
+            return f"[AUTHENTICATED SESSION STARTED (Headless={headless})]\n{content[:2000]}"
         except Exception as e:
             return f"Failed to open authenticated URL: {str(e)}"
 
@@ -233,7 +233,7 @@ class BrowserTool:
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
-            return content[:3000]
+            return content[:2000]
         except Exception as e:
             return f"Failed to scroll: {str(e)}"
 
@@ -253,7 +253,7 @@ class BrowserTool:
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
-            return content[:3000]
+            return content[:2000]
         except Exception as e:
             return f"Failed to open URL: {str(e)}"
 
@@ -313,7 +313,7 @@ class BrowserTool:
             content = "\n".join([el.inner_text() for el in elements if el])
             if not content:
                 return f"No content found for selector: {selector}"
-            return content[:5000]
+            return content[:2000]
         except Exception as e:
             return f"Failed to scrape: {str(e)}"
 
