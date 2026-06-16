@@ -68,17 +68,23 @@ class EditorManager(QWidget):
         
         # Welcome Logo
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-        logo_path = os.path.join(assets_dir, "lmms_logo.png")
+        logo_path = os.path.join(assets_dir, "lmms_logo_transparent.png")
         if os.path.exists(logo_path):
             self.welcome_logo = QLabel()
             from PyQt6.QtGui import QPixmap
-            big_logo_pixmap = QPixmap(logo_path).scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            big_logo_pixmap = QPixmap(logo_path).scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.welcome_logo.setPixmap(big_logo_pixmap)
             self.welcome_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_state_layout.addWidget(self.welcome_logo)
+            
+        # Powered By Link
+        self.powered_by_label = QLabel("<center><p style='color: #8b949e; font-size: 14px; line-height: 1.6;'><b>LMMs</b> powered by MarkanM<br>For more details visit <a href='http://LMMs.markanm.com' style='color: #58a6ff; text-decoration: none;'>LMMs.markanm.com</a></p></center>")
+        self.powered_by_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.powered_by_label.setOpenExternalLinks(True)
+        empty_state_layout.addWidget(self.powered_by_label)
         
         # Shortcuts
-        self.shortcuts_label = QLabel("<center><p style='color: #8b949e; font-size: 14px;'>Ctrl+P : Search Files<br>Ctrl+N : New File<br>Ctrl+B : Toggle Sidebar</p></center>")
+        self.shortcuts_label = QLabel("<center><p style='color: #6e7681; font-size: 13px; margin-top: 20px;'>Ctrl+P : Search Files<br>Ctrl+N : New File<br>Ctrl+B : Toggle Sidebar</p></center>")
         self.shortcuts_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_state_layout.addWidget(self.shortcuts_label)
         

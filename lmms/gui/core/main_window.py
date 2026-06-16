@@ -107,6 +107,46 @@ class MainWindow(QMainWindow):
             cwd = os.getcwd()
             self.file_model.setRootPath(cwd)
             
+            # Explorer Toolbar
+            self.explorer_toolbar = QWidget()
+            toolbar_layout = QHBoxLayout(self.explorer_toolbar)
+            toolbar_layout.setContentsMargins(15, 8, 10, 8)
+            
+            project_name = os.path.basename(cwd)
+            if not project_name:
+                project_name = cwd
+                
+            self.project_label = QLabel(project_name.upper())
+            self.project_label.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; letter-spacing: 1px;")
+            
+            self.btn_new_file = QPushButton("📄")
+            self.btn_new_file.setToolTip("New File")
+            self.btn_new_file.clicked.connect(self.create_new_file)
+            
+            self.btn_new_folder = QPushButton("📁")
+            self.btn_new_folder.setToolTip("New Folder")
+            self.btn_new_folder.clicked.connect(self.create_new_folder)
+            
+            self.btn_refresh = QPushButton("↻")
+            self.btn_refresh.setToolTip("Refresh Explorer")
+            self.btn_refresh.clicked.connect(lambda: self.file_model.setRootPath(self.file_model.rootPath()))
+            
+            for btn in [self.btn_new_file, self.btn_new_folder, self.btn_refresh]:
+                btn.setFixedSize(22, 22)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet("""
+                    QPushButton { background: transparent; border: none; color: #8b949e; border-radius: 4px; font-size: 12px; }
+                    QPushButton:hover { background: #30363d; color: #c9d1d9; }
+                """)
+                
+            toolbar_layout.addWidget(self.project_label)
+            toolbar_layout.addStretch()
+            toolbar_layout.addWidget(self.btn_new_file)
+            toolbar_layout.addWidget(self.btn_new_folder)
+            toolbar_layout.addWidget(self.btn_refresh)
+            
+            explorer_layout.addWidget(self.explorer_toolbar)
+            
             self.tree_view = QTreeView()
             self.tree_view.setObjectName("explorerTree")
             self.tree_view.setModel(self.file_model)
@@ -442,6 +482,37 @@ class MainWindow(QMainWindow):
         if not self.file_model.isDir(index):
             self.editor_manager.open_file(file_path)
             self.status_file_info.setText(f"Opened: {os.path.basename(file_path)}")
+
+    def get_selected_explorer_path(self):
+        if not hasattr(self, 'tree_view'): return os.getcwd()
+        idx = self.tree_view.currentIndex()
+        if idx.isValid() and hasattr(self, 'file_model'):
+            return self.file_model.filePath(idx)
+        return os.getcwd()
+
+    def create_new_file(self):
+        from PyQt6.QtWidgets import QInputDialog
+        path = self.get_selected_explorer_path()
+        if os.path.isfile(path): path = os.path.dirname(path)
+        name, ok = QInputDialog.getText(self, "New File", "Enter file name:")
+        if ok and name:
+            try:
+                file_path = os.path.join(path, name)
+                open(file_path, 'w').close()
+                self.editor_manager.open_file(file_path)
+            except Exception as e:
+                print(f"Error creating file: {e}")
+                
+    def create_new_folder(self):
+        from PyQt6.QtWidgets import QInputDialog
+        path = self.get_selected_explorer_path()
+        if os.path.isfile(path): path = os.path.dirname(path)
+        name, ok = QInputDialog.getText(self, "New Folder", "Enter folder name:")
+        if ok and name:
+            try:
+                os.makedirs(os.path.join(path, name), exist_ok=True)
+            except Exception as e:
+                print(f"Error creating folder: {e}")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

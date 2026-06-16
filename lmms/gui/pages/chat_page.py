@@ -31,8 +31,8 @@ class ChatPage(QWidget):
         # --- Chat Section ---
         self.chat_container = QWidget()
         chat_layout = QVBoxLayout(self.chat_container)
-        chat_layout.setContentsMargins(8, 8, 8, 8)
-        chat_layout.setSpacing(15)
+        chat_layout.setContentsMargins(0, 0, 0, 0)
+        chat_layout.setSpacing(0)
 
         # Message History
         self.chat_history = QTextBrowser()
@@ -78,12 +78,42 @@ class ChatPage(QWidget):
         self.input_field.setPlaceholderText("Type a message or command (e.g., /fast, /code, /help)...")
         self.input_field.setMaximumHeight(100)
         
-        # Send Button Row
-        btn_row = QHBoxLayout()
-        btn_row.setContentsMargins(0, 0, 0, 0)
+        # Send Button Row and Model Selector
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 5, 0, 0)
+        
+        from PyQt6.QtWidgets import QComboBox
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["🖥 Local: qwen3:8b", "🖥 Local: gemma4", "☁ Cloud: openai"])
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: none;
+                color: #8b949e;
+                font-size: 11px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+        """)
+        
+        self.approvals_combo = QComboBox()
+        self.approvals_combo.addItems(["🛡 Default", "🛡 Auto"])
+        self.approvals_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: none;
+                color: #8b949e;
+                font-size: 11px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+        """)
         
         self.attach_btn = QPushButton("+")
         self.attach_btn.setObjectName("attachBtn")
+        self.attach_btn.setToolTip("Attach Context")
         self.attach_btn.setFixedSize(24, 24)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.setStyleSheet("""
@@ -118,54 +148,21 @@ class ChatPage(QWidget):
         """)
         self.send_btn.clicked.connect(self.send_message)
         
-        btn_row.addWidget(self.attach_btn)
-        btn_row.addStretch()
-        btn_row.addWidget(self.send_btn)
+        bottom_row.addWidget(self.attach_btn)
+        bottom_row.addWidget(self.model_combo)
+        bottom_row.addWidget(self.approvals_combo)
+        bottom_row.addStretch()
+        bottom_row.addWidget(self.send_btn)
 
         input_layout.addWidget(self.attachment_container)
         input_layout.addWidget(self.input_field)
-        input_layout.addLayout(btn_row)
+        input_layout.addLayout(bottom_row)
 
-        chat_layout.addWidget(input_container)
+        chat_layout_wrapper = QHBoxLayout()
+        chat_layout_wrapper.setContentsMargins(10, 5, 10, 15)
+        chat_layout_wrapper.addWidget(input_container)
         
-        # Bottom Status Row (Model Selector)
-        from PyQt6.QtWidgets import QComboBox
-        status_row = QHBoxLayout()
-        status_row.setContentsMargins(5, 0, 5, 5)
-        
-        self.model_combo = QComboBox()
-        self.model_combo.addItems(["🖥 Local: qwen3:8b", "🖥 Local: gemma4", "☁ Cloud: openai"])
-        self.model_combo.setStyleSheet("""
-            QComboBox {
-                background: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 12px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-        """)
-        
-        self.approvals_combo = QComboBox()
-        self.approvals_combo.addItems(["🛡 Default Approvals", "🛡 Auto-Execute"])
-        self.approvals_combo.setStyleSheet("""
-            QComboBox {
-                background: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 12px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-        """)
-        
-        status_row.addWidget(self.model_combo)
-        status_row.addStretch()
-        status_row.addWidget(self.approvals_combo)
-        
-        chat_layout.addLayout(status_row)
+        chat_layout.addLayout(chat_layout_wrapper)
         
         main_layout.addWidget(self.chat_container)
 
