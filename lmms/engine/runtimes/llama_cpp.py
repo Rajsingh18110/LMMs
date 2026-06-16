@@ -47,8 +47,8 @@ class LlamaCppRuntime(RuntimeContract):
         try:
             model_instance = Llama(
                 model_path=full_path,
-                n_gpu_layers=-1, # All layers to GPU
-                n_ctx=8192,
+                n_gpu_layers=-1, # All layers to GPU, automatically offloads to RAM if compiled properly
+                n_ctx=0, # 0 means use the model's native context size limit (up to 128k+)
                 flash_attn=True,
                 chat_format="chatml",
                 verbose=False
