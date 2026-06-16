@@ -15,6 +15,24 @@ def ensure_base_tools():
     # Only useful if we still use pip for other components
     return True
 
+def ensure_windows_long_paths():
+    if platform.system().lower() == "windows":
+        try:
+            reporter.print_step("Checking Windows Long Path support...")
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\\CurrentControlSet\\Control\\FileSystem", 0, winreg.KEY_READ | winreg.KEY_WRITE)
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            if value == 0:
+                reporter.print_step("Enabling Windows Long Paths to prevent installation errors...")
+                winreg.SetValueEx(key, "LongPathsEnabled", 0, winreg.REG_DWORD, 1)
+            winreg.CloseKey(key)
+        except PermissionError:
+            reporter.print_error("Administrator privileges required to auto-enable Long Paths.")
+            reporter.print_error("If installation fails, run this in PowerShell as Administrator:")
+            reporter.print_error('New-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force')
+        except Exception:
+            pass
+
 def get_registry_path():
     p = Path(os.path.expanduser("~/.lmms/config/installed_components.json"))
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -136,6 +154,8 @@ def install_component(component_name, force=False):
         reporter.print_step(f"Updating {component_name.capitalize()} to the latest version...")
     else:
         reporter.print_step(f"Installing {component_name.capitalize()}...")
+        
+    ensure_windows_long_paths()
     
     if component_name in ["engine", "backend", "gui", "cli", "all"]:
         # We now download the compiled binary for ALL components instead of git cloning
