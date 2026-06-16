@@ -105,3 +105,54 @@ class CustomTitleBar(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.toggle_maximize()
             event.accept()
+
+class ChatDockTitleBar(QWidget):
+    def __init__(self, dock, chat_page, parent=None):
+        super().__init__(parent)
+        self.dock = dock
+        self.chat_page = chat_page
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 5, 5)
+        layout.setSpacing(5)
+        
+        self.title_label = QLabel("AI Chat")
+        self.title_label.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; text-transform: uppercase;")
+        
+        self.btn_new = QPushButton("+")
+        self.btn_new.setToolTip("New Chat")
+        self.btn_new.clicked.connect(self.chat_page.start_new_chat)
+        
+        self.btn_history = QPushButton("↺")
+        self.btn_history.setToolTip("History")
+        
+        self.btn_more = QPushButton("...")
+        self.btn_more.setToolTip("More Actions")
+        
+        self.btn_close = QPushButton("✕")
+        self.btn_close.setToolTip("Close Panel")
+        self.btn_close.clicked.connect(self.dock.close)
+        
+        for btn in [self.btn_new, self.btn_history, self.btn_more, self.btn_close]:
+            btn.setFixedSize(24, 24)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                    color: #8b949e;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background: #30363d;
+                    color: #c9d1d9;
+                }
+            """)
+            
+        layout.addWidget(self.title_label)
+        layout.addStretch()
+        layout.addWidget(self.btn_new)
+        layout.addWidget(self.btn_history)
+        layout.addWidget(self.btn_more)
+        layout.addWidget(self.btn_close)
