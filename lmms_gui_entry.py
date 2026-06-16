@@ -19,7 +19,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("LMMs-GUI")
     app.setApplicationDisplayName("LMMs - GUI Mode")
-    app.setDesktopFileName("lmms.desktop")
+    app.setDesktopFileName("lmms")
     
     icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "icon.png")
     if os.path.exists(icon_path):
