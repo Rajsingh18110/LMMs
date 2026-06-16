@@ -1087,11 +1087,12 @@ lmms update
                                                 if display_reply and not first_token:
                                                     first_token = True
                                                     spin_status.stop()
-                                                    live_view = Live(Panel(Markdown(display_reply), title=f"✨ {current_model}", subtitle="[dim]Powered by LMMs[/dim]", border_style="bold cyan", padding=(1, 2), expand=False), console=console, refresh_per_second=10, auto_refresh=True)
+                                                    console.print(f"\\n[bold cyan]✨ {current_model}[/bold cyan]")
+                                                    live_view = Live(Markdown(display_reply), console=console, refresh_per_second=10, auto_refresh=True)
                                                     live_view.start()
                                                     
                                                 if live_view and display_reply:
-                                                    live_view.update(Panel(Markdown(display_reply), title=f"✨ {current_model}", subtitle="[dim]Powered by LMMs[/dim]", border_style="bold cyan", padding=(1, 2), expand=False))
+                                                    live_view.update(Markdown(display_reply))
                                             except:
                                                 pass
                         finally:
@@ -1107,7 +1108,8 @@ lmms update
                                         
                     if not full_reply:
                         full_reply = "No response from AI."
-                        console.print(Panel(Markdown(full_reply), title=f"⚠️ {current_model}", border_style="yellow", expand=False))
+                        console.print(f"\\n[bold yellow]⚠️ {current_model}[/bold yellow]")
+                        console.print(Markdown(full_reply))
                         reply = full_reply
                         break
                         

@@ -138,8 +138,7 @@ def launch(mode, forward_args=None):
             if getattr(sys, 'frozen', False):
                 cmd = [sys.executable, "--internal-gui"]
             else:
-                gui_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lmms_gui_entry.py")
-                cmd = [sys.executable, gui_script]
+                cmd = [sys.executable, os.path.abspath(__file__), "--internal-gui"]
         else:
             if getattr(sys, 'frozen', False):
                 cmd = [sys.executable, "--internal-backend"]
