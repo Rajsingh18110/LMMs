@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+    <!-- Dark background (optional, but requested implicitly) -->
+    <rect width="512" height="512" fill="#0f111a" rx="100"/>
+    
+    <!-- Hexagon Outline -->
+    <!-- Center: 256, 256. Radius: 180 -->
+    <!-- Points: (256, 76), (411.8, 166), (411.8, 346), (256, 436), (100.1, 346), (100.1, 166) -->
+    <polygon points="256,76 411.88,166 411.88,346 256,436 100.11,346 100.11,166" 
+             fill="none" 
+             stroke="#00ff66" 
+             stroke-width="24" 
+             stroke-linejoin="miter"/>
+             
+    <!-- </ > Text -->
+    <!-- Left chevron < -->
+    <polyline points="200,200 120,256 200,312" fill="none" stroke="#00ff66" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Slash / -->
+    <line x1="280" y1="180" x2="232" y2="332" stroke="#00ff66" stroke-width="28" stroke-linecap="round"/>
+    
+    <!-- Right chevron > -->
+    <polyline points="312,200 392,256 312,312" fill="none" stroke="#00ff66" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
