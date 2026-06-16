@@ -16,6 +16,11 @@ def main():
     
     from lmms.gui.core.main_window import MainWindow
 
+    # Force native GTK file dialog on Linux (e.g. Kali/XFCE)
+    if sys.platform.startswith("linux"):
+        if "QT_QPA_PLATFORMTHEME" not in os.environ:
+            os.environ["QT_QPA_PLATFORMTHEME"] = "gtk3"
+
     app = QApplication(sys.argv)
     app.setApplicationName("LMMs-GUI")
     app.setApplicationDisplayName("LMMs - GUI Mode")
