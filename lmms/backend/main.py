@@ -275,6 +275,26 @@ def run_cli():
         console.print(f" 🛡️  Permission    : [bold cyan]{current_permission_level}[/bold cyan]")
         console.print("[dim]Type 'exit' to quit. Type '/cl' for the full command list.[/dim]\n")
 
+    def count_tokens(text: str, model_name: str) -> int:
+        try:
+            r = requests.post(f"{ENGINE_URL}/v1/tokenize", json={"model_name": model_name, "text": text}, timeout=2)
+            if r.status_code == 200:
+                return r.json().get("token_count", len(text) // 3)
+        except: pass
+        return len(text) // 3
+
+    def get_context_budget(model_name: str):
+        try:
+            r = requests.get(f"{ENGINE_URL}/v1/model/context", params={"model_name": model_name}, timeout=2)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("status") == "success":
+                    n_ctx = data.get("context_length", 8192)
+                    reserve = int(n_ctx * 0.18)
+                    return n_ctx, reserve, n_ctx - reserve
+        except: pass
+        return 8192, int(8192 * 0.18), int(8192 * 0.82)
+
     print_banner()
     
     while True:
@@ -963,7 +983,14 @@ lmms update
                 auto_extract_persona(cmd, current_model)
                 
                 
-                MAX_ITERATIONS = 8
+                n_ctx, reserve, available_for_input = get_context_budget(current_model)
+                system_cost = count_tokens(system_prompt, current_model)
+                avg_iter_cost = 1000 # Estimate tokens used per tool call/iteration
+                max_possible = max(1, (available_for_input - system_cost) // avg_iter_cost)
+                
+                if current_mode == "/fast": MAX_ITERATIONS = min(max_possible, 10)
+                else: MAX_ITERATIONS = min(max_possible, 30)
+                
                 iter_count = 0
                 
                 try:
@@ -1003,16 +1030,18 @@ lmms update
                         try:
                             # Clean history before sending to engine and truncate old large observations to save context
                             clean_messages = []
-                            obs_count = sum(1 for m in messages if "<observation>" in m["content"])
+                            obs_count = sum(1 for m in messages if isinstance(m.get("content"), str) and "<observation>" in m["content"])
                             obs_seen = 0
+                            max_single_obs_tokens = int(available_for_input * 0.15)
+                            max_single_obs_chars = max_single_obs_tokens * 3
                             for m in messages:
                                 content = m["content"]
-                                if "<observation>" in content:
+                                if isinstance(content, str) and "<observation>" in content:
                                     obs_seen += 1
-                                    # If it's an older observation and very long, truncate it
-                                    if obs_seen < obs_count and len(content) > 1000:
-                                        import re
-                                        content = re.sub(r'(<observation>).*?(</observation>)', r'\\1\\n[Observation truncated to save memory for subsequent steps]\\n\\2', content, flags=re.DOTALL)
+                                    if obs_seen < obs_count and len(content) > max_single_obs_chars:
+                                        head_len = int(max_single_obs_chars * 0.6)
+                                        tail_len = int(max_single_obs_chars * 0.4)
+                                        content = content[:head_len] + "\n...[Observation truncated to save memory for subsequent steps]...\n" + content[-tail_len:]
                                 clean_messages.append({"role": m["role"], "content": content})
 
                             # Apply AI Mode settings
@@ -1050,6 +1079,13 @@ lmms update
                                 error_detail = e.response.json().get("detail", str(e))
                             except:
                                 pass
+                            if "context length" in error_detail.lower() or "too large" in error_detail.lower() or "exceeded" in error_detail.lower():
+                                console.print(f"\n[bold yellow]⚠️ Context Overflow detected! Auto-truncating and retrying...[/bold yellow]")
+                                for idx, m in enumerate(messages):
+                                    if isinstance(m["content"], str) and "<observation>" in m["content"]:
+                                        messages[idx]["content"] = m["content"][:1000] + "\n...[Force Truncated]\n</observation>"
+                                iter_count -= 1
+                                continue
                             console.print(f"\n[red]Engine Error: {error_detail}[/red]")
                             break
                         except Exception as e:
@@ -1107,6 +1143,14 @@ lmms update
                         break
                                         
                     if not full_reply:
+                        if iter_count < MAX_ITERATIONS and sum(count_tokens(m.get("content", ""), current_model) if isinstance(m.get("content"), str) else 0 for m in messages) > available_for_input * 0.8:
+                            console.print(f"\n[bold yellow]⚠️ Silent generation failure (likely context overflow). Auto-truncating...[/bold yellow]")
+                            for idx, m in enumerate(messages):
+                                if isinstance(m["content"], str) and "<observation>" in m["content"]:
+                                    messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
+                            iter_count -= 1
+                            continue
+
                         full_reply = "No response from AI."
                         console.print(f"\\n[bold yellow]⚠️ {current_model}[/bold yellow]")
                         console.print(Markdown(full_reply))

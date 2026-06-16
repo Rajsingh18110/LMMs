@@ -159,7 +159,7 @@ class LlamaCppRuntime(RuntimeContract):
                     response_generator = active_model.create_chat_completion(
                         messages=messages,
                         stream=True,
-                        max_tokens=1024
+                        max_tokens=context.get("max_tokens", int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)
                     )
                 while True:
                     with self._global_lock:
@@ -181,7 +181,7 @@ class LlamaCppRuntime(RuntimeContract):
                 response = active_model.create_chat_completion(
                     messages=messages,
                     stream=False,
-                    max_tokens=1024
+                    max_tokens=context.get("max_tokens", int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)
                 )
             return {"message": {"content": response["choices"][0]["message"]["content"]}}
 

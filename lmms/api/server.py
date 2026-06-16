@@ -36,7 +36,9 @@ class ChatRequest(BaseModel):
 class DoctorRequest(BaseModel):
     fix: bool = False
 
-
+class TokenizeRequest(BaseModel):
+    model_name: str
+    text: str
 
 @app.post("/v1/models/load")
 async def load_model(req: LoadRequest):
@@ -413,6 +415,35 @@ def download_model_task(model_name: str):
 async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(download_model_task, req.model_name)
     return {"status": "downloading", "model": req.model_name}
+
+@app.get("/v1/model/context")
+async def get_model_context(model_name: str):
+    def norm(s):
+        return s.lower().replace(".gguf", "").replace("-", "").replace("_", "").replace(":", "").replace(".", "").replace(" ", "")
+    req_norm = norm(model_name)
+    matched_key = None
+    for key in engine_manager.runtime._models.keys():
+        if norm(key) == req_norm or req_norm in norm(key) or norm(key) in req_norm:
+            matched_key = key
+            break
+    
+    if matched_key and matched_key in engine_manager.runtime._models:
+        active_model = engine_manager.runtime._models[matched_key]
+        n_ctx = active_model.n_ctx()
+        return {
+            "status": "success",
+            "context_length": n_ctx,
+            "max_response_tokens": int(n_ctx * 0.18) if n_ctx > 0 else 1024
+        }
+    return {"status": "error", "detail": "Model not loaded in text runtime"}
+
+@app.post("/v1/tokenize")
+async def tokenize_text(req: TokenizeRequest):
+    try:
+        tokens = engine_manager.runtime.tokenize(req.text)
+        return {"status": "success", "token_count": len(tokens)}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(req: ChatRequest):
