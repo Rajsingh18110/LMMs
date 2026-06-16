@@ -971,23 +971,76 @@ def main():
                                 except Exception as e:
                                     console.print(f"[red]Failed to capture screen: {e}[/red]")
                                     messages.append({"role": "user", "content": user_input})
-                            else:
-                                if not is_audio_input:
-                                    messages.append({"role": "user", "content": user_input})
+                        # Inject browser tool instructions if it looks like a web request
+                        is_web_query = any(kw in user_input.lower() for kw in ["http", "www", "search", "fetch", "browse", "website", "url", ".com", ".in", "snapcourse"])
+                        if is_web_query:
+                            tool_instruction = (
+                                "\n[System: You have a BrowserTool available. If you need to fetch a website or bypass CAPTCHA, "
+                                "output ONLY the following XML block: <tool><name>browser</name><url>https://example.com</url></tool> "
+                                "The system will execute it and return the website content to you so you can answer.]"
+                            )
+                            if not is_audio_input:
+                                messages.append({"role": "user", "content": user_input + tool_instruction})
+                        else:
+                            if not is_audio_input:
+                                messages.append({"role": "user", "content": user_input})
 
                         sys.stdout.write(f"[{model_name}] ")
                         sys.stdout.flush()
                         
-                        response_content = ""
-                        for chunk in runtime.generate({"messages": messages, "mode": mode_arg, "think": mode_arg == "deep"}, stream=True):
-                            content = chunk.get("message", {}).get("content", "")
-                            if "<think>" in content: content = content.replace("<think>", "\n\033[90m<think>\n")
-                            if "</think>" in content: content = content.replace("</think>", "\n</think>\033[0m\n")
-                            sys.stdout.write(content)
-                            sys.stdout.flush()
-                            response_content += content
-                        print()
-                        messages.append({"role": "assistant", "content": response_content})
+                        while True:
+                            response_content = ""
+                            for chunk in runtime.generate({"messages": messages, "mode": mode_arg, "think": mode_arg == "deep"}, stream=True):
+                                content = chunk.get("message", {}).get("content", "")
+                                if "<think>" in content: content = content.replace("<think>", "\n\033[90m<think>\n")
+                                if "</think>" in content: content = content.replace("</think>", "\n</think>\033[0m\n")
+                                sys.stdout.write(content)
+                                sys.stdout.flush()
+                                response_content += content
+                            print()
+                            messages.append({"role": "assistant", "content": response_content})
+                            
+                            # Check if the model called a tool
+                            if "<tool>" in response_content and "</tool>" in response_content:
+                                try:
+                                    import re
+                                    tool_name = re.search(r"<name>(.*?)</name>", response_content).group(1).strip()
+                                    tool_url = re.search(r"<url>(.*?)</url>", response_content).group(1).strip()
+                                    
+                                    if tool_name.lower() == "browser":
+                                        print(f"\n\033[96m[System] Executing BrowserTool on {tool_url}...\033[0m")
+                                        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                                        try:
+                                            from lmms.backend.tools.browser import BrowserTool
+                                            browser = BrowserTool()
+                                            
+                                            # If it's a known captcha site, try solve_captcha first
+                                            if "turnstile" in tool_url or "cloudflare" in tool_url:
+                                                result = browser.solve_captcha(tool_url)
+                                            else:
+                                                # Regular open, but human-like stealth is active
+                                                result = browser.open_authenticated(tool_url, None, headless=False)
+                                                
+                                                # Quick check if it hit a captcha wall anyway
+                                                if "captcha" in result.lower() or "verify you are human" in result.lower() or "cloudflare" in result.lower():
+                                                    print("\033[93m[System] Detected CAPTCHA. Initiating Human-like Bypass...\033[0m")
+                                                    result = browser.solve_captcha(tool_url)
+                                                    
+                                            browser.close()
+                                        except Exception as be:
+                                            result = f"BrowserTool Error: {be}"
+                                            
+                                        print(f"\033[92m[System] Tool execution complete. Resuming AI...\033[0m\n")
+                                        messages.append({"role": "user", "content": f"<tool_result>\n{result}\n</tool_result>\nNow provide the final answer to the user based on this data."})
+                                        
+                                        sys.stdout.write(f"[{model_name}] ")
+                                        sys.stdout.flush()
+                                        continue # Loop back to generate again with the tool result!
+                                except Exception as e:
+                                    print(f"\n\033[91m[System] Tool parsing failed: {e}\033[0m")
+                            
+                            # If no tool was called, break out of the generation loop
+                            break
                 except KeyboardInterrupt:
                     print("\nExiting.")
                 except Exception as e:

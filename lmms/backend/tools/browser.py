@@ -3,7 +3,18 @@ import glob
 import platform
 import re
 from playwright.sync_api import sync_playwright
-
+import time
+import random
+import math
+try:
+    from playwright_stealth import stealth_sync
+except ImportError:
+    stealth_sync = lambda page: None
+try:
+    import numpy as np
+    from scipy.interpolate import interp1d
+except ImportError:
+    np = None
 class BrowserTool:
     def __init__(self):
         self.playwright = None
@@ -67,6 +78,12 @@ class BrowserTool:
                 self.page = self.browser.pages[0]
             elif hasattr(self.browser, "new_page"):
                 self.page = self.browser.new_page()
+            
+            # Inject stealth to bypass detection
+            try:
+                stealth_sync(self.page)
+            except Exception as e:
+                print(f"Warning: Failed to inject stealth: {e}")
 
     def _goto_if_needed(self, url: str):
         if not url: return
@@ -266,3 +283,157 @@ class BrowserTool:
             return f"JS Execution result: {result}"
         except Exception as e:
             return f"Failed to execute JS: {str(e)}"
+
+    def _generate_bezier_curve(self, start_x, start_y, end_x, end_y):
+        if np is None:
+            # Fallback to linear points if numpy/scipy missing
+            steps = random.randint(15, 30)
+            return [(start_x + (end_x - start_x) * i / steps, start_y + (end_y - start_y) * i / steps) for i in range(steps)]
+            
+        # Generate 2-3 random control points for the bezier curve
+        num_points = random.randint(3, 5)
+        points_x = [start_x]
+        points_y = [start_y]
+        
+        for i in range(1, num_points - 1):
+            t = i / (num_points - 1)
+            # Add some jitter to the straight line
+            jitter_x = random.uniform(-100, 100)
+            jitter_y = random.uniform(-100, 100)
+            points_x.append(start_x + (end_x - start_x) * t + jitter_x)
+            points_y.append(start_y + (end_y - start_y) * t + jitter_y)
+            
+        points_x.append(end_x)
+        points_y.append(end_y)
+        
+        # Interpolate
+        try:
+            t = np.linspace(0, 1, len(points_x))
+            t_new = np.linspace(0, 1, random.randint(25, 45))
+            f_x = interp1d(t, points_x, kind='quadratic')
+            f_y = interp1d(t, points_y, kind='quadratic')
+            
+            curve_x = f_x(t_new)
+            curve_y = f_y(t_new)
+            return list(zip(curve_x, curve_y))
+        except Exception:
+            # Fallback
+            steps = random.randint(15, 30)
+            return [(start_x + (end_x - start_x) * i / steps, start_y + (end_y - start_y) * i / steps) for i in range(steps)]
+
+    def _move_mouse_human_like(self, target_x, target_y):
+        # We don't always know current mouse pos in Playwright natively, so start from a random upper area
+        current_x = random.randint(100, 500)
+        current_y = random.randint(100, 300)
+        
+        curve = self._generate_bezier_curve(current_x, current_y, target_x, target_y)
+        for x, y in curve:
+            self.page.mouse.move(x, y)
+            time.sleep(random.uniform(0.01, 0.03))
+
+    def human_click(self, url: str, selector: str) -> str:
+        """Move mouse naturally with bezier curves and click, bypassing basic bot protection."""
+        try:
+            self._ensure_session(headless=False) # Must be visible for best bypass
+            self._goto_if_needed(url)
+            self.page.wait_for_timeout(random.randint(1000, 2500))
+            
+            box = None
+            if not selector.startswith(".") and not selector.startswith("#") and not "[" in selector:
+                # Text selector
+                elem = self.page.get_by_text(selector, exact=True)
+                if elem.count() > 0:
+                    box = elem.first.bounding_box()
+                else:
+                    elem = self.page.get_by_text(selector)
+                    if elem.count() > 0:
+                        box = elem.first.bounding_box()
+            
+            if not box:
+                # Try standard selector
+                locator = self.page.locator(selector).first
+                box = locator.bounding_box()
+                
+            if not box:
+                return f"Could not find bounding box for selector: {selector}"
+                
+            # Target center with slight randomized offset
+            target_x = box["x"] + box["width"] / 2 + random.uniform(-box["width"]/4, box["width"]/4)
+            target_y = box["y"] + box["height"] / 2 + random.uniform(-box["height"]/4, box["height"]/4)
+            
+            self._move_mouse_human_like(target_x, target_y)
+            time.sleep(random.uniform(0.1, 0.4))
+            self.page.mouse.down()
+            time.sleep(random.uniform(0.05, 0.15))
+            self.page.mouse.up()
+            time.sleep(random.uniform(1000, 2000))
+            
+            content = self.page.evaluate("document.body.innerText")
+            return f"Human-clicked '{selector}'. New URL: {self.page.url}\nPreview: {content[:1000]}"
+        except Exception as e:
+            return f"Failed to human-click: {str(e)}"
+
+    def solve_captcha(self, url: str) -> str:
+        """Looks for Turnstile or reCAPTCHA checkboxes and attempts a human-like click to pass it."""
+        try:
+            self._ensure_session(headless=False)
+            self._goto_if_needed(url)
+            
+            # Wait for potential CAPTCHA frames
+            self.page.wait_for_timeout(3000)
+            
+            # Check for Cloudflare Turnstile
+            turnstile_frames = self.page.frames
+            found = False
+            for frame in turnstile_frames:
+                if "cloudflare" in frame.url or "turnstile" in frame.url:
+                    try:
+                        # Find the widget inside the frame
+                        checkbox = frame.locator("input[type='checkbox'], .mark, .ctp-checkbox-label").first
+                        if checkbox.count() > 0:
+                            # We can't easily get bounding box inside iframe via playwright directly without math
+                            # Fallback: Just click the frame itself if it's small, or use standard locator click
+                            print("Attempting to bypass Turnstile...")
+                            # Attempt to get bounding box of the iframe element itself
+                            iframe_element = self.page.locator(f"iframe[src*='{frame.url}']").first
+                            box = iframe_element.bounding_box()
+                            if box:
+                                target_x = box["x"] + 30 # roughly where checkbox is
+                                target_y = box["y"] + box["height"] / 2
+                                self._move_mouse_human_like(target_x, target_y)
+                                time.sleep(random.uniform(0.1, 0.3))
+                                self.page.mouse.click(target_x, target_y, delay=random.randint(50, 150))
+                                found = True
+                                break
+                    except Exception as e:
+                        pass
+            
+            if not found:
+                # Check for reCAPTCHA
+                for frame in self.page.frames:
+                    if "recaptcha" in frame.url and "api2/anchor" in frame.url:
+                        try:
+                            checkbox = frame.locator(".recaptcha-checkbox-border").first
+                            if checkbox.count() > 0:
+                                iframe_element = self.page.locator(f"iframe[src*='{frame.url}']").first
+                                box = iframe_element.bounding_box()
+                                if box:
+                                    target_x = box["x"] + 30
+                                    target_y = box["y"] + box["height"] / 2
+                                    self._move_mouse_human_like(target_x, target_y)
+                                    time.sleep(random.uniform(0.1, 0.3))
+                                    self.page.mouse.click(target_x, target_y, delay=random.randint(50, 150))
+                                    found = True
+                                    break
+                        except Exception:
+                            pass
+            
+            if found:
+                self.page.wait_for_timeout(5000)
+                content = self.page.evaluate("document.body.innerText")
+                return f"Captcha Bypass Attempted. New URL: {self.page.url}\nPreview: {content[:1000]}"
+            else:
+                return "No identifiable CAPTCHA frames found on page."
+                
+        except Exception as e:
+            return f"Failed to solve CAPTCHA: {str(e)}"
