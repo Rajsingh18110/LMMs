@@ -242,7 +242,6 @@ class ChatPage(QWidget):
         self.is_streaming = False
         self.append_message("system", f"<b>Error:</b> {error_msg}")
 
-    @pyqtSlot(object)
     def on_anchor_clicked(self, url):
         url_str = url.toString()
         if url_str.startswith("copy:"):
