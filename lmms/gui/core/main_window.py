@@ -140,7 +140,7 @@ class MainWindow(QMainWindow):
                 btn.setFixedSize(22, 22)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setStyleSheet("""
-                    QPushButton { background: transparent; border: none; color: #8b949e; border-radius: 4px; font-size: 12px; }
+                    QPushButton { background: transparent; border: none; color: #8b949e; border-radius: 4px; font-size: 12px; padding: 0px; }
                     QPushButton:hover { background: #30363d; color: #c9d1d9; }
                 """)
                 

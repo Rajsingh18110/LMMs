@@ -122,6 +122,7 @@ class ChatPage(QWidget):
                 border: none;
                 color: #8b949e;
                 font-size: 18px;
+                padding: 0px;
             }
             QPushButton:hover {
                 color: #c9d1d9;
@@ -141,6 +142,7 @@ class ChatPage(QWidget):
                 border: none;
                 font-size: 14px;
                 font-weight: bold;
+                padding: 0px;
             }
             QPushButton:hover {
                 background-color: #58a6ff;

@@ -144,6 +144,7 @@ class ChatDockTitleBar(QWidget):
                     border-radius: 4px;
                     font-size: 18px;
                     font-weight: bold;
+                    padding: 0px;
                 }
                 QPushButton:hover {
                     background: #30363d;
