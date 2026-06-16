@@ -56,7 +56,9 @@ class MainWindow(QMainWindow):
         self.notifications.setGeometry(0, 0, self.width(), self.height())
         
         # Setup Menu Bar
-        self.setMenuBar(LMMsMenuBar(self))
+        menu_bar = LMMsMenuBar(self)
+        menu_bar.setFixedHeight(30)
+        self.setMenuBar(menu_bar)
         
         # Restore State
         state = WorkspaceService.load_workspace_state()
@@ -70,13 +72,15 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sidebar (Icon-only mode for IDE look)
+        # Sidebar (Activity Bar - VS Code style)
         self.sidebar = QWidget()
-        self.sidebar.setFixedWidth(60)
+        self.sidebar.setFixedWidth(48)
         self.sidebar.setObjectName("Sidebar")
+        self.sidebar.setStyleSheet("background-color: #181818;")
         sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(5, 20, 5, 20)
-        sidebar_layout.setSpacing(15)
+        sidebar_layout.setContentsMargins(0, 10, 0, 10)
+        sidebar_layout.setSpacing(10)
+        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         # Inner QMainWindow to handle docking layout
         self.inner_window = QMainWindow()
@@ -155,26 +159,26 @@ class MainWindow(QMainWindow):
         self.model_dock.model_selected.connect(self.on_model_selected)
         self.model_dock.hide() # Hidden by default
         
-        # 5. Reserved Docks (Tasks, Memory, Git)
-        for name in ["Tasks", "Memory", "Git"]:
-            dock = QDockWidget(name, self.inner_window)
-            dock.setObjectName(f"{name}Dock")
-            label = QLabel(f"{name} Panel (Coming Soon)")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("color: #8b949e;")
-            dock.setWidget(label)
-            self.docks[name] = dock
-            dock.hide()
-        
-        # Disable floating and enforce VS Code style layout
+        # Set Dock Dimensions
         for dock in self.docks.values():
+            dock.setMinimumWidth(170)
             dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetMovable)
+            
+            # Remove title bar from left docks to save space? The user asked for "Title Bar" height 30px,
+            # which we applied to the Menu Bar. We will leave dock title bars alone for now.
 
         # Add Docks - Initial Default Layout
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.explorer_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.search_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
+        
+        # Set default width for left docks to 250px
+        self.inner_window.resizeDocks(
+            [self.explorer_dock, self.search_dock, self.model_dock],
+            [250, 250, 250],
+            Qt.Orientation.Horizontal
+        )
 
         # Sidebar Buttons
         self.nav_buttons = {}
@@ -183,12 +187,7 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.svg")),
             ("🔍", "Search", os.path.join(assets_dir, "icon_search.svg")),
-            ("📋", "Tasks", None),
-            ("🧠", "Memory", None),
-            ("🌳", "Git", None),
             ("📦", "Models", os.path.join(assets_dir, "icon_models.svg")),
-            ("💬", "Chats", None),
-            ("Terminal", "Terminal", None),
             ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]
         
@@ -204,14 +203,6 @@ class MainWindow(QMainWindow):
             return QIcon(pixmap)
 
         for text_icon, name, custom_icon_path in nav_items:
-            # Fallback for settings if svg doesn't exist
-            if name == "Settings" and not (custom_icon_path and os.path.exists(custom_icon_path)):
-                custom_icon_path = None
-                text_icon = "⚙"
-            # Fallback for terminal
-            if name == "Terminal" and not custom_icon_path:
-                text_icon = "🖥"
-                
             btn = QPushButton(text_icon if not custom_icon_path else "")
             if custom_icon_path and os.path.exists(custom_icon_path):
                 svg_icon = load_svg_icon(custom_icon_path)
@@ -219,20 +210,31 @@ class MainWindow(QMainWindow):
                     btn.setIcon(svg_icon)
                 else:
                     btn.setIcon(QIcon(custom_icon_path))
-                # Make icon bigger
+                
+                # VS Code activity bar icons are typically 24x24 or 22x22
                 from PyQt6.QtCore import QSize
-                btn.setIconSize(QSize(28, 28))
+                btn.setIconSize(QSize(24, 24))
                 
             btn.setToolTip(name)
             btn.setObjectName("NavButton")
             btn.setCheckable(True)
-            btn.setFixedSize(40, 40)
+            btn.setFixedSize(48, 48) # Match sidebar width so it fills horizontally
+            btn.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    background-color: transparent;
+                }
+                QPushButton:hover {
+                    background-color: #2b2d31;
+                }
+                QPushButton:checked {
+                    border-left: 2px solid #007acc;
+                }
+            """)
             
             # Special case for Settings since we removed the dock
             if name == "Settings":
                 btn.clicked.connect(lambda checked: CommandRegistry.execute("settings.providers"))
-            elif name == "Terminal":
-                btn.clicked.connect(lambda checked: self.editor_manager.open_terminal_tab())
             else:
                 btn.clicked.connect(lambda checked, n=name, b=btn: self.toggle_dock(n, b))
                 # Connect visibility changed to update button state
@@ -241,7 +243,7 @@ class MainWindow(QMainWindow):
                 btn.setChecked(self.docks[name].isVisible())
             
             sidebar_layout.addWidget(btn)
-            if name not in ["Settings", "Terminal"]:
+            if name != "Settings":
                 self.nav_buttons[name] = btn
 
         sidebar_layout.addStretch()
@@ -254,7 +256,8 @@ class MainWindow(QMainWindow):
         
         # Status Bar
         self.status_bar = QStatusBar()
-        self.status_bar.setStyleSheet("background-color: #0e1116; color: #8b949e; border-top: 1px solid #30363d; padding-left: 10px;")
+        self.status_bar.setFixedHeight(22)
+        self.status_bar.setStyleSheet("background-color: #007acc; color: #ffffff; border: none; padding-left: 10px; font-size: 11px;")
         self.setStatusBar(self.status_bar)
         
         self.status_file_info = QLabel("Ready")
