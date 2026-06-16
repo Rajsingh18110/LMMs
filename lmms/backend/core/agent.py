@@ -88,6 +88,8 @@ class HexAgent:
         self.tools = {
             "web_search": web_search,
             "open_url": self.browser_tool.open_url,
+            "browser_click": self.browser_tool.human_click,
+            "browser_type": self.browser_tool.human_type,
             "read_file": self.file_tool.read,
             "write_file": self.file_tool.write,
             "edit_in_vscode": self.file_tool.edit_in_vscode,
@@ -114,10 +116,23 @@ class HexAgent:
                     "query": {"type": "string", "description": "Search query"}
                 }, "required": ["query"]}}},
             {"type": "function", "function": {
-                "name": "open_url", "description": "Open a webpage and extract content",
+                "name": "open_url", "description": "Open a webpage and extract content. Automatically bypasses simple CAPTCHAs.",
                 "parameters": {"type": "object", "properties": {
                     "url": {"type": "string", "description": "URL to open"}
                 }, "required": ["url"]}}},
+            {"type": "function", "function": {
+                "name": "browser_click", "description": "Click an element on the current webpage using human-like mouse movements. Use this to bypass 'Verify you are human' or to navigate.",
+                "parameters": {"type": "object", "properties": {
+                    "url": {"type": "string", "description": "Current URL"},
+                    "selector": {"type": "string", "description": "CSS selector or text content to click"}
+                }, "required": ["url", "selector"]}}},
+            {"type": "function", "function": {
+                "name": "browser_type", "description": "Type text into an input field on the current webpage with human-like delays. Use for login forms.",
+                "parameters": {"type": "object", "properties": {
+                    "url": {"type": "string", "description": "Current URL"},
+                    "selector": {"type": "string", "description": "CSS selector for the input field"},
+                    "text": {"type": "string", "description": "Text to type"}
+                }, "required": ["url", "selector", "text"]}}},
             {"type": "function", "function": {
                 "name": "read_file", "description": "Read contents of a local file",
                 "parameters": {"type": "object", "properties": {

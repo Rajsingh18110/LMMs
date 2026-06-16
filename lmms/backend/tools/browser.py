@@ -20,6 +20,7 @@ class BrowserTool:
         self.playwright = None
         self.browser = None
         self.page = None
+        self.cookie_file = os.path.expanduser("~/.lmms/browser_cookies.json")
 
     def _ensure_session(self, headless=True, user_data_dir=None, profile_name="Default"):
         if not self.playwright:
@@ -84,6 +85,38 @@ class BrowserTool:
                 stealth_sync(self.page)
             except Exception as e:
                 print(f"Warning: Failed to inject stealth: {e}")
+                
+            self.load_cookies()
+
+    def load_cookies(self):
+        if os.path.exists(self.cookie_file) and self.browser:
+            try:
+                import json
+                with open(self.cookie_file, "r") as f:
+                    cookies = json.load(f)
+                if hasattr(self.browser, "add_cookies"):
+                    self.browser.add_cookies(cookies)
+                elif hasattr(self.browser, "contexts") and len(self.browser.contexts) > 0:
+                    self.browser.contexts[0].add_cookies(cookies)
+            except Exception as e:
+                print(f"Warning: Failed to load cookies: {e}")
+
+    def save_cookies(self):
+        if self.browser:
+            try:
+                import json
+                cookies = []
+                if hasattr(self.browser, "cookies"):
+                    cookies = self.browser.cookies()
+                elif hasattr(self.browser, "contexts") and len(self.browser.contexts) > 0:
+                    cookies = self.browser.contexts[0].cookies()
+                
+                if cookies:
+                    os.makedirs(os.path.dirname(self.cookie_file), exist_ok=True)
+                    with open(self.cookie_file, "w") as f:
+                        json.dump(cookies, f)
+            except Exception as e:
+                print(f"Warning: Failed to save cookies: {e}")
 
     def _goto_if_needed(self, url: str):
         if not url: return
@@ -99,6 +132,7 @@ class BrowserTool:
             self.page.goto(url, timeout=30000)
 
     def close(self):
+        self.save_cookies()
         if self.browser:
             try: self.browser.close()
             except: pass
@@ -209,6 +243,13 @@ class BrowserTool:
             self._goto_if_needed(url)
             self.page.wait_for_timeout(2000)
             content = self.page.evaluate("document.body.innerText")
+            
+            # Auto-detect CAPTCHA and fallback to human-like bypass
+            content_lower = content.lower() if content else ""
+            if "captcha" in content_lower or "verify you are human" in content_lower or "cloudflare" in content_lower or "checking your browser" in content_lower:
+                print("\n[BrowserTool] CAPTCHA detected. Initiating Human-like Bypass...")
+                return self.solve_captcha(url)
+                
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
@@ -240,6 +281,7 @@ class BrowserTool:
                 
             self.page.wait_for_timeout(3000)
             content = self.page.evaluate("document.body.innerText")
+            self.save_cookies()
             return f"Clicked '{selector}'. New page URL: {self.page.url}\nPreview: {content[:1000]}"
         except Exception as e:
             return f"Failed to click element: {str(e)}"
@@ -372,6 +414,27 @@ class BrowserTool:
             return f"Human-clicked '{selector}'. New URL: {self.page.url}\nPreview: {content[:1000]}"
         except Exception as e:
             return f"Failed to human-click: {str(e)}"
+
+    def human_type(self, url: str, selector: str, text: str) -> str:
+        """Type text into an input field with human-like random delays."""
+        try:
+            self._ensure_session(headless=False)
+            self._goto_if_needed(url)
+            self.page.wait_for_timeout(random.randint(500, 1500))
+            
+            locator = self.page.locator(selector).first
+            locator.click(timeout=5000)
+            
+            # Type each character with random delay
+            for char in text:
+                self.page.keyboard.type(char)
+                time.sleep(random.uniform(0.05, 0.2))
+                
+            self.page.wait_for_timeout(1000)
+            content = self.page.evaluate("document.body.innerText")
+            return f"Human-typed into '{selector}'.\nPreview: {content[:1000]}"
+        except Exception as e:
+            return f"Failed to human-type: {str(e)}"
 
     def solve_captcha(self, url: str) -> str:
         """Looks for Turnstile or reCAPTCHA checkboxes and attempts a human-like click to pass it."""

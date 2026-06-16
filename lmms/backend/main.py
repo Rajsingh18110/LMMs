@@ -18,6 +18,7 @@ from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.live import Live
 from prompt_toolkit import prompt
@@ -837,7 +838,6 @@ lmms update
                         pass
                     if current_model != "None":
                         console.print(f"[dim]Auto-selected model: {current_model}[/dim]")
-                        print_banner()
                     
                 # Build context if workspace is open
                 system_prompt = "You are an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\\n"
@@ -898,6 +898,14 @@ lmms update
                     "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\\n"
                     "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": true|false}} (Set headless to false to show browser and bypass bot-detection for SSO login. User will select profile interactively.)\\n"
                     "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\\n"
+                )
+                
+                system_prompt += (
+                    "\n## Browsing Private Sites & Authentication\n"
+                    "If the user asks you to fetch data from a private or authenticated website (e.g., snapcourse.in), DO NOT immediately ask for credentials.\n"
+                    "Assume the user is already logged in and the session cookies are automatically managed by your browser tool.\n"
+                    "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
+                    "ONLY if the browser tool returns an explicit 'login page' or 'unauthorized' preview should you stop and ask the user for credentials or tell them to use `browser.open_authenticated`.\n\n"
                 )
                 system_prompt += (
                     "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
@@ -1054,7 +1062,7 @@ lmms update
                                                 if "error" in chunk:
                                                     full_reply += f"\n\n❌ **Engine Error:** {chunk['error']}"
                                                     if live_view:
-                                                        live_view.update(Markdown(f"**{current_model}:** {full_reply}"))
+                                                        live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False))
                                                     break
                                                 full_reply += chunk.get("content", "")
                                                 display_reply = full_reply
@@ -1067,11 +1075,11 @@ lmms update
                                                 if display_reply and not first_token:
                                                     first_token = True
                                                     spin_status.stop()
-                                                    live_view = Live(Markdown(f"**{current_model}:** "), console=console, refresh_per_second=10, auto_refresh=True)
+                                                    live_view = Live(Panel(Markdown(display_reply), title=f"✨ {current_model}", subtitle="[dim]Powered by LMMs[/dim]", border_style="bold cyan", padding=(1, 2), expand=False), console=console, refresh_per_second=10, auto_refresh=True)
                                                     live_view.start()
                                                     
                                                 if live_view and display_reply:
-                                                    live_view.update(Markdown(f"**{current_model}:** {display_reply}"))
+                                                    live_view.update(Panel(Markdown(display_reply), title=f"✨ {current_model}", subtitle="[dim]Powered by LMMs[/dim]", border_style="bold cyan", padding=(1, 2), expand=False))
                                             except:
                                                 pass
                         finally:
@@ -1087,7 +1095,7 @@ lmms update
                                         
                     if not full_reply:
                         full_reply = "No response from AI."
-                        console.print(Markdown(full_reply))
+                        console.print(Panel(Markdown(full_reply), title=f"⚠️ {current_model}", border_style="yellow", expand=False))
                         reply = full_reply
                         break
                         
