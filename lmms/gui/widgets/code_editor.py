@@ -137,6 +137,9 @@ class CodeEditor(QPlainTextEdit):
         self.updateRequest.connect(self.updateLineNumberArea)
         self.cursorPositionChanged.connect(self.highlightCurrentLine)
         
+        self.highlighter = None
+        self.linter_errors = []
+        
         # Initialization
         self.updateLineNumberAreaWidth(0)
         self.highlightCurrentLine()
@@ -151,8 +154,7 @@ class CodeEditor(QPlainTextEdit):
             }
         """)
 
-        self.highlighter = None
-        self.linter_errors = []
+
         
         # Add Timer for linting
         self.lint_timer = QTimer(self)

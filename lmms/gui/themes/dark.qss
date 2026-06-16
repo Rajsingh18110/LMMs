@@ -271,3 +271,12 @@ QPushButton#attachBtn {
 QPushButton#attachBtn:hover {
     background-color: #2a2d2e;
 }
+
+/* =========================================
+   5. Custom Title Bar
+   ========================================= */
+#CustomTitleBar {
+    background-color: #181818;
+    color: #c9d1d9;
+    border-bottom: 1px solid #30363d;
+}

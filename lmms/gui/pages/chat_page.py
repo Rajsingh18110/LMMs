@@ -74,6 +74,7 @@ class ChatPage(QWidget):
 
         self.input_field = QTextEdit()
         self.input_field.setObjectName("chatInput")
+        self.input_field.setStyleSheet("border: none; background: transparent;")
         self.input_field.setPlaceholderText("Type a message or command (e.g., /fast, /code, /help)...")
         self.input_field.setMaximumHeight(100)
         
@@ -179,16 +180,16 @@ class ChatPage(QWidget):
                 <div style="text-align: right; margin: 10px 0;">
                     <span style="background-color: #2b2d31; color: white; padding: 10px 15px; border-radius: 8px; display: inline-block;">
                         <b style="color: #58a6ff;">You</b><br>
-                        <div style="margin-top: 5px;">{html_content}</div>
+                        {html_content}
                     </span>
                 </div>
                 """
             elif role == "system":
                 html += f"""
                 <div style="text-align: center; margin: 10px 0;">
-                    <span style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block;">
+                    <span style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block; text-align: center;">
                         <b style="color: #58a6ff;">System</b><br>
-                        <div style="margin-top: 5px;">{html_content}</div>
+                        {html_content}
                     </span>
                 </div>
                 """
@@ -197,7 +198,7 @@ class ChatPage(QWidget):
                 <div style="text-align: left; margin: 10px 0;">
                     <span style="background-color: transparent; color: #cccccc; padding: 10px 15px; display: inline-block;">
                         <b style="color: #58a6ff;">Assistant</b><br>
-                        <div style="margin-top: 5px;">{html_content}</div>
+                        {html_content}
                     </span>
                 </div>
                 """
