@@ -95,17 +95,11 @@ class TerminalEdit(QTextEdit):
             
             # Get the command user typed
             cursor.setPosition(self.readonly_pos, QTextCursor.MoveMode.KeepAnchor)
-            cmd = cursor.selectedText()
+            cmd = cursor.selectedText().replace('\u2029', '\n').replace('\u00a0', ' ')
             
-            # Clear selection and insert newline locally
-            cursor.clearSelection()
+            # Remove the locally typed command to avoid duplication because interactive bash echoes it back
+            cursor.removeSelectedText()
             self.setTextCursor(cursor)
-            
-            # Append newline locally to echo it
-            format = QTextCharFormat()
-            format.setForeground(QColor("#c9d1d9"))
-            cursor.insertText("\n", format)
-            self.readonly_pos = self.document().characterCount() - 1
             
             # Send to process
             self.process.write((cmd + "\n").encode('utf-8'))
