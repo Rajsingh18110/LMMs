@@ -7,6 +7,7 @@ from PyQt6.QtGui import QIcon
 
 from lmms.gui.widgets.code_editor import CodeEditor
 from lmms.gui.panels.terminal_panel import TerminalPanel
+from lmms.gui.widgets.ai_tabs import CanvasTab, MarkdownTab, ReviewTab
 
 class EditorManager(QWidget):
     file_saved = pyqtSignal(str) # file_path
@@ -146,6 +147,35 @@ class EditorManager(QWidget):
             
         self.tabs.setCurrentWidget(self.terminal_panel)
         self.breadcrumb_label.setText("Terminal")
+        
+    def open_ai_canvas(self, identifier="ai_canvas", title="Canvas"):
+        canvas = CanvasTab()
+        self.open_custom_tab(canvas, title, identifier)
+        return canvas
+
+    def open_implementation_plan(self, content, identifier="ai_plan", title="Implementation Plan"):
+        tab = MarkdownTab()
+        tab.set_markdown(content)
+        self.open_custom_tab(tab, title, identifier)
+        return tab
+
+    def open_task_list(self, content, identifier="ai_tasks", title="Task"):
+        tab = MarkdownTab()
+        tab.set_markdown(content)
+        self.open_custom_tab(tab, title, identifier)
+        return tab
+
+    def open_walkthrough(self, content, identifier="ai_walkthrough", title="Walkthrough"):
+        tab = MarkdownTab()
+        tab.set_markdown(content)
+        self.open_custom_tab(tab, title, identifier)
+        return tab
+
+    def open_review(self, original_text, new_text, identifier="ai_review", title="Review Code"):
+        tab = ReviewTab()
+        tab.set_diff(original_text, new_text)
+        self.open_custom_tab(tab, title, identifier)
+        return tab
         
     def close_tab(self, index: int):
         widget = self.tabs.widget(index)

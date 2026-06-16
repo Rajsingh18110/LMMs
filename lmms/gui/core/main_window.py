@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QSize, QPoint, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QFont, QCursor, QColor, QPixmap, QPainter
-from PyQt6.QtSvg import QSvgRenderer
 import os
 try:
     from PyQt6.QtGui import QFileSystemModel
@@ -34,6 +33,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LMMs - Local Machine Model Studio")
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.resize(1400, 900)
         
         # Set Window Icon
@@ -57,8 +57,7 @@ class MainWindow(QMainWindow):
         
         # Setup Menu Bar
         menu_bar = LMMsMenuBar(self)
-        menu_bar.setFixedHeight(30)
-        self.setMenuBar(menu_bar)
+        self.menu_bar_widget = menu_bar
         
         # Restore State
         state = WorkspaceService.load_workspace_state()
@@ -192,15 +191,19 @@ class MainWindow(QMainWindow):
         ]
         
         def load_svg_icon(path, size=64):
-            renderer = QSvgRenderer(path)
-            if not renderer.isValid():
-                return None
-            pixmap = QPixmap(size, size)
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            renderer.render(painter)
-            painter.end()
-            return QIcon(pixmap)
+            try:
+                from PyQt6.QtSvg import QSvgRenderer
+                renderer = QSvgRenderer(path)
+                if not renderer.isValid():
+                    return None
+                pixmap = QPixmap(size, size)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.end()
+                return QIcon(pixmap)
+            except ImportError:
+                return QIcon(path)
 
         for text_icon, name, custom_icon_path in nav_items:
             btn = QPushButton(text_icon if not custom_icon_path else "")
@@ -252,7 +255,22 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(self.inner_window)
 
-        self.setCentralWidget(main_widget)
+        # Wrap with Title Bar
+        from lmms.gui.widgets.title_bar import CustomTitleBar
+        self.title_bar = CustomTitleBar(self, self.menu_bar_widget)
+        
+        # Connect Toggles
+        self.title_bar.btn_toggle_left.clicked.connect(self.toggle_left_panel)
+        self.title_bar.btn_toggle_right.clicked.connect(self.toggle_right_panel)
+
+        container_widget = QWidget()
+        container_layout = QVBoxLayout(container_widget)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+        container_layout.addWidget(self.title_bar)
+        container_layout.addWidget(main_widget)
+
+        self.setCentralWidget(container_widget)
         
         # Status Bar
         self.status_bar = QStatusBar()
@@ -267,6 +285,28 @@ class MainWindow(QMainWindow):
         
         # Auto-manage Chat visibility based on tab context
         self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed)
+
+    def toggle_left_panel(self):
+        if self.explorer_dock.isVisible():
+            self.explorer_dock.hide()
+            if "Explorer" in self.nav_buttons:
+                self.nav_buttons["Explorer"].setChecked(False)
+        else:
+            self.explorer_dock.show()
+            self.explorer_dock.raise_()
+            if "Explorer" in self.nav_buttons:
+                self.nav_buttons["Explorer"].setChecked(True)
+
+    def toggle_right_panel(self):
+        if self.chat_dock.isVisible():
+            self.chat_dock.hide()
+            if "Chats" in self.nav_buttons:
+                self.nav_buttons["Chats"].setChecked(False)
+        else:
+            self.chat_dock.show()
+            self.chat_dock.raise_()
+            if "Chats" in self.nav_buttons:
+                self.nav_buttons["Chats"].setChecked(True)
 
     def on_editor_tab_changed(self, index):
         if index < 0:
