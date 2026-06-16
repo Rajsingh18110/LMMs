@@ -57,32 +57,32 @@ class EditorManager(QWidget):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; }
-            QTabBar::tab {
-                background: #0d1117;
-                color: #8b949e;
-                padding: 8px 16px;
-                border-right: 1px solid #30363d;
-            }
-            QTabBar::tab:selected {
-                background: #161b22;
-                color: #c9d1d9;
-                border-top: 2px solid #58a6ff;
-            }
-            QTabBar::tab:hover {
-                background: #161b22;
-            }
-        """)
-        
         layout.addWidget(self.tabs)
         
-        # Empty State Label
-        self.empty_label = QLabel(self.tabs)
-        self.empty_label.setText("<center><h1 style='color: #21262d; font-size: 64px; margin-bottom: 10px;'>LMMs</h1><p style='color: #8b949e; font-size: 14px;'>Ctrl+P : Search Files<br>Ctrl+N : New File<br>Ctrl+B : Toggle Sidebar</p></center>")
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.empty_label.show() # Initially empty
+        # Empty State Container (Overlay)
+        self.empty_state_widget = QWidget(self.tabs)
+        self.empty_state_widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        empty_state_layout = QVBoxLayout(self.empty_state_widget)
+        empty_state_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_state_layout.setSpacing(20)
+        
+        # Welcome Logo
+        assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+        logo_path = os.path.join(assets_dir, "lmms_logo.png")
+        if os.path.exists(logo_path):
+            self.welcome_logo = QLabel()
+            from PyQt6.QtGui import QPixmap
+            big_logo_pixmap = QPixmap(logo_path).scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.welcome_logo.setPixmap(big_logo_pixmap)
+            self.welcome_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_state_layout.addWidget(self.welcome_logo)
+        
+        # Shortcuts
+        self.shortcuts_label = QLabel("<center><p style='color: #8b949e; font-size: 14px;'>Ctrl+P : Search Files<br>Ctrl+N : New File<br>Ctrl+B : Toggle Sidebar</p></center>")
+        self.shortcuts_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_state_layout.addWidget(self.shortcuts_label)
+        
+        self.empty_state_widget.show() # Initially empty
         
     def open_file(self, file_path: str):
         if file_path in self.open_files:
@@ -209,13 +209,13 @@ class EditorManager(QWidget):
         
         if self.tabs.count() == 0:
             self.breadcrumb_label.setText("No file selected")
-            self.empty_label.show()
+            self.empty_state_widget.show()
             
     def on_tab_changed(self, index: int):
         if self.tabs.count() == 0:
-            self.empty_label.show()
+            self.empty_state_widget.show()
         else:
-            self.empty_label.hide()
+            self.empty_state_widget.hide()
             
         if index >= 0:
             widget = self.tabs.widget(index)
@@ -262,5 +262,5 @@ class EditorManager(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'empty_label') and self.empty_label.isVisible():
-            self.empty_label.setGeometry(0, self.tabs.tabBar().height(), self.tabs.width(), self.tabs.height() - self.tabs.tabBar().height())
+        if hasattr(self, 'empty_state_widget') and self.empty_state_widget.isVisible():
+            self.empty_state_widget.setGeometry(0, self.tabs.tabBar().height(), self.tabs.width(), self.tabs.height() - self.tabs.tabBar().height())

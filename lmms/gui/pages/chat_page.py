@@ -73,18 +73,19 @@ class ChatPage(QWidget):
         self.attachment_container.setVisible(False)
 
         self.input_field = QTextEdit()
+        self.input_field.setObjectName("chatInput")
         self.input_field.setPlaceholderText("Type a message or command (e.g., /fast, /code, /help)...")
         self.input_field.setMaximumHeight(100)
-        self.input_field.setStyleSheet("border: none; background: transparent;")
         
         # Send Button Row
         btn_row = QHBoxLayout()
         self.attach_btn = QPushButton("📎 Attach")
+        self.attach_btn.setObjectName("attachBtn")
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.clicked.connect(self.attach_files)
         
         self.send_btn = QPushButton("Send")
-        self.send_btn.setObjectName("PrimaryButton")
+        self.send_btn.setObjectName("sendBtn")
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.clicked.connect(self.send_message)
         
@@ -158,45 +159,49 @@ class ChatPage(QWidget):
         for msg in self.messages:
             role = msg["role"]
             content = msg["content"]
-            
-            if role == "user":
-                name = "You"
-                color = "#c9d1d9"
-                bg = "#2b313d"
-                align_style = "margin-left: 20%; margin-right: 0;"
-            elif role == "system":
-                name = "System"
-                color = "#8b949e"
-                bg = "transparent"
-                align_style = "text-align: center;"
-            else:
-                name = "Assistant"
-                color = "#e5e7eb"
-                bg = "transparent"
-                align_style = "margin-right: 20%; margin-left: 0;"
 
             html_content = markdown.markdown(content, extensions=['fenced_code', 'tables'])
             
             # Inject Copy Code buttons
             def replace_code_block(match):
                 code_id = str(uuid.uuid4())
-                # Replace html entities to get actual code for clipboard
                 import html as html_lib
                 code = match.group(1)
                 raw_code = html_lib.unescape(code)
-                # Remove any inner HTML tags (like span from syntax highlighting)
                 raw_code = re.sub(r'<[^>]+>', '', raw_code)
                 self.code_blocks[code_id] = raw_code
                 return f'<div style="background-color: #0d1117; padding: 8px; border: 1px solid #30363d; border-radius: 5px; margin-bottom: 10px;"><div style="text-align: right;"><a href="copy:{code_id}" style="color: #58a6ff; text-decoration: none; font-size: 12px; font-weight: bold;">[Copy Code]</a></div><pre style="margin: 0; padding-top: 5px;"><code>{code}</code></pre></div>'
             
             html_content = re.sub(r'<pre><code>(.*?)</code></pre>', replace_code_block, html_content, flags=re.DOTALL)
             
-            html += f"""
-            <div style="{align_style} margin-bottom: 20px; padding: 12px; background-color: {bg}; border-radius: 8px;">
-                <b style="color: #58a6ff;">{name}</b>
-                <div style="margin-top: 5px; color: {color};">{html_content}</div>
-            </div>
-            """
+            if role == "user":
+                html += f"""
+                <div style="text-align: right; margin: 10px 0;">
+                    <div style="background-color: #2b2d31; color: white; padding: 10px 15px; border-radius: 8px; display: inline-block; text-align: left;">
+                        <b style="color: #58a6ff;">You</b><br>
+                        <div style="margin-top: 5px;">{html_content}</div>
+                    </div>
+                </div>
+                """
+            elif role == "system":
+                html += f"""
+                <div style="text-align: center; margin: 10px 0;">
+                    <div style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block; text-align: left;">
+                        <b style="color: #58a6ff;">System</b><br>
+                        <div style="margin-top: 5px;">{html_content}</div>
+                    </div>
+                </div>
+                """
+            else:
+                html += f"""
+                <div style="text-align: left; margin: 10px 0;">
+                    <div style="background-color: transparent; color: #cccccc; padding: 10px 15px; display: inline-block; text-align: left;">
+                        <b style="color: #58a6ff;">Assistant</b><br>
+                        <div style="margin-top: 5px;">{html_content}</div>
+                    </div>
+                </div>
+                """
+                
         self.chat_history.setHtml(html)
         scrollbar = self.chat_history.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())

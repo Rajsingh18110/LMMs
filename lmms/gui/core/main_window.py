@@ -108,43 +108,13 @@ class MainWindow(QMainWindow):
             self.file_model.setRootPath(cwd)
             
             self.tree_view = QTreeView()
+            self.tree_view.setObjectName("explorerTree")
             self.tree_view.setModel(self.file_model)
             self.tree_view.setRootIndex(self.file_model.index(cwd))
             self.tree_view.setHeaderHidden(True)
             # Hide size, type, date columns
             for i in range(1, 4):
                 self.tree_view.hideColumn(i)
-            self.tree_view.setStyleSheet("""
-                QTreeView { 
-                    background-color: #0d1117; 
-                    border: none; 
-                    outline: none;
-                }
-                QTreeView::item {
-                    padding: 2px 0px;
-                }
-                QTreeView::item:hover { 
-                    background-color: #21262d; 
-                }
-                QTreeView::item:selected {
-                    background-color: #30363d;
-                }
-                QTreeView::branch {
-                    background-color: transparent;
-                }
-                QTreeView::branch:has-siblings:!adjoins-item {
-                    border-left: 1px solid #30363d;
-                    margin-left: 10px;
-                }
-                QTreeView::branch:has-siblings:adjoins-item {
-                    border-left: 1px solid #30363d;
-                    margin-left: 10px;
-                }
-                QTreeView::branch:!has-children:!has-siblings:adjoins-item {
-                    border-left: 1px solid #30363d;
-                    margin-left: 10px;
-                }
-            """)
             
             # Disable auto-expand on double click
             self.tree_view.setExpandsOnDoubleClick(False)
@@ -328,6 +298,149 @@ class MainWindow(QMainWindow):
         
         # Auto-manage Chat visibility based on tab context
         self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed)
+        
+        # Apply Monolithic QSS
+        monolithic_qss = """
+        /* =========================================
+           1. Title Bar Controls & Toggles
+           ========================================= */
+        QPushButton#minimizeBtn, QPushButton#maximizeBtn {
+            width: 46px;
+            height: 30px;
+            background: transparent;
+            border: none;
+            color: #cccccc;
+        }
+        QPushButton#minimizeBtn:hover, QPushButton#maximizeBtn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        QPushButton#closeBtn {
+            width: 46px;
+            height: 30px;
+            background: transparent;
+            border: none;
+            color: #cccccc;
+        }
+        QPushButton#closeBtn:hover {
+            background-color: #e81123; /* VS Code Red */
+            color: #ffffff;
+        }
+        
+        QPushButton#toggleBtn {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            background: transparent;
+            border: none;
+            color: #cccccc;
+        }
+        QPushButton#toggleBtn:hover {
+            background-color: #2a2d2e;
+        }
+        
+        /* =========================================
+           2. QTabBar (Editor Tabs & Close Button)
+           ========================================= */
+        QTabBar::tab {
+            background-color: #2d2d2d;
+            color: #8b949e;
+            padding: 8px 16px;
+            border: none;
+            border-right: 1px solid #1e1e1e; /* Subtle separator */
+        }
+        QTabBar::tab:selected {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            border-top: 1px solid #007acc; /* Subtle top accent line */
+        }
+        QTabBar::close-button {
+            background: transparent;
+            padding: 2px;
+        }
+        QTabBar::close-button:hover {
+            background: #333333;
+            border-radius: 4px;
+        }
+        
+        /* =========================================
+           3. File Explorer & Splitter (Border Bleed Fix)
+           ========================================= */
+        QTreeView#explorerTree {
+            background-color: #181818;
+            border: none;
+            border-bottom: none; /* Fixes intersection with status bar */
+            outline: none;
+        }
+        QTreeView#explorerTree::item {
+            padding: 2px 0px;
+        }
+        QTreeView#explorerTree::item:hover { 
+            background-color: #21262d; 
+        }
+        QTreeView#explorerTree::item:selected {
+            background-color: #30363d;
+        }
+        QTreeView#explorerTree::branch {
+            background-color: transparent;
+        }
+        QTreeView#explorerTree::branch:has-siblings:!adjoins-item {
+            border-left: 1px solid #30363d;
+            margin-left: 10px;
+        }
+        QTreeView#explorerTree::branch:has-siblings:adjoins-item {
+            border-left: 1px solid #30363d;
+            margin-left: 10px;
+        }
+        QTreeView#explorerTree::branch:!has-children:!has-siblings:adjoins-item {
+            border-left: 1px solid #30363d;
+            margin-left: 10px;
+        }
+        
+        QSplitter::handle {
+            background-color: #2a2d2e;
+        }
+        
+        /* =========================================
+           4. AI Chat Panel
+           ========================================= */
+        QTextEdit#chatInput {
+            background-color: #1e1e24;
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            padding: 8px;
+            color: #ffffff;
+            font-size: 13px;
+        }
+        QTextEdit#chatInput:focus {
+            border: 1px solid #007acc; /* VS Code focus highlight */
+            outline: none;
+        }
+        
+        QPushButton#sendBtn {
+            background-color: #0e639c; /* VS Code modern blue */
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 6px 14px;
+            border: none;
+            font-weight: bold;
+        }
+        QPushButton#sendBtn:hover {
+            background-color: #1177bb;
+        }
+        
+        QPushButton#attachBtn {
+            background-color: transparent;
+            color: #cccccc;
+            border-radius: 4px;
+            padding: 6px 10px;
+            border: none;
+        }
+        QPushButton#attachBtn:hover {
+            background-color: #2a2d2e;
+        }
+        """
+        self.setStyleSheet(monolithic_qss)
 
     def toggle_left_panel(self):
         if self.explorer_dock.isVisible():
