@@ -293,12 +293,12 @@ class MainWindow(QMainWindow):
     def toggle_dock(self, name, button):
         dock = self.docks[name]
         
-        left_docks = ["Explorer", "Search", "Tasks", "Memory", "Git", "Models"]
+        left_docks = ["Explorer", "Search", "Models"]
         if name in left_docks:
             # Hide other left docks to simulate sidebar tabs
             if not dock.isVisible():
                 for other in left_docks:
-                    if other != name and self.docks[other].isVisible():
+                    if other != name and other in self.docks and self.docks[other].isVisible():
                         self.docks[other].hide()
                         if other in self.nav_buttons:
                             self.nav_buttons[other].setChecked(False)
