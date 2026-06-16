@@ -74,7 +74,8 @@ class LlamaCppRuntime(RuntimeContract):
                 
         current_ctx = safe_n_ctx
         model_instance = None
-        while current_ctx >= 512:
+        first_try = True
+        while current_ctx >= 512 or first_try:
             try:
                 model_instance = Llama(
                     model_path=full_path,
@@ -87,9 +88,14 @@ class LlamaCppRuntime(RuntimeContract):
                 break
             except Exception as e:
                 err_msg = str(e).lower()
-                if "llama_context" in err_msg or "kv cache" in err_msg:
-                    print(f"\033[93m[Fallback]\033[0m Context {current_ctx} too large for VRAM, retrying with {current_ctx // 2}...")
-                    current_ctx //= 2
+                if "llama_context" in err_msg or "kv cache" in err_msg or "memory" in err_msg or "alloc" in err_msg:
+                    if current_ctx == 0:
+                        current_ctx = 8192
+                        print(f"\033[93m[Fallback]\033[0m Native context too large for RAM/VRAM, retrying with {current_ctx}...")
+                    else:
+                        print(f"\033[93m[Fallback]\033[0m Context {current_ctx} too large for RAM/VRAM, retrying with {current_ctx // 2}...")
+                        current_ctx //= 2
+                    first_try = False
                 else:
                     print(f"Failed to load model: {e}")
                     return False
