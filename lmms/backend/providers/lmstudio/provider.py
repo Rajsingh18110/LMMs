@@ -16,7 +16,7 @@ class LMStudioProvider(ProviderContract):
                         model_id = f"lmstudio/{rel_path}"
                         size = os.path.getsize(path)
                         manifest = {
-                            "model_id": model_id,
+                            "id": model_id,
                             "provider": "LM Studio",
                             "path": path,
                             "format": "GGUF" if f.endswith(".gguf") else "Safetensors",

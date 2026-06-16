@@ -14,7 +14,7 @@ class HuggingFaceProvider(ProviderContract):
                     if len(parts) >= 3:
                         model_id = f"{parts[1]}/{parts[2]}"
                         manifest = {
-                            "model_id": model_id,
+                            "id": model_id,
                             "provider": "Hugging Face",
                             "path": os.path.join(hf_dir, repo_dir),
                             "format": "Unknown",
