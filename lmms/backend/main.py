@@ -905,7 +905,8 @@ lmms update
                     "If the user asks you to fetch data from a private or authenticated website (e.g., snapcourse.in), DO NOT immediately ask for credentials.\n"
                     "Assume the user is already logged in and the session cookies are automatically managed by your browser tool.\n"
                     "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
-                    "ONLY if the browser tool returns an explicit 'login page' or 'unauthorized' preview should you stop and ask the user for credentials or tell them to use `browser.open_authenticated`.\n\n"
+                    "ONLY if the browser tool returns an explicit 'login page' or 'unauthorized' preview should you stop and ask the user for credentials or tell them to use `browser.open_authenticated`.\n"
+                    "CRITICAL: DO NOT hallucinate or guess exact URLs for inner pages (e.g., /course/day6). Start at the homepage/dashboard and use `browser.scrape` to read the navigation menus, then use `browser.open_url` or `browser.click_element` to follow real links step-by-step to find the requested content.\n\n"
                 )
                 system_prompt += (
                     "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
