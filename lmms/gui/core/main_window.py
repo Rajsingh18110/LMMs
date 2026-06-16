@@ -142,6 +142,9 @@ class MainWindow(QMainWindow):
         self.chat_dock.setObjectName("ChatDock")
         self.chat_page = ChatPage()
         self.chat_dock.setWidget(self.chat_page)
+        
+        from lmms.gui.widgets.title_bar import ChatDockTitleBar
+        self.chat_dock.setTitleBarWidget(ChatDockTitleBar(self.chat_dock, self.chat_page))
         self.docks["Chats"] = self.chat_dock
         
         # 3. Search Dock

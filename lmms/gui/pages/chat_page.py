@@ -31,7 +31,7 @@ class ChatPage(QWidget):
         # --- Chat Section ---
         self.chat_container = QWidget()
         chat_layout = QVBoxLayout(self.chat_container)
-        chat_layout.setContentsMargins(20, 20, 20, 20)
+        chat_layout.setContentsMargins(8, 8, 8, 8)
         chat_layout.setSpacing(15)
 
         # Message History
@@ -80,14 +80,42 @@ class ChatPage(QWidget):
         
         # Send Button Row
         btn_row = QHBoxLayout()
-        self.attach_btn = QPushButton("📎 Attach")
+        btn_row.setContentsMargins(0, 0, 0, 0)
+        
+        self.attach_btn = QPushButton("+")
         self.attach_btn.setObjectName("attachBtn")
+        self.attach_btn.setFixedSize(24, 24)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #8b949e;
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                color: #c9d1d9;
+            }
+        """)
         self.attach_btn.clicked.connect(self.attach_files)
         
-        self.send_btn = QPushButton("Send")
+        self.send_btn = QPushButton("↑")
         self.send_btn.setObjectName("sendBtn")
+        self.send_btn.setFixedSize(26, 26)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #30363d;
+                color: #ffffff;
+                border-radius: 13px;
+                border: none;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #58a6ff;
+            }
+        """)
         self.send_btn.clicked.connect(self.send_message)
         
         btn_row.addWidget(self.attach_btn)
@@ -99,6 +127,45 @@ class ChatPage(QWidget):
         input_layout.addLayout(btn_row)
 
         chat_layout.addWidget(input_container)
+        
+        # Bottom Status Row (Model Selector)
+        from PyQt6.QtWidgets import QComboBox
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(5, 0, 5, 5)
+        
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["🖥 Local: qwen3:8b", "🖥 Local: gemma4", "☁ Cloud: openai"])
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: none;
+                color: #8b949e;
+                font-size: 12px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+        """)
+        
+        self.approvals_combo = QComboBox()
+        self.approvals_combo.addItems(["🛡 Default Approvals", "🛡 Auto-Execute"])
+        self.approvals_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: none;
+                color: #8b949e;
+                font-size: 12px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+        """)
+        
+        status_row.addWidget(self.model_combo)
+        status_row.addStretch()
+        status_row.addWidget(self.approvals_combo)
+        
+        chat_layout.addLayout(status_row)
         
         main_layout.addWidget(self.chat_container)
 
