@@ -402,7 +402,7 @@ def main():
                     safe_name = model_name.split("/")[-1]
                     manifest_path = os.path.join(manifests_dir, f"{safe_name}.json")
                     with open(manifest_path, "w") as f:
-                        json.dump({"base_model": target_file}, f)
+                        json.dump({"base_model": target_file, "repo_id": repo_id}, f)
                         
                     # Update downloads map
                     d_file = os.path.expanduser("~/.lmms/logs/downloads.json")
@@ -613,6 +613,19 @@ def main():
                 is_vlm = False
                 is_audio = False
                 hf_repo = model_name
+                
+                # Check manifest for true repo_id
+                manifests_dir = os.path.expanduser("~/.lmms/manifests")
+                safe_name = model_name.split("/")[-1]
+                manifest_path = os.path.join(manifests_dir, f"{safe_name}.json")
+                if os.path.exists(manifest_path):
+                    try:
+                        with open(manifest_path, "r") as f:
+                            man_data = json.load(f)
+                            if "repo_id" in man_data:
+                                hf_repo = man_data["repo_id"]
+                    except:
+                        pass
                 
                 # Aliases for convenience
                 if "smolvlm" in model_name.lower(): hf_repo = "HuggingFaceTB/SmolVLM2-2.2B-Instruct"

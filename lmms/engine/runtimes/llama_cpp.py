@@ -44,11 +44,39 @@ class LlamaCppRuntime(RuntimeContract):
             print(f"ERROR: Model file not found at {full_path}")
             return False
             
+        file_size_gb = os.path.getsize(full_path) / (1024**3)
+        vram_gb = 0
+        try:
+            import torch
+            if torch.cuda.is_available():
+                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        except Exception:
+            pass
+
+        # Calculate safe n_ctx and display warning if necessary
+        safe_n_ctx = 0 # 0 = native max
+        if vram_gb > 0:
+            if file_size_gb > vram_gb * 1.5:
+                import time
+                print(f"\n\033[91mWARNING: You are attempting to run a massive model ({file_size_gb:.1f}GB) on a GPU with limited VRAM ({vram_gb:.1f}GB).\033[0m")
+                print("\033[91mThis will cause heavy system RAM swapping, leading to extremely slow generation.\033[0m")
+                print("\033[91mSustained 100% GPU/CPU thrashing may overheat or damage your hardware over time.\033[0m")
+                print("\033[93mProceeding in 5 seconds...\033[0m\n")
+                time.sleep(5)
+            
+            # Cap n_ctx dynamically based on VRAM to prevent KV cache OOM
+            if vram_gb < 8.0:
+                safe_n_ctx = 8192
+            elif vram_gb < 16.0:
+                safe_n_ctx = 16384
+            else:
+                safe_n_ctx = 32768
+                
         try:
             model_instance = Llama(
                 model_path=full_path,
                 n_gpu_layers=-1, # All layers to GPU, automatically offloads to RAM if compiled properly
-                n_ctx=0, # 0 means use the model's native context size limit (up to 128k+)
+                n_ctx=safe_n_ctx,
                 flash_attn=True,
                 chat_format="chatml",
                 verbose=False
