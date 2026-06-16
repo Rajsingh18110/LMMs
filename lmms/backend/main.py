@@ -1001,8 +1001,19 @@ lmms update
                     
                     with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave"):
                         try:
-                            # Clean history before sending to engine
-                            clean_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+                            # Clean history before sending to engine and truncate old large observations to save context
+                            clean_messages = []
+                            obs_count = sum(1 for m in messages if "<observation>" in m["content"])
+                            obs_seen = 0
+                            for m in messages:
+                                content = m["content"]
+                                if "<observation>" in content:
+                                    obs_seen += 1
+                                    # If it's an older observation and very long, truncate it
+                                    if obs_seen < obs_count and len(content) > 1000:
+                                        import re
+                                        content = re.sub(r'(<observation>).*?(</observation>)', r'\\1\\n[Observation truncated to save memory for subsequent steps]\\n\\2', content, flags=re.DOTALL)
+                                clean_messages.append({"role": m["role"], "content": content})
 
                             # Apply AI Mode settings
                             req_temp = 0.5
