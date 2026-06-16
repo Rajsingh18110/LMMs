@@ -31,7 +31,7 @@ class CustomTitleBar(QWidget):
         
         # Custom Logo
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-        logo_path = os.path.join(assets_dir, "lmms_logo.png")
+        logo_path = os.path.join(assets_dir, "lmms_logo_transparent.png")
         if os.path.exists(logo_path):
             self.title_logo = QLabel()
             logo_pixmap = QPixmap(logo_path).scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)

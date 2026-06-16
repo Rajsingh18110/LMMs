@@ -21,7 +21,7 @@ def main():
     app.setApplicationDisplayName("LMMs - GUI Mode")
     app.setDesktopFileName("lmms")
     
-    icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "lmms_logo.png")
+    icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "lmms_logo_transparent.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         
@@ -36,6 +36,8 @@ def main():
     asyncio.set_event_loop(loop)
     
     window = MainWindow()
+    if os.path.exists(icon_path):
+        window.setWindowIcon(QIcon(icon_path))
     window.show()
     
     with loop:
