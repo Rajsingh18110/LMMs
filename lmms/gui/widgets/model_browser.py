@@ -340,6 +340,8 @@ class LogoLoader(QObject):
             self.logo_ready.emit(org, pixmap)
             return
         req = QNetworkRequest(QUrl(urls[idx]))
+        req.setAttribute(QNetworkRequest.Attribute.Http2AllowedAttribute, False)
+        req.setRawHeader(b"User-Agent", b"LMMsBrowser/1.0")
         reply = self._nam.get(req)
         self._in_flight[org] = reply
         reply.finished.connect(lambda: self._on_logo_reply(reply, org, urls, idx))
@@ -384,19 +386,22 @@ class LogoLoader(QObject):
         return QColor(PALETTE[hash(org) % len(PALETTE)])
 
     def _make_initials(self, org: str) -> QPixmap:
+        name, color_hex, initial, verified = get_provider_details(org)
+        
         s = self.LOGO_SIZE
         pixmap = QPixmap(s, s)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QBrush(self._org_color(org)))
+        painter.setBrush(QBrush(QColor(color_hex)))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(0, 0, s, s)
         painter.setPen(QPen(Qt.GlobalColor.white))
-        font = QFont("Arial", s // 3, QFont.Weight.Bold)
+        
+        font_size = s // 2 if len(initial) == 1 else s // 3
+        font = QFont("Arial", font_size, QFont.Weight.Bold)
         painter.setFont(font)
-        initials = (org[:2] if len(org) >= 2 else org).upper()
-        painter.drawText(QRect(0, 0, s, s), Qt.AlignmentFlag.AlignCenter, initials)
+        painter.drawText(QRect(0, 0, s, s), Qt.AlignmentFlag.AlignCenter, initial)
         painter.end()
         return pixmap
 
