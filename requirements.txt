@@ -1,3 +1,6 @@
+# =========================================
+# LMMs - Core CLI & Agent Dependencies
+# =========================================
 ollama
 rich
 duckduckgo-search
@@ -15,19 +18,42 @@ watchdog
 transformers
 airllm
 
-fastapi
-uvicorn
-httpx
-psutil
+# =========================================
+# LMMs GUI (PyQt6) Dependencies
+# =========================================
 PyQt6
+PyQt6-Qt6
+PyQt6-sip
 qasync
-markdown
-sqlite-vec
-sentence-transformers
 
+# =========================================
+# Backend API & Server
+# =========================================
 fastapi
 uvicorn[standard]
-llama-cpp-python
-pydantic
 httpx[http2]
+websockets
+pydantic
 nest_asyncio
+psutil
+
+# =========================================
+# AI / ML & Inference
+# =========================================
+llama-cpp-python
+sentence-transformers
+numpy
+
+# =========================================
+# Markdown & Text Processing
+# =========================================
+markdown
+
+# =========================================
+# Database / Storage
+# =========================================
+sqlite-vec
+
+# =========================================
+# Utilities
+# =========================================

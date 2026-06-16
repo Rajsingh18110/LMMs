@@ -22,14 +22,32 @@ setup(
     description="Local Multi-Model AI System — open style agent",
     packages=find_packages(),
     install_requires=[
+        # Core CLI & Agent
         "ollama", "rich", "duckduckgo-search", "playwright",
         "requests", "click", "prompt_toolkit", "openai",
         "anthropic", "pathspec", "plotext", "textual",
         "huggingface_hub", "watchdog", "transformers", "airllm",
+
+        # GUI (PyQt6)
+        "PyQt6", "PyQt6-Qt6", "PyQt6-sip", "qasync",
+
+        # Backend API & Server
+        "fastapi", "uvicorn[standard]", "httpx[http2]",
+        "websockets", "pydantic", "nest_asyncio", "psutil",
+
+        # AI / ML & Inference
+        "sentence-transformers", "numpy",
+
+        # Markdown & Text Processing
+        "markdown",
+
+        # Database
+        "sqlite-vec",
     ],
     entry_points={
         "console_scripts": [
             "LMMs=main:main",
+            "lmms-gui=lmms_gui_entry:main",
         ],
     },
     cmdclass={
