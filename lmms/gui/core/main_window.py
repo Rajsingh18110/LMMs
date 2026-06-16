@@ -114,7 +114,37 @@ class MainWindow(QMainWindow):
             # Hide size, type, date columns
             for i in range(1, 4):
                 self.tree_view.hideColumn(i)
-            self.tree_view.setStyleSheet("QTreeView { background-color: #0d1117; border: none; } QTreeView::item:hover { background-color: #21262d; }")
+            self.tree_view.setStyleSheet("""
+                QTreeView { 
+                    background-color: #0d1117; 
+                    border: none; 
+                    outline: none;
+                }
+                QTreeView::item {
+                    padding: 2px 0px;
+                }
+                QTreeView::item:hover { 
+                    background-color: #21262d; 
+                }
+                QTreeView::item:selected {
+                    background-color: #30363d;
+                }
+                QTreeView::branch {
+                    background-color: transparent;
+                }
+                QTreeView::branch:has-siblings:!adjoins-item {
+                    border-left: 1px solid #30363d;
+                    margin-left: 10px;
+                }
+                QTreeView::branch:has-siblings:adjoins-item {
+                    border-left: 1px solid #30363d;
+                    margin-left: 10px;
+                }
+                QTreeView::branch:!has-children:!has-siblings:adjoins-item {
+                    border-left: 1px solid #30363d;
+                    margin-left: 10px;
+                }
+            """)
             
             # Disable auto-expand on double click
             self.tree_view.setExpandsOnDoubleClick(False)
@@ -190,31 +220,43 @@ class MainWindow(QMainWindow):
             ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]
         
-        def load_svg_icon(path, size=64):
+        def load_svg_icon(path, size=24):
             try:
                 from PyQt6.QtSvg import QSvgRenderer # type: ignore
                 renderer = QSvgRenderer(path)
                 if not renderer.isValid():
                     return None
-                pixmap = QPixmap(size, size)
-                pixmap.fill(Qt.GlobalColor.transparent)
-                painter = QPainter(pixmap)
-                renderer.render(painter)
-                painter.end()
-                return QIcon(pixmap)
+                    
+                def render_colored(color_hex):
+                    pixmap = QPixmap(size, size)
+                    pixmap.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(pixmap)
+                    renderer.render(painter)
+                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                    painter.fillRect(pixmap.rect(), QColor(color_hex))
+                    painter.end()
+                    return pixmap
+
+                icon = QIcon()
+                icon.addPixmap(render_colored("#8b949e"), QIcon.Mode.Normal, QIcon.State.Off) # Normal grey
+                icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Normal, QIcon.State.On)  # Active white
+                # Active mode is used for hover in some themes
+                icon.addPixmap(render_colored("#c9d1d9"), QIcon.Mode.Active, QIcon.State.Off)
+                icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Active, QIcon.State.On)
+                return icon
             except ImportError:
                 return QIcon(path)
 
         for text_icon, name, custom_icon_path in nav_items:
             btn = QPushButton(text_icon if not custom_icon_path else "")
             if custom_icon_path and os.path.exists(custom_icon_path):
-                svg_icon = load_svg_icon(custom_icon_path)
+                svg_icon = load_svg_icon(custom_icon_path, 24)
                 if svg_icon:
                     btn.setIcon(svg_icon)
                 else:
                     btn.setIcon(QIcon(custom_icon_path))
                 
-                # VS Code activity bar icons are typically 24x24 or 22x22
+                # VS Code activity bar icons are typically 24x24
                 from PyQt6.QtCore import QSize
                 btn.setIconSize(QSize(24, 24))
                 
@@ -226,12 +268,13 @@ class MainWindow(QMainWindow):
                 QPushButton {
                     border: none;
                     background-color: transparent;
+                    border-left: 2px solid transparent;
                 }
                 QPushButton:hover {
                     background-color: #2b2d31;
                 }
                 QPushButton:checked {
-                    border-left: 2px solid #007acc;
+                    border-left: 2px solid #58a6ff;
                 }
             """)
             
@@ -275,7 +318,7 @@ class MainWindow(QMainWindow):
         # Status Bar
         self.status_bar = QStatusBar()
         self.status_bar.setFixedHeight(22)
-        self.status_bar.setStyleSheet("background-color: #007acc; color: #ffffff; border: none; padding-left: 10px; font-size: 11px;")
+        self.status_bar.setStyleSheet("background-color: #161b22; color: #8b949e; border-top: 1px solid #30363d; padding-left: 10px; font-size: 11px;")
         self.setStatusBar(self.status_bar)
         
         self.status_file_info = QLabel("Ready")

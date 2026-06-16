@@ -77,6 +77,13 @@ class EditorManager(QWidget):
         
         layout.addWidget(self.tabs)
         
+        # Empty State Label
+        self.empty_label = QLabel(self.tabs)
+        self.empty_label.setText("<center><h1 style='color: #21262d; font-size: 64px; margin-bottom: 10px;'>LMMs</h1><p style='color: #8b949e; font-size: 14px;'>Ctrl+P : Search Files<br>Ctrl+N : New File<br>Ctrl+B : Toggle Sidebar</p></center>")
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.empty_label.show() # Initially empty
+        
     def open_file(self, file_path: str):
         if file_path in self.open_files:
             self.tabs.setCurrentWidget(self.open_files[file_path])
@@ -202,8 +209,14 @@ class EditorManager(QWidget):
         
         if self.tabs.count() == 0:
             self.breadcrumb_label.setText("No file selected")
+            self.empty_label.show()
             
     def on_tab_changed(self, index: int):
+        if self.tabs.count() == 0:
+            self.empty_label.show()
+        else:
+            self.empty_label.hide()
+            
         if index >= 0:
             widget = self.tabs.widget(index)
             if widget == self.terminal_panel:
@@ -246,3 +259,8 @@ class EditorManager(QWidget):
                 self.file_saved.emit(file_path)
             except Exception as e:
                 print(f"Failed to save file: {e}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'empty_label') and self.empty_label.isVisible():
+            self.empty_label.setGeometry(0, self.tabs.tabBar().height(), self.tabs.width(), self.tabs.height() - self.tabs.tabBar().height())

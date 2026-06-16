@@ -12,7 +12,7 @@ class CustomIconProvider(QFileIconProvider):
         if isinstance(icon_type_or_info, QFileInfo):
             info = icon_type_or_info
             if info.isDir():
-                return self.get_or_create_icon("folder", "#dcb67a") # Yellow-ish folder
+                return self.get_or_create_icon("folder", "#8b949e") # Minimal grey folder
             else:
                 ext = info.suffix().lower()
                 if ext == "py":

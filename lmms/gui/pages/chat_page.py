@@ -36,7 +36,8 @@ class ChatPage(QWidget):
 
         # Message History
         self.chat_history = QTextBrowser()
-        self.chat_history.setOpenExternalLinks(True)
+        self.chat_history.setOpenExternalLinks(False) # We handle links manually for Copy Code
+        self.chat_history.anchorClicked.connect(self.on_anchor_clicked)
         self.chat_history.setStyleSheet("""
             QTextBrowser {
                 background-color: transparent;
@@ -45,6 +46,8 @@ class ChatPage(QWidget):
                 line-height: 1.5;
             }
         """)
+        
+        self.code_blocks = {} # id -> code content
         
         # Display welcome message
         self.append_message("system", "Welcome to LMMs! I'm your local AI powerhouse. How can I help you today?")
@@ -146,26 +149,50 @@ class ChatPage(QWidget):
         self.attachment_layout.addStretch()
 
     def render_messages(self):
+        import re
+        import uuid
+        
         html = ""
+        self.code_blocks.clear()
+        
         for msg in self.messages:
             role = msg["role"]
             content = msg["content"]
+            
             if role == "user":
                 name = "You"
                 color = "#c9d1d9"
-                bg = "#21262d"
+                bg = "#2b313d"
+                align_style = "margin-left: 20%; margin-right: 0;"
             elif role == "system":
                 name = "System"
                 color = "#8b949e"
                 bg = "transparent"
+                align_style = "text-align: center;"
             else:
                 name = "Assistant"
                 color = "#e5e7eb"
                 bg = "transparent"
+                align_style = "margin-right: 20%; margin-left: 0;"
 
             html_content = markdown.markdown(content, extensions=['fenced_code', 'tables'])
+            
+            # Inject Copy Code buttons
+            def replace_code_block(match):
+                code_id = str(uuid.uuid4())
+                # Replace html entities to get actual code for clipboard
+                import html as html_lib
+                code = match.group(1)
+                raw_code = html_lib.unescape(code)
+                # Remove any inner HTML tags (like span from syntax highlighting)
+                raw_code = re.sub(r'<[^>]+>', '', raw_code)
+                self.code_blocks[code_id] = raw_code
+                return f'<div style="background-color: #0d1117; padding: 8px; border: 1px solid #30363d; border-radius: 5px; margin-bottom: 10px;"><div style="text-align: right;"><a href="copy:{code_id}" style="color: #58a6ff; text-decoration: none; font-size: 12px; font-weight: bold;">[Copy Code]</a></div><pre style="margin: 0; padding-top: 5px;"><code>{code}</code></pre></div>'
+            
+            html_content = re.sub(r'<pre><code>(.*?)</code></pre>', replace_code_block, html_content, flags=re.DOTALL)
+            
             html += f"""
-            <div style="margin-bottom: 20px; padding: 10px; background-color: {bg}; border-radius: 8px;">
+            <div style="{align_style} margin-bottom: 20px; padding: 12px; background-color: {bg}; border-radius: 8px;">
                 <b style="color: #58a6ff;">{name}</b>
                 <div style="margin-top: 5px; color: {color};">{html_content}</div>
             </div>
@@ -214,6 +241,25 @@ class ChatPage(QWidget):
     def on_error_occurred(self, error_msg):
         self.is_streaming = False
         self.append_message("system", f"<b>Error:</b> {error_msg}")
+
+    @pyqtSlot(object)
+    def on_anchor_clicked(self, url):
+        url_str = url.toString()
+        if url_str.startswith("copy:"):
+            code_id = url_str.split("copy:")[1]
+            if code_id in self.code_blocks:
+                from PyQt6.QtWidgets import QApplication
+                QApplication.clipboard().setText(self.code_blocks[code_id])
+                # Show subtle notification in input field placeholder
+                original_placeholder = self.input_field.placeholderText()
+                self.input_field.setPlaceholderText("Code copied to clipboard!")
+                import threading
+                def reset_placeholder():
+                    self.input_field.setPlaceholderText(original_placeholder)
+                threading.Timer(2.0, reset_placeholder).start()
+        else:
+            import webbrowser
+            webbrowser.open(url_str)
 
     def cleanup(self):
         if hasattr(self, 'chat_service') and self.chat_service.isRunning():
