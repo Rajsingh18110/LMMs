@@ -579,7 +579,7 @@ def main():
                 sys.exit(0)
 
             elif cmd == "run" and model_args:
-                model_name = model_args[0]
+                model_name = "-".join(model_args)
                 MODELS_DIR = os.path.expanduser("~/.lmms/models")
                 path = os.path.join(MODELS_DIR, f"{model_name}.gguf")
                 
@@ -626,6 +626,30 @@ def main():
                                 hf_repo = man_data["repo_id"]
                     except:
                         pass
+                        
+                # Dynamic fallback if repo_id wasn't in manifest (for backward compatibility)
+                if hf_repo == model_name and "/" not in hf_repo:
+                    try:
+                        from huggingface_hub import HfApi
+                        api = HfApi()
+                        search_term = model_name.replace(":", "-").lower()
+                        models = list(api.list_models(search=search_term, filter="gguf", limit=10, sort="downloads"))
+                        if models:
+                            best_match = models[0]
+                            for m in models:
+                                repo_name = m.id.split("/")[-1].lower()
+                                if search_term == repo_name or search_term + "-gguf" == repo_name:
+                                    best_match = m
+                                    break
+                            hf_repo = best_match.id
+                            try:
+                                md = {}
+                                if os.path.exists(manifest_path):
+                                    with open(manifest_path, "r") as f: md = json.load(f)
+                                md["repo_id"] = hf_repo
+                                with open(manifest_path, "w") as f: json.dump(md, f)
+                            except: pass
+                    except: pass
                 
                 # Aliases for convenience
                 if "smolvlm" in model_name.lower(): hf_repo = "HuggingFaceTB/SmolVLM2-2.2B-Instruct"

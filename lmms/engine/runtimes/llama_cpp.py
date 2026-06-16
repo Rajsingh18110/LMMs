@@ -72,28 +72,41 @@ class LlamaCppRuntime(RuntimeContract):
             else:
                 safe_n_ctx = 32768
                 
-        try:
-            model_instance = Llama(
-                model_path=full_path,
-                n_gpu_layers=-1, # All layers to GPU, automatically offloads to RAM if compiled properly
-                n_ctx=safe_n_ctx,
-                flash_attn=True,
-                chat_format="chatml",
-                verbose=False
-            )
-            # Use base filename as key if path was given
-            key = os.path.basename(full_path).replace(".gguf", "")
-            
-            # Add cache to avoid re-evaluating system prompt
-            cache = LlamaRAMCache(capacity_bytes=1024 * 1024 * 1024) # 1GB Cache
-            model_instance.set_cache(cache)
-            
-            self._models[key] = model_instance
-            return True
-        except Exception as e:
-            print(f"Failed to load model: {e}")
+        current_ctx = safe_n_ctx
+        model_instance = None
+        while current_ctx >= 512:
+            try:
+                model_instance = Llama(
+                    model_path=full_path,
+                    n_gpu_layers=-1, # All layers to GPU, automatically offloads to RAM if compiled properly
+                    n_ctx=current_ctx,
+                    flash_attn=True,
+                    chat_format="chatml",
+                    verbose=False
+                )
+                break
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "llama_context" in err_msg or "kv cache" in err_msg:
+                    print(f"\033[93m[Fallback]\033[0m Context {current_ctx} too large for VRAM, retrying with {current_ctx // 2}...")
+                    current_ctx //= 2
+                else:
+                    print(f"Failed to load model: {e}")
+                    return False
+                    
+        if not model_instance:
+            print("Failed to load model: Insufficient memory to create context even at lowest settings.")
             return False
-
+            
+        # Use base filename as key if path was given
+        key = os.path.basename(full_path).replace(".gguf", "")
+        
+        # Add cache to avoid re-evaluating system prompt
+        cache = LlamaRAMCache(capacity_bytes=1024 * 1024 * 1024) # 1GB Cache
+        model_instance.set_cache(cache)
+        
+        self._models[key] = model_instance
+        return True
     def unload_model(self, model_id: str = None) -> bool:
         if model_id:
             if model_id in self._models:
