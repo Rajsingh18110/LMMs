@@ -179,28 +179,32 @@ class MainWindow(QMainWindow):
         self.nav_buttons = {}
         logo_path = os.path.join(os.path.dirname(__file__), "assets", "lmms_logo.png")
         nav_items = [
-            ("📁", "Explorer", None),
-            ("🔍", "Search", None),
+            ("📁", "Explorer", os.path.join(os.path.dirname(__file__), "assets", "icon_explorer.png")),
+            ("🔍", "Search", os.path.join(os.path.dirname(__file__), "assets", "icon_search.png")),
             ("📋", "Tasks", None),
             ("🧠", "Memory", None),
             ("🌳", "Git", None),
-            ("📦", "Models", None),
+            ("📦", "Models", os.path.join(os.path.dirname(__file__), "assets", "icon_models.png")),
             ("💬", "Chats", None),
             ("Terminal", "Terminal", None),
-            ("", "Settings", logo_path if os.path.exists(logo_path) else None),
+            ("⚙", "Settings", os.path.join(os.path.dirname(__file__), "assets", "icon_settings.png")),
         ]
 
         for text_icon, name, custom_icon_path in nav_items:
-            # Fallback for settings if logo doesn't exist
-            if name == "Settings" and not custom_icon_path:
+            # Fallback for settings if svg doesn't exist
+            if name == "Settings" and not os.path.exists(custom_icon_path):
+                custom_icon_path = None
                 text_icon = "⚙"
             # Fallback for terminal
             if name == "Terminal" and not custom_icon_path:
                 text_icon = "🖥"
                 
-            btn = QPushButton(text_icon)
-            if custom_icon_path:
+            btn = QPushButton(text_icon if not custom_icon_path else "")
+            if custom_icon_path and os.path.exists(custom_icon_path):
                 btn.setIcon(QIcon(custom_icon_path))
+                # Make icon bigger
+                from PyQt6.QtCore import QSize
+                btn.setIconSize(QSize(24, 24))
                 
             btn.setToolTip(name)
             btn.setObjectName("NavButton")
