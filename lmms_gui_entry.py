@@ -21,7 +21,7 @@ def main():
     app.setApplicationDisplayName("LMMs - GUI Mode")
     app.setDesktopFileName("lmms")
     
-    icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "icon.png")
+    icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "lmms_logo.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         

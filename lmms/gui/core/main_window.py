@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         
         # Set Window Icon
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "lmms_logo.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         
@@ -177,7 +177,7 @@ class MainWindow(QMainWindow):
 
         # Sidebar Buttons
         self.nav_buttons = {}
-        logo_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+        logo_path = os.path.join(os.path.dirname(__file__), "assets", "lmms_logo.png")
         nav_items = [
             ("📁", "Explorer", None),
             ("🔍", "Search", None),

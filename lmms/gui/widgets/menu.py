@@ -15,7 +15,7 @@ class LMMsMenuBar(QMenuBar):
         from PyQt6.QtGui import QIcon
         
         app_menu = QMenu(self)
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "lmms_logo.png")
         if os.path.exists(icon_path):
             app_menu.setIcon(QIcon(icon_path))
         else:
