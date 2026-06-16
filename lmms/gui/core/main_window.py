@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
         
         def load_svg_icon(path, size=64):
             try:
-                from PyQt6.QtSvg import QSvgRenderer
+                from PyQt6.QtSvg import QSvgRenderer # type: ignore
                 renderer = QSvgRenderer(path)
                 if not renderer.isValid():
                     return None
