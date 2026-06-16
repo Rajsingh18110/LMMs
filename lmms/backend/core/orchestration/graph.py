@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
-from lmms.backend.agents.core_agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 
 @dataclass
 class GraphNode:

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSlot
 from lmms.backend.services.chat_service import ChatService
-from lmms.backend.agents.core_agents.manager import AgentManager
+from lmms.backend.agents.core_agents.agents.manager import AgentManager
 
 class ChatPage(QWidget):
     def __init__(self):

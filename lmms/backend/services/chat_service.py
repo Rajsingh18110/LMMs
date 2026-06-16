@@ -1,6 +1,6 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-from lmms.backend.agents.core_agents.manager import AgentManager
-from lmms.backend.agents.core_agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.manager import AgentManager
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 from lmms.backend.tasks.core_tasks.task import Task
 import asyncio
 

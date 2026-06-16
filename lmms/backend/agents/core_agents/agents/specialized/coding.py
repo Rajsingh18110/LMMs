@@ -1,7 +1,7 @@
 from typing import Dict, Any, AsyncGenerator
 import json
 from lmms.backend.agents.core_agents.base import BaseAgent
-from lmms.backend.agents.core_agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 
 class CodingAgent(BaseAgent):
     def __init__(self):

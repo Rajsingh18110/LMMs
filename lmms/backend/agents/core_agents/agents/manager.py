@@ -2,7 +2,7 @@ import os
 from typing import Dict, Any, List, Optional, AsyncGenerator
 
 from lmms.backend.agents.core_agents.base import BaseAgent
-from lmms.backend.agents.core_agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 from lmms.backend.agents.core_agents.history import ActionHistory
 
 class AgentManager:

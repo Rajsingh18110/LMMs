@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncGenerator
 
-from lmms.backend.agents.core_agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
 
 class BaseAgent(ABC):
     """

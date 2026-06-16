@@ -1,8 +1,8 @@
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from lmms.backend.core.orchestration.graph import ExecutionGraph, GraphNode
-from lmms.backend.agents.core_agents.context import ExecutionContext
-from lmms.backend.agents.core_agents.manager import AgentManager
+from lmms.backend.agents.core_agents.agents.context import ExecutionContext
+from lmms.backend.agents.core_agents.agents.manager import AgentManager
 from lmms.backend.tasks.core_tasks.task import Task
 
 class Router:
