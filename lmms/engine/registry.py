@@ -33,8 +33,10 @@ class RegistryManager:
                         data = json.load(json_file)
                         tag = f.replace(".json", "")
                         base = data.get("base_model", "")
-                        base_size = raw_models.get(base, raw_models.get(base.replace(".gguf", ""), 0))
-                        manifests[tag] = {"base": base, "size": base_size}
+                        base_key = base.replace(".gguf", "")
+                        if base_key in raw_models:
+                            base_size = raw_models[base_key]
+                            manifests[tag] = {"base": base, "size": base_size}
                 except Exception:
                     pass
         

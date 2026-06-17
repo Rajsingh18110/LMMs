@@ -209,6 +209,10 @@ These commands are typed inside an active LMMs CLI chat session.
 | `/ml -s <modelname>` | **Live model switch** — swap the active model mid-conversation without losing context |
 | `/folder <name>` | Attach an entire folder to the agent's context (e.g., `/folder src`) |
 | `/code` | Enter focused code generation and editing mode for complex programming tasks |
+| `/chat` | Show a list of all your past chat sessions |
+| `/newchat` | Start a brand new empty chat session |
+| `/chat -r <id> <name>` | Rename a specific chat by its ID |
+| `/chat -d <id>` | Delete a specific chat history by its ID |
 | `/undo` | Undo the last AI action or file edit |
 | `/redo` | Redo the last undone action |
 | `/exit` | Exit the LMMs CLI session |

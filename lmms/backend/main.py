@@ -1333,4 +1333,10 @@ if __name__ == "__main__":
         api_thread = threading.Thread(target=start_api, daemon=True)
         api_thread.start()
         
-    run_cli()
+    try:
+        run_cli()
+    except Exception:
+        pass
+    finally:
+        import os
+        os._exit(0)
