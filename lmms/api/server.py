@@ -46,21 +46,31 @@ async def load_model(req: LoadRequest):
     path = req.model_path or os.path.join(MODELS_DIR, f"{req.model_name}.gguf")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Model file not found")
-        
+
+    # Check if already loaded
+    key = os.path.basename(path).replace(".gguf", "")
+    if key in engine_manager.runtime._models:
+        return {"status": "success", "stats": engine_manager.cache.get_stats()}
+
+    # Unload all previous models to prevent OOM
+    for loaded_model in list(engine_manager.cache.loaded_models.keys()):
+        engine_manager.cache.unload_model(loaded_model)
+    engine_manager.runtime.unload_model()
+
     size_gb = os.path.getsize(path) / (1024**3)
-    
+
     if not engine_manager.cache.can_fit(size_gb):
         raise HTTPException(status_code=507, detail="Insufficient VRAM/RAM to load model")
-        
+
     # Register in cache
     engine_manager.cache.load_model(req.model_name, size_gb)
-    
+
     # Actually load into runtime (llama_cpp)
     success = engine_manager.runtime.load_model(path)
     if not success:
         engine_manager.cache.unload_model(req.model_name)
         raise HTTPException(status_code=500, detail="Failed to initialize runtime")
-        
+
     return {"status": "success", "stats": engine_manager.cache.get_stats()}
 
 @app.post("/v1/models/unload")

@@ -145,8 +145,8 @@ class LlamaCppRuntime(RuntimeContract):
             self._model_fallback_stops[key] = None
 
         # Add cache to avoid re-evaluating system prompt
-        cache = LlamaRAMCache(capacity_bytes=1024 * 1024 * 1024) # 1GB Cache
-        model_instance.set_cache(cache)
+        # cache = LlamaRAMCache(capacity_bytes=1024 * 1024 * 1024) # 1GB Cache
+        # model_instance.set_cache(cache)
         
         self._models[key] = model_instance
         return True

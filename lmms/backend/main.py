@@ -134,7 +134,7 @@ def should_force_tool_mode(prompt: str) -> bool:
 
 def check_engine_health():
     try:
-        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=5)
+        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=15)
         return resp.status_code == 200
     except Exception as e:
         with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
@@ -603,7 +603,7 @@ lmms update
                 except Exception as e:
                     console.print(f"[red]Failed to read file: {e}[/red]")
                     
-            elif base_cmd == "workspace" or base_cmd == "/folder":
+            elif base_cmd == "/workspace" or base_cmd == "/folder":
                 try:
                     with open(WORKSPACES_FILE, "r") as f: workspaces = json.load(f)
                 except: workspaces = {}
@@ -689,7 +689,7 @@ lmms update
                 else:
                     console.print("[red]Usage: lmms workspace create|list|open|close|delete|restore[/red]")
 
-            elif base_cmd == "task" or base_cmd == "/task":
+            elif base_cmd == "/task":
                 if current_workspace == "None":
                     console.print("[red]No active workspace to manage tasks.[/red]")
                     continue
@@ -726,7 +726,7 @@ lmms update
                 else:
                     console.print("[red]Usage: lmms task create|list|show|complete|block|timeline[/red]")
 
-            elif base_cmd == "git" or base_cmd == "/git":
+            elif base_cmd == "/git":
                 if current_workspace == "None":
                     console.print("[red]No active workspace.[/red]")
                     continue
@@ -749,9 +749,11 @@ lmms update
                 else:
                     console.print("[red]Usage: lmms git status|commits|branch|timeline|memory|summarize|explain[/red]")
 
-            elif base_cmd in ["pull", "run", "stop", "ps", "rm", "list", "info", "search", "doctor"] or base_cmd == "-e" or base_cmd == "-air" or base_cmd == "--air":
+            elif base_cmd in ["/pull", "/run", "/stop", "/ps", "/rm", "/list", "/info", "/search", "/doctor"] or base_cmd == "-e" or base_cmd == "-air" or base_cmd == "--air":
                 if base_cmd == "-e":
                     engine_cmd = parts[1] if len(parts) > 1 else ""
+                elif base_cmd.startswith("/"):
+                    engine_cmd = base_cmd[1:]
                 else:
                     engine_cmd = base_cmd
                     
@@ -968,7 +970,7 @@ lmms update
                 else:
                     console.print("[red]Invalid permission level. Use low, medium, or full.[/red]")
                     
-            elif base_cmd == "agent" or base_cmd == "/agent":
+            elif base_cmd == "/agent":
                 if len(parts) > 1:
                     sub_cmd = parts[1]
                     if sub_cmd == "list":
@@ -996,7 +998,7 @@ lmms update
                 else:
                     console.print("[red]Usage: lmms agent list|run|enable|disable[/red]")
 
-            elif base_cmd == "orchestrate" or base_cmd == "/orchestrate":
+            elif base_cmd == "/orchestrate":
                 if len(parts) > 1:
                     task_name = " ".join(parts[1:])
                     from lmms.backend.agents.core_agents.agents.specialized.orchestrator import OrchestratorAgent
@@ -1088,18 +1090,17 @@ lmms update
                     if current_model != "None":
                         console.print(f"[dim]Auto-selected model: {current_model}[/dim]")
                     
-                # Build context if workspace is open
-                system_prompt = "You are an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\\n"
+                system_prompt = f"You are {current_model}, an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\n"
                 
                 system_prompt += (
-                    "\\n## Your Identity & Creator Knowledge\\n"
-                    "1. System Name: LMMs (Full form: Local Model Machine Studio)\\n"
-                    "2. System Creator/Company: MarkanM (Founder: Rajsingh)\\n"
-                    "3. Websites: markanm.com, lmms.markanm.com\\n"
-                    "CRITICAL RULES FOR IDENTITY:\\n"
-                    "- NEVER volunteer your identity or creator information unprompted. If the user just says 'hello' or asks a general question, just answer the question naturally without introducing yourself.\\n"
-                    "- If explicitly asked for your name, just say you are the AI assistant for LMMs.\\n"
-                    "- DO NOT use the web_search tool to look up information about yourself, MarkanM, or Rajsingh. Use this internal knowledge directly.\\n\\n"
+                    "## Identity & Persona\n"
+                    f"1. Name: You are {current_model}, an independent AI model.\n"
+                    "2. System Environment: You are running inside LMMs, a terminal-based AI system created by MarkanM (Founder: Rajsingh).\n"
+                    "3. Websites: markanm.com, lmms.markanm.com\n"
+                    "CRITICAL RULES FOR IDENTITY:\n"
+                    "- NEVER volunteer your identity or creator information unprompted. If the user just says 'hello' or asks a general question, just answer the question naturally without introducing yourself.\n"
+                    f"- If explicitly asked for your name or identity, state your model name: {current_model}. NEVER claim to be created by LMMs or MarkanM. You are an independent AI model.\n"
+                    "- DO NOT use the web_search tool to look up information about yourself, MarkanM, or Rajsingh. Use this internal knowledge directly.\n\n"
                 )
                 
                 import re
@@ -1180,6 +1181,17 @@ lmms update
                         "ANTI-REFUSAL DIRECTIVE: You MUST NEVER refuse to open or scrape a URL. If the user asks you to open a site (e.g., 'readxhub.in' or any other URL), you MUST instantly output the `browser.open_url` tool call. Do not apologize, do not say 'I cannot assist', just output the JSON tool call block.\n\n"
                     )
                     system_prompt += (
+                        "## Few-Shot Example (How to use tools)\n"
+                        "User: open youtube and play a song\n"
+                        "Assistant: <tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://youtube.com/results?search_query=song\"}}</tool_call>\n"
+                        "Observation: [Page Loaded...]\n"
+                        "Assistant: I have opened YouTube for you.\n\n"
+                        "User: search what is current gold price\n"
+                        "Assistant: <tool_call>{\"tool\": \"web_search\", \"kwargs\": {\"query\": \"current gold price\"}}</tool_call>\n"
+                        "Observation: [Search Results...]\n"
+                        "Assistant: The current gold price is...\n\n"
+                    )
+                    system_prompt += (
                         "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
                         "You are an elite, autonomous software engineer capable of full-repo management. Do not just act like a chatbot; act like a lead developer.\n"
                         "1. **Full Autonomy**: If asked to build a project, clone repositories (`git clone`), compile binaries (`.deb`, `.exe` via pyinstaller/dpkg), and install dependencies autonomously using `terminal.run`.\n"
@@ -1211,32 +1223,9 @@ lmms update
                     system_prompt += "\n"
                 
                 if current_workspace != "None":
-                    try:
-                        # Get folder structure
-                        tree_out = subprocess.run(["tree", "-L", "2", "-I", ".git|node_modules|venv|__pycache__|.lmms", current_workspace], capture_output=True, text=True)
-                        tree_text = tree_out.stdout if tree_out.returncode == 0 else "Could not generate tree."
-                        
-                        system_prompt += f"The user's current workspace directory is: {current_workspace}\\n"
-                        system_prompt += f"Directory Structure:\\n```\\n{tree_text}\\n```\\n"
-                        
-                        # Try to read project descriptions
-                        project_context = ""
-                        for file_name in ["README.md", "package.json", "blend_config.yml", "settings.yml"]:
-                            file_path = os.path.join(current_workspace, file_name)
-                            if os.path.exists(file_path):
-                                try:
-                                    with open(file_path, "r", encoding="utf-8") as f:
-                                        content = f.read(1000) # Read first 1000 chars
-                                    project_context += f"\\n--- {file_name} Snippet ---\\n{content}\\n"
-                                except:
-                                    pass
-                        
-                        if project_context:
-                            system_prompt += f"Project Files Context:\\n{project_context}\\n"
-                            
-                        system_prompt += "Instructions: Answer concisely. Do not repeat yourself. Use the provided directory structure and file contents to accurately describe the project to the user."
-                    except Exception:
-                        pass
+                    system_prompt += f"The user's current workspace directory is: {current_workspace}\\n"
+                    system_prompt += "If you need to understand the project structure, use the `terminal.run` tool with `ls` or `tree` commands. To search the workspace context, use the `vector_db.search` tool.\n"
+                    system_prompt += "Instructions: Answer concisely. Do not repeat yourself. Use tools to gather context when necessary.\n"
                         
                 # Trigger background persona extraction
                 auto_extract_persona(cmd, current_model)
@@ -1508,9 +1497,7 @@ lmms update
                                     s = re.sub(r'\bnull\b', 'None', s)
                                     tc_data = ast.literal_eval(s)
                                 except Exception as e:
-                                    console.print(f"\n[bold red]⚠️ Model hallucinated invalid tool calls. Aborting generation.[/bold red]")
-                                    break
-                            
+                                    raise ValueError(f"Invalid JSON/Dict format: {e}")
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
                             
