@@ -23,9 +23,15 @@ class AgentManager:
         try:
             from lmms.backend.agents.core_agents.agents.specialized.coding import CodingAgent
             from lmms.backend.agents.core_agents.agents.specialized.vision import VisionAgent
+            from lmms.backend.agents.core_agents.agents.specialized.orchestrator import OrchestratorAgent
+            from lmms.backend.agents.core_agents.agents.specialized.tester import TesterAgent
+            from lmms.backend.agents.core_agents.agents.specialized.reviewer import ReviewerAgent
             
             self.register_agent(CodingAgent())
             self.register_agent(VisionAgent())
+            self.register_agent(OrchestratorAgent())
+            self.register_agent(TesterAgent())
+            self.register_agent(ReviewerAgent())
         except ImportError as e:
             print(f"Failed to load default agents: {e}")
 

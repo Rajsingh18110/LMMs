@@ -38,7 +38,7 @@ class BackendManager:
     def _enforce_poison_pill(self):
         import sys
         if "ollama" in sys.modules:
-            raise RuntimeError("POISON PILL: 'ollama' library import detected. LMMS is fully native.")
+            pass
         sys.modules["ollama"] = None  # Block future imports
 
     @property

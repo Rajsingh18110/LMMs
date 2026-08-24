@@ -21,22 +21,124 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.live import Live
-from prompt_toolkit import prompt
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit import prompt, PromptSession
+from prompt_toolkit.formatted_text import HTML, ANSI
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.completion import Completer, Completion
 from lmms.backend.memory.embeddings.faiss_provider import VectorDB
 from fastapi import FastAPI
 import uvicorn
 
+def _patched_ask(message, choices=None, default=None, **kwargs):
+    import io
+    c = Console(file=io.StringIO(), force_terminal=True, color_system="standard")
+    msg = message
+    if choices:
+        msg += f" \\[{'/'.join(choices)}]"
+    if default:
+        msg += f" (default: {default})"
+    msg += ": "
+    c.print(msg, end="")
+    ansi_str = c.file.getvalue()
+    
+    while True:
+        ans = prompt(ANSI(ansi_str)).strip()
+        if not ans and default is not None:
+            return default
+        if not choices or ans in choices:
+            return ans
+Prompt.ask = staticmethod(_patched_ask)
 
 app = FastAPI(title="LMMs Backend OS")
 
 ENGINE_URL = "http://localhost:11435"
 
+
+def extract_active_model_from_stats(stats: dict) -> str | None:
+    """Return the first active model from either the engine's legacy or current payload format."""
+    if not isinstance(stats, dict):
+        return None
+
+    if isinstance(stats.get("models"), dict) and stats["models"]:
+        return next(iter(stats["models"].keys()))
+
+    loaded = stats.get("loaded_models")
+    if isinstance(loaded, list) and loaded:
+        return str(loaded[0])
+
+    if isinstance(loaded, dict) and loaded:
+        return str(next(iter(loaded.keys())))
+
+    return None
+
+
+def should_force_tool_mode(prompt: str) -> bool:
+    """Return True only when the user is explicitly asking for a tool-driven agent action.
+
+    Normal chat like 'hello', 'hi', or general Q&A should stay in direct-answer mode.
+    """
+    if not isinstance(prompt, str):
+        return False
+
+    cleaned = prompt.strip()
+    if not cleaned:
+        return False
+
+    lowered = cleaned.lower()
+    if lowered.startswith(("/", "@")):
+        return False
+
+    explicit_tool_signals = [
+        "use browser.open_url",
+        "browser.open_url",
+        "browser.click_element",
+        "browser.fill_form",
+        "browser.scrape",
+        "browser.scroll",
+        "browser.open_authenticated",
+        "web_search",
+        "search the web",
+        "use tool",
+        "use tools",
+        "read /",
+        "write /",
+        "open url",
+        "inspect the site",
+        "summarize file",
+        "debug this project",
+        "read the file",
+        "search for",
+        "find file",
+        "run command",
+        "terminal.run",
+        "files.read",
+        "files.write",
+        "vector_db.search",
+        "analyze this repo",
+    ]
+    if any(sig in lowered for sig in explicit_tool_signals):
+        return True
+
+    if len(cleaned.split()) <= 8 and any(word in lowered for word in [
+        "hello", "hi", "hey", "thanks", "good morning", "good evening",
+        "what is", "who are you", "how are you", "can you help", "who are",
+    ]):
+        return False
+
+    # Tool-driven commands are typically imperative and task-like rather than casual chat.
+    if any(keyword in lowered for keyword in ["read ", "write ", "search ", "open ", "run ", "debug ", "inspect ", "summarize "]):
+        return True
+
+    return False
+
+
 def check_engine_health():
     try:
         resp = requests.get(f"{ENGINE_URL}/webhook", timeout=5)
         return resp.status_code == 200
-    except:
+    except Exception as e:
+        with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
+            f.write(f"Health Check Failed: {str(e)}\n")
         return False
 
 @app.get("/v1/health")
@@ -55,10 +157,23 @@ def auto_start_engine():
         
     try:
         env = os.environ.copy()
-        env["PYTHONPATH"] = os.getcwd()
-        # Suppress PyTorch and Engine logs from spilling into the CLI
-        subprocess.Popen(["python3", "-m", "lmms.engine.server", "--internal-start"], 
-                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        env["PYTHONPATH"] = PROJECT_ROOT
+        
+        # Ensure engine is started via the CLI command
+        engine_script = os.path.join(PROJECT_ROOT, "lmms", "lmmsengine", "main.py")
+        log_file = os.path.expanduser("~/.lmms/logs/server.log")
+        f = open(log_file, "a")
+        
+        import platform
+        kwargs = {}
+        if platform.system() == "Windows":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["start_new_session"] = True
+            
+        subprocess.Popen([sys.executable, engine_script, "server"], 
+                         env=env, stdout=f, stderr=f, **kwargs)
         
         import time
         for _ in range(15):
@@ -124,8 +239,9 @@ def run_cli():
         try:
             r = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
             stats = r.json()
-            if stats.get("models"):
-                current_model = list(stats["models"].keys())[0]
+            detected_model = extract_active_model_from_stats(stats)
+            if detected_model:
+                current_model = detected_model
             else:
                 config_path = os.path.expanduser("~/.lmms/config.json")
                 if os.path.exists(config_path):
@@ -135,7 +251,7 @@ def run_cli():
                             if cfg.get("default_model"):
                                 current_model = cfg["default_model"]
                     except: pass
-                
+
                 if current_model == "None":
                     r_list = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=2)
                     models_list = r_list.json().get("models", [])
@@ -223,7 +339,11 @@ def run_cli():
                 return Prompt.ask(f"[bold yellow]AI wants to write to {path} outside workspace. Allow? (y/n)[/bold yellow]").lower() == "y"
             if tool_name == "terminal.run":
                 cmd = kwargs.get("command", "")
-                safelist = ["ls", "cat", "curl", "pwd", "echo", "tree"]
+                import platform
+                if platform.system() == "Windows":
+                    safelist = ["dir", "type", "curl", "cd", "echo", "tree"]
+                else:
+                    safelist = ["ls", "cat", "curl", "pwd", "echo", "tree"]
                 if any(cmd.strip().startswith(s) for s in safelist):
                     return True
                 return Prompt.ask(f"[bold yellow]AI wants to run unverified command: {cmd}. Allow? (y/n)[/bold yellow]").lower() == "y"
@@ -257,22 +377,7 @@ def run_cli():
     chat_history = []
     
     def print_banner():
-        console.print("[bold cyan]" + "="*50 + "[/bold cyan]")
-        console.print("[bold cyan]       ██╗     ███╗   ███╗███╗   ███╗███████╗[/bold cyan]")
-        console.print("[bold cyan]       ██║     ████╗ ████║████╗ ████║██╔════╝[/bold cyan]")
-        console.print("[bold cyan]       ██║     ██╔████╔██║██╔████╔██║███████╗[/bold cyan]")
-        console.print("[bold cyan]       ██║     ██║╚██╔╝██║██║╚██╔╝██║╚════██║[/bold cyan]")
-        console.print("[bold cyan]       ███████╗██║ ╚═╝ ██║██║ ╚═╝ ██║███████║[/bold cyan]")
-        console.print("[bold cyan]       ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝[/bold cyan]")
-        console.print("[bold cyan]" + "="*50 + "[/bold cyan]")
-        console.print("[bold blue]      Powered by MarkanM | [link=https://lmms.markanm.com]lmms.markanm.com[/link][/bold blue]")
-        console.print("[bold cyan]" + "="*50 + "[/bold cyan]")
-        console.print(f" ⚙️  Engine Status : {status}")
-        console.print(f" 📁 Workspace     : [bold yellow]{current_workspace}[/bold yellow]")
-        console.print(f" 🧠 Active Model  : [bold green]{current_model}[/bold green]")
-        console.print(f" 🤝 Active Pair   : [bold magenta]{current_pair}[/bold magenta]")
-        console.print(f" ⚡ AI Mode       : [bold blue]{current_mode}[/bold blue]")
-        console.print(f" 🛡️  Permission    : [bold cyan]{current_permission_level}[/bold cyan]")
+        console.print("[bold cyan]LMMS v1.0[/bold cyan] [dim]· powered by markanm[/dim]")
         console.print("[dim]Type 'exit' to quit. Type '/cl' for the full command list.[/dim]\n")
 
     def count_tokens(text: str, model_name: str) -> int:
@@ -283,26 +388,99 @@ def run_cli():
         except: pass
         return len(text) // 3
 
+    _context_budget_cache = {}
+
     def get_context_budget(model_name: str):
+        if model_name in _context_budget_cache:
+            return _context_budget_cache[model_name]
         try:
-            r = requests.get(f"{ENGINE_URL}/v1/model/context", params={"model_name": model_name}, timeout=2)
+            r = requests.get(f"{ENGINE_URL}/v1/model/context", params={"model_name": model_name}, timeout=1)
             if r.status_code == 200:
                 data = r.json()
                 if data.get("status") == "success":
                     n_ctx = data.get("context_length", 8192)
+                    if n_ctx <= 0:
+                        n_ctx = 8192
                     reserve = int(n_ctx * 0.18)
-                    return n_ctx, reserve, n_ctx - reserve
+                    res = (n_ctx, reserve, n_ctx - reserve)
+                    _context_budget_cache[model_name] = res
+                    return res
         except: pass
-        return 8192, int(8192 * 0.18), int(8192 * 0.82)
+        res = (8192, int(8192 * 0.18), int(8192 * 0.82))
+        _context_budget_cache[model_name] = res
+        return res
 
     print_banner()
+
+    # --- CLI Auto-Complete & Session Setup ---
+    command_dict = {
+        "/fast": "Fast and concise AI mode",
+        "/deep": "Deep reasoning AI mode",
+        "/code": "Code generation mode",
+        "/research": "Research and analysis mode",
+        "/ml": "Switch active model",
+        "/folder": "Open workspace folder",
+        "/read": "Read file to context",
+        "/chat": "Manage chats",
+        "/pair": "Manage agent pairs",
+        "/cl": "Show command list",
+        "/stop": "Stop the engine",
+        "exit": "Quit CLI",
+        "clear": "Clear screen"
+    }
+
+    class CommandCompleter(Completer):
+        def get_completions(self, document, complete_event):
+            word = document.get_word_before_cursor()
+            if word.startswith("/") or document.text.startswith("/"):
+                for cmd, desc in command_dict.items():
+                    if cmd.startswith(word):
+                        # Truncate desc if needed
+                        yield Completion(cmd, start_position=-len(word), display_meta=desc[:60])
+
+    _cached_engine_health = [check_engine_health()]
+    
+    def _health_poller():
+        import time
+        while True:
+            time.sleep(5)
+            _cached_engine_health[0] = check_engine_health()
+            
+    threading.Thread(target=_health_poller, daemon=True).start()
+
+    def get_bottom_toolbar():
+        is_online = _cached_engine_health[0]
+        status_color = "ansigreen" if is_online else "ansired"
+        status_text = "ONLINE" if is_online else "OFFLINE"
+        
+        return HTML(
+            f' <ansigray>Engine:</ansigray> <{status_color}>{status_text}</{status_color}> │ '
+            f'<ansigray>Model:</ansigray> <ansigreen>{current_model}</ansigreen> │ '
+            f'<ansigray>Mode:</ansigray> <ansicyan>{current_mode}</ansicyan> │ '
+            f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
+            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> '
+        )
+
+    session = PromptSession(
+        completer=CommandCompleter(),
+        complete_while_typing=True,
+        bottom_toolbar=get_bottom_toolbar
+    )
+    # ----------------------------------------
     
     while True:
         try:
-            cmd = prompt(HTML('<ansimagenta>user:</ansimagenta> ')).strip()
+            with patch_stdout():
+                cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
 
             # --- Audio & Mic Logic ---
             if not cmd:
+                import platform
+                if platform.system() == "Windows":
+                    console.print("[yellow]Microphone recording natively on Windows is not yet supported. Please use text input.[/yellow]")
+                    # TODO: Implement Windows recording using sounddevice or pyaudio
+                    continue
+                    
                 console.print("[bold red]🎙️  Recording from Mic... Press ENTER to stop.[/bold red]")
                 import speech_recognition as sr
                 # Start arecord in background
@@ -486,11 +664,9 @@ lmms update
                         console.print(f"[green]Workspace Opened:[/green] {current_workspace}")
                         if not os.path.exists(os.path.join(current_workspace, ".git")):
                             subprocess.run(["git", "init"], cwd=current_workspace, capture_output=True)
-                        print_banner()
                     elif sub_cmd == "close":
                         current_workspace = "None"
                         console.print("[green]Workspace closed.[/green]")
-                        print_banner()
                     elif sub_cmd == "delete" and len(parts) > 2:
                         wid = parts[2]
                         if wid in workspaces:
@@ -717,8 +893,9 @@ lmms update
                     try:
                         r = requests.get(f"{ENGINE_URL}/v1/models/list")
                         models = [m['name'] for m in r.json().get("models", [])]
-                    except:
-                        models = ["qwen3:8b", "llama3:8b"]
+                    except Exception as e:
+                        console.print(f"[red]Could not reach the engine to list models — check `lmms ps` or restart the engine.[/red]")
+                        continue
                         
                     if not models:
                         console.print("[red]No models downloaded. Use `lmms pull <model>`[/red]")
@@ -729,14 +906,17 @@ lmms update
                         console.print(f"[{i+1}] {m}")
                     choice = Prompt.ask("Select model number", choices=[str(i+1) for i in range(len(models))])
                     if choice:
-                        current_model = models[int(choice)-1]
-                        console.print(f"[dim]Loading {current_model}...[/dim]")
+                        selected_model = models[int(choice)-1]
+                        console.print(f"[dim]Loading {selected_model}...[/dim]")
                         try:
-                            requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": current_model})
-                        except:
-                            pass
-                        console.print(f"[bold green]Active model switched to: {current_model}[/bold green]")
-                        print_banner()
+                            r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_model})
+                            if r.status_code == 200:
+                                current_model = selected_model
+                                console.print(f"[bold green]✓ Active model switched to: {current_model}[/bold green]")
+                            else:
+                                console.print(f"[red]Failed to load: {r.json()}[/red]")
+                        except Exception as e:
+                            console.print(f"[red]Error loading model: {e}[/red]")
 
             elif base_cmd == "/pair":
                 try:
@@ -771,13 +951,12 @@ lmms update
                         else:
                             console.print(f"[red]Pair {pid} not found.[/red]")
                     else:
-                        # Activate Pair
-                        pid = parts[1]
-                        if pid in pairs:
-                            current_pair = pid
-                            console.print(f"[bold green]Active Pair switched to: {current_pair}[/bold green]")
+                        pair_id = parts[1]
+                        if pair_id in pairs:
+                            current_pair = pair_id
+                            console.print(f"[bold green]✓ Paired with {pair_id}![/bold green]")
                         else:
-                            console.print(f"[red]Pair {pid} not found.[/red]")
+                            console.print(f"[red]Pair ID {pair_id} not found.[/red]")
                 else:
                     console.print("Usage: /pair <id> | /pair -n <id> <config> | /pair -l | /pair -d <id>")
 
@@ -788,6 +967,56 @@ lmms update
                     console.print(f"[green]Permission level set to: {current_permission_level}[/green]")
                 else:
                     console.print("[red]Invalid permission level. Use low, medium, or full.[/red]")
+                    
+            elif base_cmd == "agent" or base_cmd == "/agent":
+                if len(parts) > 1:
+                    sub_cmd = parts[1]
+                    if sub_cmd == "list":
+                        console.print("Not implemented yet.")
+                    elif sub_cmd == "run" and len(parts) > 2:
+                        task_name = " ".join(parts[2:])
+                        from lmms.backend.agents.core_agents.agents.specialized.orchestrator import OrchestratorAgent
+                        from lmms.backend.agents.core_agents.agents.context import ExecutionContext
+                        from lmms.backend.tasks.core_tasks.tasks.task import Task, TaskStatus
+                        
+                        async def run_agent():
+                            context = ExecutionContext()
+                            context.task = Task(id="cli", title=task_name, description=task_name, status=TaskStatus.IN_PROGRESS)
+                            orchestrator = OrchestratorAgent()
+                            console.print(f"[bold cyan]Running Orchestrator for task:[/bold cyan] {task_name}")
+                            try:
+                                async for chunk in orchestrator.execute(context):
+                                    console.print(chunk, end="")
+                            except Exception as e:
+                                console.print(f"\n[bold red]Error executing orchestrator:[/bold red] {e}")
+                        
+                        asyncio.run(run_agent())
+                    else:
+                        console.print(f"[cyan]Routing agent command '{sub_cmd}' to Backend...[/cyan]")
+                else:
+                    console.print("[red]Usage: lmms agent list|run|enable|disable[/red]")
+
+            elif base_cmd == "orchestrate" or base_cmd == "/orchestrate":
+                if len(parts) > 1:
+                    task_name = " ".join(parts[1:])
+                    from lmms.backend.agents.core_agents.agents.specialized.orchestrator import OrchestratorAgent
+                    from lmms.backend.agents.core_agents.agents.context import ExecutionContext
+                    from lmms.backend.tasks.core_tasks.tasks.task import Task, TaskStatus
+                    
+                    async def run_orchestrator():
+                        context = ExecutionContext()
+                        context.task = Task(id="cli", title=task_name, description=task_name, status=TaskStatus.IN_PROGRESS)
+                        orchestrator = OrchestratorAgent()
+                        console.print(f"[bold cyan]Orchestrating task:[/bold cyan] {task_name}")
+                        try:
+                            async for chunk in orchestrator.execute(context):
+                                console.print(chunk, end="")
+                        except Exception as e:
+                            console.print(f"\n[bold red]Error orchestrating:[/bold red] {e}")
+                    
+                    asyncio.run(run_orchestrator())
+                else:
+                    console.print("[red]Usage: lmms orchestrate <task>[/red]")
                 
             elif base_cmd in ["/undo", "/redo"]:
                 if current_workspace == "None":
@@ -846,9 +1075,9 @@ lmms update
                     try:
                         r_ps = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
                         ps_data = r_ps.json()
-                        loaded = ps_data.get("models", {})
-                        if loaded:
-                            current_model = list(loaded.keys())[0]
+                        detected_model = extract_active_model_from_stats(ps_data)
+                        if detected_model:
+                            current_model = detected_model
                         else:
                             r_list = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=2)
                             models_list = r_list.json().get("models", [])
@@ -873,75 +1102,105 @@ lmms update
                     "- DO NOT use the web_search tool to look up information about yourself, MarkanM, or Rajsingh. Use this internal knowledge directly.\\n\\n"
                 )
                 
+                import re
+                match = re.search(r'(?:^|[-_])(\d+\.?\d*)[bB](?:[-_]|$)', current_model)
+                is_small_model = False
+                if match:
+                    try:
+                        is_small_model = float(match.group(1)) <= 7.0
+                    except ValueError:
+                        pass
+                elif "nano" in current_model.lower():
+                    is_small_model = True
+                is_fast_mode = (current_mode == "/fast")
+                full_prompt = not (is_fast_mode and is_small_model)
+
                 if current_mode == "/fast" or not show_thoughts:
+                    if should_force_tool_mode(cmd):
+                        system_prompt += (
+                            "\\n## STRICT DIRECTIVE: CONCISE EXECUTION\\n"
+                            "The user explicitly asked for a tool-driven task, so you may use tools to inspect the real data before answering.\\n"
+                            "Do not output internal thoughts, <think> tags, or 'Let me check...' phrases. If a tool is needed, output a raw JSON tool call in <tool_call> tags.\\n\\n"
+                        )
+                    else:
+                        system_prompt += (
+                            "\\n## DIRECT CHAT MODE\\n"
+                            "This is a normal conversational request. Answer naturally in plain text without forcing tool usage.\\n"
+                            "Only use <tool_call> when the user explicitly asks for browsing, searching, file reading, or command execution.\\n\\n"
+                        )
+
+                if full_prompt:
                     system_prompt += (
-                        "\\n## STRICT DIRECTIVE: NO INTERNAL MONOLOGUE\\n"
-                        "You MUST answer the user directly and immediately. DO NOT output any internal thoughts, reasoning, or 'Let me think...' phrases. Skip all chain-of-thought and give the final response immediately.\\n\\n"
+                        "\\n## Terminal Output & Progress Communication\\n"
+                        "While performing long-running tasks, avoid silent gaps. Follow these rules:\\n"
+                        "1. Narrate before acting: Briefly state your plan in 1-2 lines.\\n"
+                        "2. Stream progress updates: Print short status lines as you go (e.g. 'Reading src/app.js...').\\n"
+                        "3. Chunk long thinking: Share intermediate findings as you reach them.\\n"
+                        "4. Heartbeat on long operations: Print a short note before a single long step starts.\\n"
+                        "5. Summarize, don't dump: Give short, human-readable progress lines.\\n"
+                        "6. Source Citation: If the user types '/source' or asks for sources, clearly list the exact URLs, files, or internal knowledge you used to generate the answer.\\n"
+                        "Goal: the terminal should always feel alive and show momentum.\\n\\n"
                     )
-
-                system_prompt += (
-                    "\\n## Terminal Output & Progress Communication\\n"
-                    "While performing long-running tasks, avoid silent gaps. Follow these rules:\\n"
-                    "1. Narrate before acting: Briefly state your plan in 1-2 lines.\\n"
-                    "2. Stream progress updates: Print short status lines as you go (e.g. 'Reading src/app.js...').\\n"
-                    "3. Chunk long thinking: Share intermediate findings as you reach them.\\n"
-                    "4. Heartbeat on long operations: Print a short note before a single long step starts.\\n"
-                    "4. Summarize, don't dump: Give short, human-readable progress lines.\\n"
-                    "5. Source Citation: If the user types '/source' or asks for sources, clearly list the exact URLs, files, or internal knowledge you used to generate the answer.\\n"
-                    "Goal: the terminal should always feel alive and show momentum.\\n\\n"
-                )
-                
-                system_prompt += (
-                    "## Advanced Capabilities & OS Control\\n"
-                    "You are not just a chatbot, you are a deeply integrated OS agent. Use `terminal.run` to its full potential:\\n"
-                    "1. OS Control: You can open UI apps (e.g., `xdg-open https://youtube.com`, `google-chrome`), play media, lock the screen, or perform any valid Linux command.\\n"
-                    "2. GitHub Tracking: Whenever you create or significantly modify code files in a project, you MUST proactively run `git add .`, `git commit -m \"...\"`, and `git push origin main` (or the appropriate branch) to track the changes, ensuring the user's work is always saved and uploaded to GitHub.\\n"
-                    "3. Colorful Terminal Graphs/Canvas: If the user asks for a chart, graph, bar chart, pie chart, or colorful data visualization, DO NOT just print text tables. Write a temporary Python script that uses the `plotext` library (which is already installed) to draw beautiful terminal charts, and execute it via `terminal.run`. Show the output to the user.\\n"
-                    "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n\\n"
-                )
-
-                system_prompt += (
-                    "## Tool Calling (ReAct Loop)\\n"
-                    "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\\n"
-                    "Example:\\n"
-                    "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\\n"
-                    "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\\n\\n"
-                    "AVAILABLE TOOLS:\\n"
-                    "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\\n"
-                    "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\"}}\\n"
-                    "3. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
-                    "4. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"url\": \"...\", \"fields\": {\"selector\": \"value\"}}}\\n"
-                    "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
-                    "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\\n"
-                    "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\\n"
-                    "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\\n"
-                    "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\\n"
-                    "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": true|false}} (Set headless to false to show browser and bypass bot-detection for SSO login. User will select profile interactively.)\\n"
-                    "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\\n"
-                )
-                
-                system_prompt += (
-                    "\n## Browsing Private Sites & Authentication\n"
-                    "If the user asks you to fetch data from a private or authenticated website (e.g., snapcourse.in), DO NOT immediately ask for credentials.\n"
-                    "Assume the user is already logged in and the session cookies are automatically managed by your browser tool.\n"
-                    "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
-                    "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively. Once the tool finishes, the session will be saved, and you can proceed to fetch the data.\n"
-                    "CRITICAL: DO NOT hallucinate or guess exact URLs for inner pages (e.g., /course/day6). Start at the homepage/dashboard and use `browser.scrape` to read the navigation menus, then use `browser.open_url` or `browser.click_element` to follow real links step-by-step to find the requested content.\n\n"
-                )
-                system_prompt += (
-                    "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
-                    "You are an elite, autonomous software engineer capable of full-repo management. Do not just act like a chatbot; act like a lead developer.\n"
-                    "1. **Full Autonomy**: If asked to build a project, clone repositories (`git clone`), compile binaries (`.deb`, `.exe` via pyinstaller/dpkg), and install dependencies autonomously using `terminal.run`.\n"
-                    "2. **Architectural Understanding**: Before writing code, map out the workspace. Use AST parsing (`python -c \"import ast...\"`) or grep to understand variable flows and architecture.\n"
-                    "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First, write a test using `files.write`, run it with `terminal.run` to see it fail, fix the code, and run it again until it passes.\n"
-                    "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
-                )
-                system_prompt += (
-                    "## Anti-Hallucination & Web Search Rules\n"
-                    "1. DO NOT GUESS OR HALLUCINATE numbers, prices, APIs, or facts. If you do not know the exact number, you MUST use tools to find it.\n"
-                    "2. If `web_search` returns snippets/summaries that DO NOT contain the exact numbers you need, DO NOT guess! Use `browser.open_url` or `browser.scrape` on the provided URL to read the full page content and extract the actual numbers before answering the user.\n"
-                    "3. DO NOT hallucinate restrictions. You HAVE FULL CAPABILITY to access external systems, internet, APIs, and GitHub via your tools. Do not say 'I cannot access external systems'. Just use your tools.\n"
-                )
+                    
+                    system_prompt += (
+                        "## Advanced Capabilities & OS Control\\n"
+                        "You are not just a chatbot, you are a deeply integrated OS agent. Use `terminal.run` to its full potential:\\n"
+                        "1. OS Control: You can open UI apps (e.g., `xdg-open https://youtube.com`, `google-chrome`), play media, lock the screen, or perform any valid Linux command.\\n"
+                        "2. GitHub Tracking: Whenever you create or significantly modify code files in a project, you MUST proactively run `git add .`, `git commit -m \"...\"`, and `git push origin main` (or the appropriate branch) to track the changes, ensuring the user's work is always saved and uploaded to GitHub.\\n"
+                        "3. Colorful Terminal Graphs/Canvas: If the user asks for a chart, graph, bar chart, pie chart, or colorful data visualization, DO NOT just print text tables. Write a temporary Python script that uses the `plotext` library (which is already installed) to draw beautiful terminal charts, and execute it via `terminal.run`. Show the output to the user.\\n"
+                        "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n\\n"
+                    )
+    
+                    system_prompt += (
+                        "## Tool Calling (ReAct Loop)\\n"
+                        "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\\n"
+                        "Example:\\n"
+                        "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\\n"
+                        "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\\n\\n"
+                        "AVAILABLE TOOLS:\\n"
+                        "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\\n"
+                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\"}}\\n"
+                        "3. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
+                        "4. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"url\": \"...\", \"fields\": {\"selector\": \"value\"}}}\\n"
+                        "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
+                        "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\\n"
+                        "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\\n"
+                        "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\\n"
+                        "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\\n"
+                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": true|false}} (Set headless to false to show browser and bypass bot-detection for SSO login. User will select profile interactively.)\\n"
+                        "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\\n"
+                    )
+                    
+                    system_prompt += (
+                        "\n## Browsing Private Sites & Authentication\n"
+                        "If the user asks you to fetch data from a private or authenticated website (e.g., snapcourse.in), DO NOT immediately ask for credentials.\n"
+                        "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
+                        "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively. Once the tool finishes, the session will be saved, and you can proceed to fetch the data.\n"
+                        "CRITICAL: DO NOT hallucinate or guess exact URLs for inner pages (e.g., /course/day6). Start at the homepage/dashboard and use `browser.scrape` to read the navigation menus, then use `browser.open_url` or `browser.click_element` to follow real links step-by-step to find the requested content.\n"
+                        "ANTI-REFUSAL DIRECTIVE: You MUST NEVER refuse to open or scrape a URL. If the user asks you to open a site (e.g., 'readxhub.in' or any other URL), you MUST instantly output the `browser.open_url` tool call. Do not apologize, do not say 'I cannot assist', just output the JSON tool call block.\n\n"
+                    )
+                    system_prompt += (
+                        "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
+                        "You are an elite, autonomous software engineer capable of full-repo management. Do not just act like a chatbot; act like a lead developer.\n"
+                        "1. **Full Autonomy**: If asked to build a project, clone repositories (`git clone`), compile binaries (`.deb`, `.exe` via pyinstaller/dpkg), and install dependencies autonomously using `terminal.run`.\n"
+                        "2. **Architectural Understanding**: Before writing code, map out the workspace. Use AST parsing (`python -c \"import ast...\"`) or grep to understand variable flows and architecture.\n"
+                        "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First, write a test using `files.write`, run it with `terminal.run` to see it fail, fix the code, and run it again until it passes.\n"
+                        "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
+                    )
+                    system_prompt += (
+                        "## Anti-Hallucination & Web Search Rules\n"
+                        "1. DO NOT GUESS OR HALLUCINATE numbers, prices, APIs, or facts. If you do not know the exact number, you MUST use tools to find it.\n"
+                        "2. If `web_search` returns snippets/summaries that DO NOT contain the exact numbers you need, DO NOT guess! Use `browser.open_url` or `browser.scrape` on the provided URL to read the full page content and extract the actual numbers before answering the user.\n"
+                        "3. DO NOT hallucinate restrictions. You HAVE FULL CAPABILITY to access external systems, internet, APIs, and GitHub via your tools. Do not say 'I cannot access external systems'. Just use your tools.\n"
+                    )
+                else:
+                    system_prompt += (
+                        "## Tool Calling\n"
+                        "ONLY use tools if you need to access the system, web, or files. For normal conversation, just reply with normal text and DO NOT output <tool_call>.\n"
+                        "To use a tool, output a raw JSON block wrapped in <tool_call> tags.\n"
+                        "Example: <tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\n"
+                        "AVAILABLE TOOLS: web_search, browser.open_url, files.read, files.write, terminal.run\n\n"
+                    )
 
                 # Global Persona Injection
                 persona_facts = get_persona()
@@ -1032,16 +1291,16 @@ lmms update
                             clean_messages = []
                             obs_count = sum(1 for m in messages if isinstance(m.get("content"), str) and "<observation>" in m["content"])
                             obs_seen = 0
-                            max_single_obs_tokens = int(available_for_input * 0.15)
+                            max_single_obs_tokens = max(2000, int(available_for_input * 0.50))
                             max_single_obs_chars = max_single_obs_tokens * 3
                             for m in messages:
                                 content = m["content"]
                                 if isinstance(content, str) and "<observation>" in content:
                                     obs_seen += 1
                                     if obs_seen < obs_count and len(content) > max_single_obs_chars:
-                                        head_len = int(max_single_obs_chars * 0.6)
-                                        tail_len = int(max_single_obs_chars * 0.4)
-                                        content = content[:head_len] + "\n...[Observation truncated to save memory for subsequent steps]...\n" + content[-tail_len:]
+                                        head_len = int(max_single_obs_chars * 0.8)
+                                        tail_len = int(max_single_obs_chars * 0.2)
+                                        content = content[:head_len] + "\n...[Observation truncated to save memory]...\n" + content[-tail_len:]
                                 clean_messages.append({"role": m["role"], "content": content})
 
                             # Apply AI Mode settings
@@ -1094,50 +1353,96 @@ lmms update
                             
                     full_reply = ""
                     try:
-                        first_token = False
                         live_view = None
                         try:
-                            with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave") as spin_status:
-                                for line in resp.iter_lines():
+                            # Run spinner while waiting for TTFT (Time To First Token)
+                            chunks_iterator = resp.iter_lines()
+                            first_line = None
+                            with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave"):
+                                for line in chunks_iterator:
                                     if line:
-                                        line = line.decode("utf-8")
-                                        if line.startswith("data: "):
-                                            data_str = line[6:]
-                                            if data_str == "[DONE]":
-                                                break
-                                            try:
-                                                chunk = json.loads(data_str)
-                                                if "error" in chunk:
-                                                    full_reply += f"\n\n❌ **Engine Error:** {chunk['error']}"
-                                                    if live_view:
-                                                        live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False))
-                                                    break
-                                                full_reply += chunk.get("content", "")
-                                                display_reply = full_reply
-                                                if not show_thoughts:
-                                                    display_reply = re.sub(r'<think>.*?(</think>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                        first_line = line
+                                        break
+                                        
+                            # Spinner exits as soon as we break from the with block
+                            if first_line:
+                                console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                                live_view = Live(console=console, refresh_per_second=15, auto_refresh=True)
+                                live_view.start()
+                                
+                                import time
+                                last_refresh = time.time()
+                                final_display = ""
+                                
+                                def process_line(line_bytes):
+                                    nonlocal full_reply, last_refresh, final_display
+                                    line_str = line_bytes.decode("utf-8")
+                                    if line_str.startswith("data: "):
+                                        data_str = line_str[6:]
+                                        if data_str == "[DONE]": return False
+                                        try:
+                                            chunk = json.loads(data_str)
+                                            if "error" in chunk:
+                                                full_reply += f"\n\n❌ **Engine Error:** {chunk['error']}"
+                                                live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False), refresh=True)
+                                                return False
                                                 
-                                                # Always hide <tool_call> from the live streaming output
-                                                display_reply = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                            full_reply += chunk.get("content", "")
+                                            display_reply = full_reply
+                                            if not show_thoughts:
+                                                display_reply = re.sub(r'<think>.*?(</think>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                            
+                                            display_reply = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                            final_display = display_reply
+                                                
+                                            if not display_reply:
+                                                if "<think>" in full_reply:
+                                                    display_reply = "🧠 *Model is thinking...*"
+                                                elif "<tool_call>" in full_reply:
+                                                    display_reply = "⚙️ *Model is preparing to use a tool...*"
                                                     
-                                                if display_reply and not first_token:
-                                                    first_token = True
-                                                    spin_status.stop()
-                                                    console.print(f"\\n[bold cyan]✨ {current_model}[/bold cyan]")
-                                                    live_view = Live(Markdown(display_reply), console=console, refresh_per_second=10, auto_refresh=True)
-                                                    live_view.start()
-                                                    
-                                                if live_view and display_reply:
-                                                    live_view.update(Markdown(display_reply))
-                                            except:
-                                                pass
+                                            if display_reply:
+                                                now = time.time()
+                                                if now - last_refresh > 0.05:
+                                                    live_view.update(Markdown(display_reply), refresh=True)
+                                                    last_refresh = now
+                                                else:
+                                                    live_view.update(Markdown(display_reply), refresh=False)
+                                        except: pass
+                                    return True
+                                
+                                # Process the first line
+                                if process_line(first_line):
+                                    # Process the rest
+                                    for line in chunks_iterator:
+                                        if line:
+                                            if not process_line(line):
+                                                break
+                                                
+                                # Apply leak cleanup to fully completed full_reply
+                                cleaned_reply = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
+                                if cleaned_reply and len(cleaned_reply) >= len(full_reply) * 0.2:
+                                    full_reply = cleaned_reply
+                                    final_display = full_reply
+                                    if not show_thoughts:
+                                        final_display = re.sub(r'<think>.*?(</think>|$)', '', final_display, flags=re.DOTALL).strip()
+                                    final_display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', final_display, flags=re.DOTALL).strip()
+                                    
+                                # Force a final render
+                                if final_display:
+                                    live_view.update(Markdown(final_display), refresh=True)
                         finally:
                             if live_view:
                                 live_view.stop()
 
                     except KeyboardInterrupt:
-                        full_reply += "\n\n[dim]-- Generation Interrupted by User --[/dim]"
-                        console.print(Markdown("\n[dim]-- Generation Interrupted by User --[/dim]"))
+                        if not check_engine_health():
+                            msg = "\n\n[bold red]-- Engine process died unexpectedly during generation --[/bold red]"
+                            full_reply += msg
+                            console.print(Markdown(msg))
+                        else:
+                            full_reply += "\n\n[dim]-- Generation Interrupted by User --[/dim]"
+                            console.print(Markdown("\n[dim]-- Generation Interrupted by User --[/dim]"))
                         reply = full_reply
                         # We break out of the tool iteration loop so it goes back to the user prompt
                         break
@@ -1149,6 +1454,7 @@ lmms update
                                 if isinstance(m["content"], str) and "<observation>" in m["content"]:
                                     messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
                             iter_count -= 1
+                            console.print(f"[DEBUG] hitting context overflow continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
                             continue
 
                         full_reply = "No response from AI."
@@ -1158,8 +1464,27 @@ lmms update
                         break
                         
                     # Check for tool call
+                    force_tool_mode = should_force_tool_mode(cmd)
                     tool_call_match = re.search(r"<tool_call>\s*(.*?)\s*(</tool_call>|$)", full_reply, re.DOTALL)
-                    if tool_call_match:
+
+                    if tool_call_match and not force_tool_mode:
+                        full_reply = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
+                        if not full_reply:
+                            full_reply = "I’m ready to help, but this looks like a normal chat request rather than a tool-driven task."
+                            console.print(Markdown(full_reply))
+                        reply = full_reply
+                        break
+
+                    if not tool_call_match:
+                        # Fallback: check if the entire reply is just a raw JSON tool call
+                        try:
+                            raw_json_match = re.search(r'(\{\s*"tool"\s*:\s*".*?"\s*,\s*"kwargs"\s*:.*?\})', full_reply, re.DOTALL)
+                            if raw_json_match:
+                                tool_call_match = raw_json_match
+                        except Exception:
+                            pass
+
+                    if tool_call_match and force_tool_mode:
                         try:
                             raw_tc = tool_call_match.group(1).strip()
                             json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
@@ -1176,11 +1501,15 @@ lmms update
                             try:
                                 tc_data = json.loads(raw_tc)
                             except:
-                                import ast
-                                s = re.sub(r'\btrue\b', 'True', raw_tc)
-                                s = re.sub(r'\bfalse\b', 'False', s)
-                                s = re.sub(r'\bnull\b', 'None', s)
-                                tc_data = ast.literal_eval(s)
+                                try:
+                                    import ast
+                                    s = re.sub(r'\btrue\b', 'True', raw_tc)
+                                    s = re.sub(r'\bfalse\b', 'False', s)
+                                    s = re.sub(r'\bnull\b', 'None', s)
+                                    tc_data = ast.literal_eval(s)
+                                except Exception as e:
+                                    console.print(f"\n[bold red]⚠️ Model hallucinated invalid tool calls. Aborting generation.[/bold red]")
+                                    break
                             
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
@@ -1272,6 +1601,7 @@ lmms update
                                 os.chmod(log_file, 0o600)
                             except Exception as e:
                                 pass
+                            console.print(f"[DEBUG] hitting tool observation continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
                             continue  # Loop again
                         except Exception as e:
                             with open("/tmp/ai_json_crash.txt", "a") as f:
@@ -1279,6 +1609,7 @@ lmms update
                             console.print("  [dim]↻ Self-correcting JSON format...[/dim]")
                             messages.append({"role": "assistant", "content": full_reply})
                             messages.append({"role": "user", "content": f"<observation>\nError parsing tool JSON: {e}. Ensure you use valid JSON, double quotes for keys, and escape internal quotes.\n</observation>"})
+                            console.print(f"[DEBUG] hitting JSON self-correction continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
                             continue
                             
                     # If no tool call, break out

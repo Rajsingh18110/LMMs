@@ -463,8 +463,11 @@ class MainWindow(QMainWindow):
             file_path = self.file_model.filePath(index)
             import subprocess
             folder = os.path.dirname(file_path)
-            if os.name == 'nt':
+            import sys
+            if sys.platform == "win32":
                 os.startfile(folder)
+            elif sys.platform == "darwin":
+                subprocess.Popen(['open', folder])
             else:
                 subprocess.Popen(['xdg-open', folder])
 

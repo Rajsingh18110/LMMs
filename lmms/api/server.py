@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
+import asyncio
 from huggingface_hub import hf_hub_download
 
 from lmms.engine.manager import engine_manager
@@ -519,19 +520,43 @@ async def chat_completions(req: ChatRequest):
             
     if req.stream:
         async def event_generator():
-            try:
-                # generate yields {"message": {"content": "..."}}
-                generator = runtime.generate({"messages": req.messages, "mode": req.mode, "think": req.think}, stream=True)
-                for chunk in generator:
-                    # chunk is dict, we yield SSE format
-                    # data: {"content": "..."}
-                    yield f"data: {json.dumps(chunk['message'])}\n\n"
-                yield "data: [DONE]\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            q = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+            
+            def producer():
+                try:
+                    generator = runtime.generate(
+                        {"messages": req.messages, "mode": req.mode, "think": req.think}, 
+                        stream=True
+                    )
+                    for chunk in generator:
+                        loop.call_soon_threadsafe(q.put_nowait, chunk)
+                except Exception as e:
+                    loop.call_soon_threadsafe(q.put_nowait, e)
+                finally:
+                    loop.call_soon_threadsafe(q.put_nowait, None)
+
+            import threading
+            threading.Thread(target=producer, daemon=True).start()
+            
+            while True:
+                item = await q.get()
+                if item is None:
+                    yield "data: [DONE]\n\n"
+                    break
+                if isinstance(item, Exception):
+                    yield f"data: {json.dumps({'error': str(item)})}\n\n"
+                    break
+                yield f"data: {json.dumps(item['message'])}\n\n"
+                
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     else:
-        response = runtime.generate({"messages": req.messages, "mode": req.mode, "think": req.think}, stream=False)
+        # Run synchronous generate in a thread to avoid blocking the event loop
+        response = await asyncio.to_thread(
+            runtime.generate, 
+            {"messages": req.messages, "mode": req.mode, "think": req.think}, 
+            stream=False
+        )
         return response
 
 import random
@@ -543,6 +568,10 @@ server_otp = ""
 server_api_key = ""
 server_temp_token = ""
 active_agent_name = "No Model Loaded"
+
+@app.get("/v1/health")
+async def health_check():
+    return {"status": "ok"}
 
 @app.get("/webhook")
 async def webhook_get():

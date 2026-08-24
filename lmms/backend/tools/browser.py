@@ -60,17 +60,22 @@ class BrowserTool:
                         except Exception as copy_e:
                             pass # Might have permission errors but we proceed
                         
-                        self.browser = self.playwright.chromium.launch_persistent_context(
-                            user_data_dir=temp_dir,
-                            headless=headless,
-                            args=[
-                                "--disable-blink-features=AutomationControlled",
-                                f"--profile-directory={profile_name}"
-                            ],
-                            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        )
+                        try:
+                            self.browser = self.playwright.chromium.launch_persistent_context(
+                                user_data_dir=temp_dir,
+                                headless=headless,
+                                args=[
+                                    "--disable-blink-features=AutomationControlled",
+                                    f"--profile-directory={profile_name}"
+                                ],
+                                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                            )
+                        except Exception as temp_e:
+                            print(f"  [dim]Temp session failed. Falling back to blank headless session.[/dim]")
+                            self.browser = self.playwright.chromium.launch(headless=headless)
                     else:
-                        raise e
+                        print(f"  [dim]Persistent context failed ({e}). Falling back to blank headless session.[/dim]")
+                        self.browser = self.playwright.chromium.launch(headless=headless)
             else:
                 self.browser = self.playwright.chromium.launch(headless=headless)
                 
@@ -248,7 +253,10 @@ class BrowserTool:
             content_lower = content.lower() if content else ""
             if "captcha" in content_lower or "verify you are human" in content_lower or "cloudflare" in content_lower or "checking your browser" in content_lower:
                 print("\n[BrowserTool] CAPTCHA detected. Initiating Human-like Bypass...")
-                return self.solve_captcha(url)
+                success, msg = self.solve_captcha(url)
+                if not success:
+                    return f"[CAPTCHA_FAILED] {msg}"
+                return f"[CAPTCHA_SOLVED] {msg}"
                 
             if content:
                 content = re.sub(r'\n+', '\n', content)
@@ -436,7 +444,7 @@ class BrowserTool:
         except Exception as e:
             return f"Failed to human-type: {str(e)}"
 
-    def solve_captcha(self, url: str) -> str:
+    def solve_captcha(self, url: str) -> tuple[bool, str]:
         """Looks for Turnstile or reCAPTCHA checkboxes and attempts a human-like click to pass it."""
         try:
             self._ensure_session(headless=False)
@@ -494,9 +502,15 @@ class BrowserTool:
             if found:
                 self.page.wait_for_timeout(5000)
                 content = self.page.evaluate("document.body.innerText")
-                return f"Captcha Bypass Attempted. New URL: {self.page.url}\nPreview: {content[:1000]}"
+                
+                # Check if captcha is gone
+                content_lower = content.lower() if content else ""
+                if "captcha" in content_lower or "verify you are human" in content_lower:
+                    return False, f"Bypass attempted but CAPTCHA still present. New URL: {self.page.url}\nPreview: {content[:1000]}"
+                
+                return True, f"Bypass successful. New URL: {self.page.url}\nPreview: {content[:1000]}"
             else:
-                return "No identifiable CAPTCHA frames found on page."
+                return False, "No identifiable CAPTCHA frames found on page."
                 
         except Exception as e:
-            return f"Failed to solve CAPTCHA: {str(e)}"
+            return False, f"Failed to solve CAPTCHA: {str(e)}"

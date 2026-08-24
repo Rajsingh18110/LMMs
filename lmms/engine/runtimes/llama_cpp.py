@@ -53,21 +53,30 @@ class LlamaCppRuntime(RuntimeContract):
         except Exception:
             pass
 
+        # Check System RAM
+        import psutil
+        ram_gb = psutil.virtual_memory().total / (1024**3)
+        
         # Calculate safe n_ctx and display warning if necessary
-        safe_n_ctx = 0 # 0 = native max
-        if vram_gb > 0:
-            if file_size_gb > vram_gb * 1.5:
+        safe_n_ctx = 8192 # Default safe limit instead of 0 (native max)
+        
+        mem_gb = max(vram_gb, ram_gb)
+        
+        if mem_gb > 0:
+            if file_size_gb > mem_gb * 1.5:
                 import time
-                print(f"\n\033[91mWARNING: You are attempting to run a massive model ({file_size_gb:.1f}GB) on a GPU with limited VRAM ({vram_gb:.1f}GB).\033[0m")
+                print(f"\n\033[91mWARNING: You are attempting to run a massive model ({file_size_gb:.1f}GB) on a machine with limited memory ({mem_gb:.1f}GB).\033[0m")
                 print("\033[91mThis will cause heavy system RAM swapping, leading to extremely slow generation.\033[0m")
                 print("\033[91mSustained 100% GPU/CPU thrashing may overheat or damage your hardware over time.\033[0m")
                 print("\033[93mProceeding in 5 seconds...\033[0m\n")
                 time.sleep(5)
             
-            # Cap n_ctx dynamically based on VRAM to prevent KV cache OOM
-            if vram_gb < 8.0:
+            # Cap n_ctx dynamically based on available memory to prevent KV cache OOM
+            if mem_gb < 8.0:
+                safe_n_ctx = 4096
+            elif mem_gb < 16.0:
                 safe_n_ctx = 8192
-            elif vram_gb < 16.0:
+            elif mem_gb < 32.0:
                 safe_n_ctx = 16384
             else:
                 safe_n_ctx = 32768
@@ -77,14 +86,20 @@ class LlamaCppRuntime(RuntimeContract):
         first_try = True
         while current_ctx >= 512 or first_try:
             try:
-                model_instance = Llama(
-                    model_path=full_path,
-                    n_gpu_layers=-1, # All layers to GPU, automatically offloads to RAM if compiled properly
-                    n_ctx=current_ctx,
-                    flash_attn=True,
-                    chat_format="chatml",
-                    verbose=False
-                )
+                kwargs = {
+                    "model_path": full_path,
+                    "n_gpu_layers": -1,
+                    "n_ctx": current_ctx,
+                    "flash_attn": True,
+                    "verbose": False
+                }
+                # Initial guess for chat_format based on filename
+                if "qwen" in os.path.basename(full_path).lower() or "chatml" in os.path.basename(full_path).lower():
+                    kwargs["chat_format"] = "chatml"
+                elif "llama" in os.path.basename(full_path).lower():
+                    kwargs["chat_format"] = "llama-2"
+                
+                model_instance = Llama(**kwargs)
                 break
             except Exception as e:
                 err_msg = str(e).lower()
@@ -107,6 +122,28 @@ class LlamaCppRuntime(RuntimeContract):
         # Use base filename as key if path was given
         key = os.path.basename(full_path).replace(".gguf", "")
         
+        # Check for chat template in metadata to prepare fallback stop tokens
+        metadata = getattr(model_instance, "metadata", {})
+        has_chat_template = False
+        for k in metadata.keys():
+            if "tokenizer.chat_template" in k:
+                has_chat_template = True
+                break
+                
+        if not hasattr(self, "_model_fallback_stops"):
+            self._model_fallback_stops = {}
+            
+        if not has_chat_template:
+            self._model_fallback_stops[key] = ["<|im_end|>", "</s>", "<|endoftext|>"]
+            # Apply Bug 5 Fix: Reload model with 'chatml' if we missed it and no template exists
+            if "chat_format" not in kwargs:
+                print(f"[Fallback] No chat_template found in metadata for {key}. Reloading with fallback 'chatml' format to prevent infinite repetition.")
+                del model_instance
+                kwargs["chat_format"] = "chatml"
+                model_instance = Llama(**kwargs)
+        else:
+            self._model_fallback_stops[key] = None
+
         # Add cache to avoid re-evaluating system prompt
         cache = LlamaRAMCache(capacity_bytes=1024 * 1024 * 1024) # 1GB Cache
         model_instance.set_cache(cache)
@@ -159,14 +196,30 @@ class LlamaCppRuntime(RuntimeContract):
             messages.insert(0, {"role": "system", "content": sys_msg})
 
         
+        # Prepare context-aware repeat penalty
+        repeat_penalty = 1.05 if mode == "code" else 1.1
+        
+        # Prepare fallback stop tokens
+        fallback_stops = getattr(self, "_model_fallback_stops", {}).get(model_name)
+        stop_tokens = fallback_stops if fallback_stops else []
+        
+        # N-gram repetition safety net config (avoid hardcoding too tightly)
+        # We read from context for configurability, defaulting to user's requested (5 tokens, 4 repeats)
+        ngram_window = context.get("ngram_window", 5)
+        max_repeats = context.get("ngram_repeats", 4)
+
         if stream:
             def stream_response():
                 with self._global_lock:
                     response_generator = active_model.create_chat_completion(
                         messages=messages,
                         stream=True,
-                        max_tokens=context.get("max_tokens", int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)
+                        max_tokens=context.get("max_tokens", max(1024, int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)),
+                        repeat_penalty=repeat_penalty,
+                        stop=stop_tokens
                     )
+                
+                recent_tokens = []
                 while True:
                     with self._global_lock:
                         try:
@@ -180,6 +233,33 @@ class LlamaCppRuntime(RuntimeContract):
                         delta = chunk["choices"][0].get("delta", {})
                         token = delta.get("content")
                         if token:
+                            # N-gram repetition tracker
+                            recent_tokens.append(token)
+                            if len(recent_tokens) > ngram_window * max_repeats:
+                                recent_tokens.pop(0)
+                            
+                            # Check for repetition dynamically for sizes from 1 up to ngram_window
+                            is_repeating = False
+                            for w in range(1, ngram_window + 1):
+                                if len(recent_tokens) >= w * max_repeats:
+                                    is_rep = True
+                                    window = recent_tokens[-w:]
+                                    for i in range(1, max_repeats):
+                                        start = -(i + 1) * w
+                                        end = -i * w
+                                        prev_window = recent_tokens[start:end] if end != 0 else recent_tokens[start:]
+                                        if window != prev_window:
+                                            is_rep = False
+                                            break
+                                    if is_rep:
+                                        is_repeating = True
+                                        break
+
+                            if is_repeating:
+                                print("Model repetition detected, generation stopped early.")
+                                yield {"message": {"role": "assistant", "content": "\n\n[System: Model repeated itself, please rephrase your question or switch model.]"}}
+                                break
+
                             yield {"message": {"role": "assistant", "content": token}}
             return stream_response()
         else:
@@ -187,7 +267,9 @@ class LlamaCppRuntime(RuntimeContract):
                 response = active_model.create_chat_completion(
                     messages=messages,
                     stream=False,
-                    max_tokens=context.get("max_tokens", int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)
+                    max_tokens=context.get("max_tokens", max(1024, int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)),
+                    repeat_penalty=repeat_penalty,
+                    stop=stop_tokens
                 )
             return {"message": {"content": response["choices"][0]["message"]["content"]}}
 

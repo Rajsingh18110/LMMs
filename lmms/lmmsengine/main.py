@@ -24,19 +24,39 @@ except Exception:
 
 API_URL = "http://localhost:11435/v1"
 def is_root():
+    import platform
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            return False
     return os.geteuid() == 0
 
 def ensure_server_running():
     import requests
     import time
+    import socket
     try:
         requests.get("http://localhost:11435/v1/health", timeout=1)
     except:
+        # Fallback defensive check: Is port actually in use?
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(('localhost', 11435)) == 0:
+                print("Port 11435 is already in use by another process. Skipping spawn.")
+                return
+
         print("Starting Engine daemon in the background...")
         log_file = os.path.expanduser("~/.lmms/logs/server.log")
-        with open(log_file, "a") as f:
-            engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
-            subprocess.Popen([sys.executable, engine_script, "server"], stdout=f, stderr=f)
+        f = open(log_file, "a")
+        engine_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+        import platform
+        kwargs = {}
+        if platform.system() == "Windows":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen([sys.executable, engine_script, "server"], stdout=f, stderr=f, **kwargs)
         time.sleep(2)
 
 def main():
@@ -318,6 +338,12 @@ def main():
     # Clean args for command router
     clean_args = [a for a in args if a not in ["--air", "-air"]]
     
+    # CLI mode bypass
+    if clean_args and clean_args[0] in ["cli", "-cli", "--cli", "-c"]:
+        from lmms.backend.main import run_cli
+        run_cli()
+        sys.exit(0)
+    
     # Engine CLI Commands Bypass
     if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]:
         import requests, json, sys, os
@@ -367,8 +393,16 @@ def main():
                 model_name = "-".join(clean_args[1:])
                 print(f"Pulling {model_name}...")
                 
-                from huggingface_hub import HfApi, hf_hub_download
                 import logging
+                import os
+                import sys
+                import subprocess
+
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=FutureWarning)
+                    from huggingface_hub import HfApi, hf_hub_download
+                    
                 logging.getLogger("huggingface_hub").setLevel(logging.INFO)
                 
                 api = HfApi()
@@ -904,6 +938,13 @@ def main():
                             # Default to Mic if no file provided for STT
                             import subprocess
                             import os
+                            import platform
+                            
+                            if platform.system() == "Windows":
+                                console.print("\n[yellow]Microphone recording natively on Windows is not yet supported.[/yellow]")
+                                # TODO: Implement Windows recording using sounddevice or pyaudio
+                                continue
+                                
                             tmp_mic = "/tmp/lmms_mic_client.wav"
                             console.print("\n[bold red]🎙️ Recording from Mic... (Press Ctrl+C to stop)[/bold red]")
                             try:
@@ -1022,6 +1063,8 @@ def main():
                             continue
                         except Exception as turn_err:
                             print(f"\n\033[91m[Turn Error]\033[0m {turn_err}")
+                            import traceback
+                            traceback.print_exc()
                             # Stay in REPL — don't crash the whole session
                             continue
                         # ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,51 @@
 import subprocess
 import os
 import shutil
+from typing import Dict, Any
 
+from lmms.backend.tools.core import default_registry, default_executor, ToolDefinition, Permission
+from lmms.backend.config.config import ConfigManager
+
+config = ConfigManager()
+
+def get_workspace_dir() -> str:
+    return config.get("workspace_dir", os.getcwd())
+
+def enforce_boundary(path: str):
+    workspace = get_workspace_dir()
+    if not os.path.abspath(path).startswith(os.path.abspath(workspace)):
+        raise PermissionError(f"Path {path} is outside the allowed workspace boundary.")
+
+def canonical_file_read(path: str) -> Dict[str, Any]:
+    enforce_boundary(path)
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"content": content, "path": path}
+
+def canonical_file_write(path: str, content: str) -> Dict[str, Any]:
+    enforce_boundary(path)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return {"status": "success", "path": path}
+
+default_registry.register(ToolDefinition(
+    name="file.read",
+    description="Read content from a file.",
+    category="fs",
+    parameters={"path": "str"},
+    permissions=[Permission.READ_ONLY],
+    callback=canonical_file_read
+))
+
+default_registry.register(ToolDefinition(
+    name="file.write",
+    description="Write content to a file.",
+    category="fs",
+    parameters={"path": "str", "content": "str"},
+    permissions=[Permission.SAFE_WRITE],
+    callback=canonical_file_write
+))
 
 class FileTool:
     def read(self, path: str) -> str:
