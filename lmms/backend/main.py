@@ -564,7 +564,6 @@ def run_cli():
                     print_banner()
                     continue
                 try:
-                    import requests
                     requests.post("http://127.0.0.1:11435/v1/internal/shutdown", timeout=2)
                 except:
                     pass
