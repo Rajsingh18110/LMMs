@@ -372,13 +372,26 @@ class ChatPage(QWidget):
         self.chat_service.start_chat(full_text)
 
     @pyqtSlot(str)
-    def on_chunk_received(self, text):
-        if not self.is_streaming:
-            self.messages.append({"role": "assistant", "content": text})
-            self.is_streaming = True
-        else:
-            self.messages[-1]["content"] = text
-        self.render_messages()
+    def on_chunk_received(self, chunk: str):
+        from lmms.engine.response_cleaner import strip_hidden_reasoning
+        # Do not render internal thinking tags in the UI
+        clean_text = strip_hidden_reasoning(chunk)
+        
+        is_thinking = "<think>" in chunk and chunk.count("<think>") > chunk.count("</think>")
+        if is_thinking:
+            indicator = "\n\n*🧠 Model is thinking...*"
+            if not clean_text.strip():
+                clean_text = indicator.strip()
+            else:
+                clean_text += indicator
+                
+        if clean_text:
+            if not self.is_streaming:
+                self.messages.append({"role": "assistant", "content": clean_text})
+                self.is_streaming = True
+            else:
+                self.messages[-1]["content"] = clean_text
+            self.render_messages()
 
     @pyqtSlot(str)
     def on_response_finished(self, status):
