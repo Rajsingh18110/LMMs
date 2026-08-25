@@ -500,6 +500,13 @@ def run_cli():
     )
     # ----------------------------------------
     
+    if current_model != "None":
+        with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Loading model...[/dim]", spinner="lmms_wave"):
+            try:
+                requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": current_model}, timeout=120)
+            except Exception:
+                pass
+
     while True:
         try:
             with patch_stdout():
@@ -1310,7 +1317,7 @@ lmms update
                 while iter_count < MAX_ITERATIONS:
                     iter_count += 1
                     
-                    with console.status("[dim]Preparing request...[/dim]", spinner="lmms_wave"):
+                    if True:
                         try:
                             # Clean history before sending to engine and truncate old large observations to save context
                             clean_messages = []
@@ -1353,11 +1360,11 @@ lmms update
                             running_status = True
                             status_start_time = time.time()
                             
-                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model... (0s)[/dim]", spinner="lmms_wave") as status:
+                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Loading model... (0s)[/dim]", spinner="lmms_wave") as status:
                                 def update_status():
                                     while running_status:
                                         elapsed = int(time.time() - status_start_time)
-                                        status.update(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model... ({elapsed}s)[/dim]")
+                                        status.update(f"[bold blue]{current_model}:[/bold blue] [dim]Loading model... ({elapsed}s)[/dim]")
                                         time.sleep(1)
                                         
                                 t_status = threading.Thread(target=update_status, daemon=True)
