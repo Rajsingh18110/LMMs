@@ -397,3 +397,44 @@ class ChatPage(QWidget):
             self.chat_service.wait()
         self.send_btn.setEnabled(True)
         self.send_btn.setText("Send")
+
+    def refresh_models(self):
+        try:
+            import requests
+            r = requests.get("http://localhost:11435/v1/models/list", timeout=1)
+            if r.status_code == 200:
+                models = r.json().get("models", [])
+                self.model_combo.blockSignals(True)
+                self.model_combo.clear()
+                self.model_combo.addItem("☁ Cloud: openai")
+                for m in models:
+                    name = m["name"] if isinstance(m, dict) else m
+                    self.model_combo.addItem(f"🖥 Local: {name}")
+                self.model_combo.blockSignals(False)
+            
+            r_active = requests.get("http://localhost:11435/v1/models/ps", timeout=1)
+            if r_active.status_code == 200:
+                active = r_active.json().get("loaded_models", [])
+                if active:
+                    active_name = active[0]
+                    for i in range(self.model_combo.count()):
+                        if active_name in self.model_combo.itemText(i):
+                            self.model_combo.blockSignals(True)
+                            self.model_combo.setCurrentIndex(i)
+                            self.model_combo.blockSignals(False)
+                            break
+        except Exception:
+            self.model_combo.addItems(["🖥 Local: default", "☁ Cloud: openai"])
+
+    def on_model_changed(self, text: str):
+        if not text or "Local:" not in text:
+            return
+        model_name = text.split("Local: ")[-1].strip()
+        import threading
+        def do_load():
+            try:
+                import requests
+                requests.post("http://localhost:11435/v1/models/load", json={"model_name": model_name}, timeout=10)
+            except Exception:
+                pass
+        threading.Thread(target=do_load, daemon=True).start()
