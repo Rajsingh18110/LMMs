@@ -1395,7 +1395,7 @@ lmms update
                                             
                                             if not leak_check_done:
                                                 if len(full_reply) < 80:
-                                                    return True  # Buffer it, don't render yet
+                                                    pass  # Buffer it, but STILL render it
                                                 else:
                                                     cleaned = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
                                                     if cleaned:
