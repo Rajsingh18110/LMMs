@@ -1168,7 +1168,7 @@ lmms update
                 elif "nano" in current_model.lower():
                     is_small_model = True
                 is_fast_mode = (current_mode == "/fast")
-                full_prompt = not (is_fast_mode and is_small_model)
+                full_prompt = not (is_fast_mode or is_small_model)
 
                 if current_mode == "/fast" or not show_thoughts:
                     if should_force_tool_mode(cmd):
