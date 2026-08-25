@@ -287,7 +287,8 @@ class LlamaCppRuntime(RuntimeContract):
 
         if stream:
             def stream_response():
-                with self._global_lock:
+                self._global_lock.acquire()
+                try:
                     response_generator = active_model.create_chat_completion(
                         messages=messages,
                         stream=True,
@@ -298,12 +299,11 @@ class LlamaCppRuntime(RuntimeContract):
                         stop=stop_tokens
                     )
                 
-                recent_tokens = []
-                accumulated_text = ""
-                yielded_text = ""
-                
-                while True:
-                    with self._global_lock:
+                    recent_tokens = []
+                    accumulated_text = ""
+                    yielded_text = ""
+                    
+                    while True:
                         try:
                             chunk = next(response_generator)
                         except StopIteration:
@@ -311,60 +311,63 @@ class LlamaCppRuntime(RuntimeContract):
                         except Exception as e:
                             print(f"Error during stream generation: {e}")
                             break
-                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                        delta = chunk["choices"][0].get("delta", {})
-                        token = delta.get("content")
-                        if token:
-                            if not think and mode not in ["fast"]:
-                                accumulated_text += token
-                                cleaned = self._strip_hidden_reasoning(accumulated_text)
-                                if len(cleaned) > len(yielded_text):
-                                    token = cleaned[len(yielded_text):]
-                                    yielded_text = cleaned
-                                else:
-                                    continue
-
-                            # N-gram repetition tracker
-                            recent_tokens.append(token)
-                            if len(recent_tokens) > ngram_window * max_repeats:
-                                recent_tokens.pop(0)
                             
-                            # Check for repetition dynamically for sizes from 1 up to ngram_window
-                            is_repeating = False
-                            for w in range(1, ngram_window + 1):
-                                if len(recent_tokens) >= w * max_repeats:
-                                    is_rep = True
-                                    window = recent_tokens[-w:]
-                                    for i in range(1, max_repeats):
-                                        start = -(i + 1) * w
-                                        end = -i * w
-                                        prev_window = recent_tokens[start:end] if end != 0 else recent_tokens[start:]
-                                        if window != prev_window:
-                                            is_rep = False
-                                            break
-                                    if is_rep:
-                                        window_str = "".join(window)
-                                        import string
-                                        is_only_punct = all(c in string.punctuation or c.isspace() for c in window_str)
-                                        
-                                        if len(window_str) < 15 or is_only_punct:
-                                            # False positive due to short/punctuation sequence
-                                            is_rep = False
-                                        else:
-                                            is_repeating = True
-                                            break
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            token = delta.get("content")
+                            if token:
+                                if not think and mode not in ["fast"]:
+                                    accumulated_text += token
+                                    cleaned = self._strip_hidden_reasoning(accumulated_text)
+                                    if len(cleaned) > len(yielded_text):
+                                        token = cleaned[len(yielded_text):]
+                                        yielded_text = cleaned
+                                    else:
+                                        continue
 
-                            if is_repeating:
-                                print(f"\n--- REPETITION SAFETY-NET TRIGGERED ---")
-                                print(f"Recent Tokens Array: {recent_tokens}")
-                                print(f"Matched Window Size: {w}")
-                                print(f"Accumulated Text snippet: {accumulated_text[-200:]}")
-                                print("---------------------------------------\n")
-                                print("Model repetition detected, generation stopped early.")
-                                yield {"message": {"role": "assistant", "content": "\n\n[System: Model repeated itself, please rephrase your question or switch model.]"}}
-                                break
+                                # N-gram repetition tracker
+                                recent_tokens.append(token)
+                                if len(recent_tokens) > ngram_window * max_repeats:
+                                    recent_tokens.pop(0)
+                                
+                                # Check for repetition dynamically for sizes from 1 up to ngram_window
+                                is_repeating = False
+                                for w in range(1, ngram_window + 1):
+                                    if len(recent_tokens) >= w * max_repeats:
+                                        is_rep = True
+                                        window = recent_tokens[-w:]
+                                        for i in range(1, max_repeats):
+                                            start = -(i + 1) * w
+                                            end = -i * w
+                                            prev_window = recent_tokens[start:end] if end != 0 else recent_tokens[start:]
+                                            if window != prev_window:
+                                                is_rep = False
+                                                break
+                                        if is_rep:
+                                            window_str = "".join(window)
+                                            import string
+                                            is_only_punct = all(c in string.punctuation or c.isspace() for c in window_str)
+                                            
+                                            if len(window_str) < 15 or is_only_punct:
+                                                # False positive due to short/punctuation sequence
+                                                is_rep = False
+                                            else:
+                                                is_repeating = True
+                                                break
 
-                            yield {"message": {"role": "assistant", "content": token}}
+                                if is_repeating:
+                                    print(f"\n--- REPETITION SAFETY-NET TRIGGERED ---")
+                                    print(f"Recent Tokens Array: {recent_tokens}")
+                                    print(f"Matched Window Size: {w}")
+                                    print(f"Accumulated Text snippet: {accumulated_text[-200:]}")
+                                    print("---------------------------------------\n")
+                                    print("Model repetition detected, generation stopped early.")
+                                    yield {"message": {"role": "assistant", "content": "\n\n[System: Model repeated itself, please rephrase your question or switch model.]"}}
+                                    break
+
+                                yield {"message": {"role": "assistant", "content": token}}
+                finally:
+                    self._global_lock.release()
             return stream_response()
         else:
             with self._global_lock:
