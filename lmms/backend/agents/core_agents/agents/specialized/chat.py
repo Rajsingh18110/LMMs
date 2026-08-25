@@ -49,7 +49,7 @@ class PlainChatAgent(BaseAgent):
         }
 
         try:
-            response = requests.post("http://localhost:11435/v1/chat/completions", json=payload, stream=True, timeout=120)
+            response = requests.post("http://localhost:11435/v1/chat/completions", json=payload, stream=True, timeout=(10, 300))
             response.raise_for_status()
 
             for line in response.iter_lines():

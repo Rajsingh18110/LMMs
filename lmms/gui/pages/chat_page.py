@@ -8,6 +8,20 @@ from PyQt6.QtCore import Qt, pyqtSlot
 from lmms.backend.services.chat_service import ChatService
 from lmms.backend.agents.core_agents.agents.manager import AgentManager
 
+class ChatInputEdit(QTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.send_callback = None
+        
+    def keyPressEvent(self, event):
+        from PyQt6.QtCore import Qt
+        if event.key() == Qt.Key.Key_Return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            if self.send_callback:
+                self.send_callback()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
 class ChatPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -72,7 +86,7 @@ class ChatPage(QWidget):
         self.attachment_layout.setContentsMargins(0, 0, 0, 0)
         self.attachment_container.setVisible(False)
 
-        self.input_field = QTextEdit()
+        self.input_field = ChatInputEdit()
         self.input_field.setObjectName("chatInput")
         self.input_field.setStyleSheet("border: none; background: transparent;")
         self.input_field.setPlaceholderText("Type a message or command (e.g., /fast, /code, /help)...")
@@ -133,7 +147,7 @@ class ChatPage(QWidget):
         
         self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("sendBtn")
-        self.send_btn.setMinimumSize(60, 26)
+        self.send_btn.setMinimumSize(85, 26)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.setStyleSheet("""
             QPushButton {
@@ -159,6 +173,7 @@ class ChatPage(QWidget):
 
         input_layout.addWidget(self.attachment_container)
         input_layout.addWidget(self.input_field)
+        self.input_field.send_callback = self.send_message
         input_layout.addLayout(bottom_row)
 
         chat_layout_wrapper = QHBoxLayout()
@@ -346,9 +361,14 @@ class ChatPage(QWidget):
 
         self.input_field.clear()
         self.append_message("user", display_msg)
-        self.send_btn.setEnabled(False)
-        self.send_btn.setText("Thinking...")
-
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("Stop")
+        try:
+            self.send_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        self.send_btn.clicked.connect(self.stop_generation)
+        
         self.chat_service.start_chat(full_text)
 
     @pyqtSlot(str)
@@ -392,11 +412,21 @@ class ChatPage(QWidget):
             webbrowser.open(url_str)
 
     def cleanup(self):
-        if hasattr(self, 'chat_service') and self.chat_service.isRunning():
-            self.chat_service.quit()
-            self.chat_service.wait()
+        self.is_streaming = False
         self.send_btn.setEnabled(True)
         self.send_btn.setText("Send")
+        try:
+            self.send_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        self.send_btn.clicked.connect(self.send_message)
+
+    def stop_generation(self):
+        if hasattr(self, 'chat_service') and self.chat_service.isRunning():
+            self.chat_service.terminate()
+            self.chat_service.wait()
+        self.cleanup()
+        self.append_message("system", "\n[Generation Stopped by User]\n")
 
     def refresh_models(self):
         try:
