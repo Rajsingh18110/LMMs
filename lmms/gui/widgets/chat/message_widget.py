@@ -12,15 +12,13 @@ Key design decisions:
 - Thought panel: only shown when real model reasoning exists
 """
 import re
-import time
 import markdown
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QTextBrowser, QSizePolicy, QPushButton,
     QApplication, QMessageBox, QFrame
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 
 from lmms.gui.state.chat_message import ChatMessage
 from lmms.gui.widgets.chat.thought_panel import ThoughtPanelWidget
@@ -40,21 +38,24 @@ class ChatTextBrowser(QTextBrowser):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setMinimumWidth(96 if is_user else 220)
         self.document().setDocumentMargin(0)
         self.setContentsMargins(0, 0, 0, 0)
         self.setFrameShape(QFrame.Shape.NoFrame)
 
         if is_user:
             fg = "#e5e7eb"
-            bg = "background: #383838; border-radius: 20px; padding: 12px 16px; margin: 0;"
+            bg = "background: #343434; border-radius: 18px; padding: 11px 15px; margin: 0;"
+            border = "border: 1px solid #404040;"
         else:
             fg = "#d1d5db"
-            bg = "background: #1a1a1a; border-radius: 16px; padding: 12px 16px; margin: 0;"
+            bg = "background: transparent; border-radius: 0; padding: 0; margin: 0;"
+            border = "border: none;"
 
         self.setStyleSheet(f"""
             QTextBrowser {{
                 {bg}
-                border: none;
+                {border}
                 color: {fg};
                 font-size: 14px;
                 line-height: 1.6;
@@ -62,7 +63,48 @@ class ChatTextBrowser(QTextBrowser):
             }}
         """)
         # Force HTML elements to inherit the text color
-        self.document().setDefaultStyleSheet(f"p {{ color: {fg}; margin: 0; }}")
+        self.document().setDefaultStyleSheet(f"""
+            body {{
+                color: {fg};
+                margin: 0;
+                font-size: 14px;
+            }}
+            p {{
+                color: {fg};
+                margin: 0 0 8px 0;
+            }}
+            strong {{
+                color: #f3f4f6;
+                font-weight: 600;
+            }}
+            ul, ol {{
+                margin-top: 4px;
+                margin-bottom: 8px;
+                padding-left: 18px;
+            }}
+            li {{
+                margin-bottom: 4px;
+            }}
+            table {{
+                border-collapse: collapse;
+                margin-top: 8px;
+                margin-bottom: 8px;
+            }}
+            th {{
+                color: #f3f4f6;
+                font-weight: 600;
+                background-color: #202020;
+            }}
+            th, td {{
+                border: 1px solid #303030;
+                padding: 5px 7px;
+                vertical-align: top;
+            }}
+            code {{
+                color: #e5e7eb;
+                background-color: #111827;
+            }}
+        """)
         
         self.document().documentLayout().documentSizeChanged.connect(self._reheight)
 
@@ -151,7 +193,7 @@ class MessageWidget(QWidget):
         self.thought_panel = None
         self.status_label = None
 
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         self._build_ui()
@@ -163,12 +205,12 @@ class MessageWidget(QWidget):
     def _build_ui(self):
         # Outer: horizontal row for left/right alignment
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setContentsMargins(0, 10, 0, 10)
         outer.setSpacing(0)
 
         # Inner content column
         self._content_col = QWidget()
-        self._content_col.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self._content_col.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         col_layout = QVBoxLayout(self._content_col)
         col_layout.setContentsMargins(0, 0, 0, 0)
@@ -180,7 +222,7 @@ class MessageWidget(QWidget):
             display = raw.replace(".gguf", "").replace(".bin", "").strip() or "LMMs Engine"
             hdr = QLabel(display)
             hdr.setStyleSheet(
-                "font-size: 11px; font-weight: 600; color: #6b7280; padding: 0; margin: 0;"
+                "font-size: 11px; font-weight: 600; color: #7b8494; padding: 0 0 2px 2px; margin: 0;"
             )
             hdr.setToolTip(raw)
             col_layout.addWidget(hdr)
@@ -199,7 +241,11 @@ class MessageWidget(QWidget):
 
         # ── Status label (Generating… / Failed / Stopped) ─────────────────
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("font-size: 11px; color: #3b82f6; padding: 0; margin: 0;")
+        self.status_label.setStyleSheet(
+            "font-size: 11px; color: #8b949e; background: #111827; "
+            "border: 1px solid #1f2937; border-radius: 8px; "
+            "padding: 3px 8px; margin: 2px 0 0 2px;"
+        )
         self.status_label.hide()
         col_layout.addWidget(self.status_label)
 
@@ -217,18 +263,18 @@ class MessageWidget(QWidget):
         if self._is_user:
             outer.addStretch(1)
             outer.addWidget(self._content_col)
-            # Add a small stretch on the right for margin, or just use margins
         else:
-            outer.addWidget(self._content_col)
-            outer.addStretch(1)
+            outer.addWidget(self._content_col, 1)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         w = self.width()
         if w > 0:
-            # User messages: up to 70% width. Assistant: up to 85%.
-            ratio = 0.70 if self._is_user else 0.85
+            # User messages stay compact; assistant messages get more room for tables/lists.
+            ratio = 0.74 if self._is_user else 0.96
             self._content_col.setMaximumWidth(int(w * ratio))
+            if not self._is_user:
+                self._content_col.setMinimumWidth(int(w * ratio))
 
     # ─────────────────────────────────────────────────────────────────────────
     # Action bar factory
@@ -277,11 +323,14 @@ class MessageWidget(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     def update_content(self):
         msg = self.message
+        content = msg.content or ""
+        thought = msg.thought or ""
+        has_content = bool(content.strip())
+        has_thought = bool(thought.strip())
 
         # ── Thought panel ──────────────────────────────────────────────────
         if self.thought_panel is not None:
-            thought = msg.thought or ""
-            if thought.strip():
+            if has_thought:
                 self.thought_panel.show()
                 self.thought_panel.set_content(thought)
                 self.thought_panel.set_generating(msg.status == "generating")
@@ -293,22 +342,28 @@ class MessageWidget(QWidget):
         # ── Status ────────────────────────────────────────────────────────
         if self.status_label is not None:
             status = msg.status
-            if status == "generating":
-                self.status_label.setText("Generating…")
+            if status == "generating" and not has_content and not has_thought:
+                self.status_label.setText("Thinking...")
                 self.status_label.setStyleSheet(
-                    "font-size: 11px; color: #3b82f6; padding: 0; margin: 0;"
+                    "font-size: 11px; color: #8b949e; background: #111827; "
+                    "border: 1px solid #1f2937; border-radius: 8px; "
+                    "padding: 3px 8px; margin: 2px 0 0 2px;"
                 )
                 self.status_label.show()
             elif status == "error":
                 self.status_label.setText("Failed")
                 self.status_label.setStyleSheet(
-                    "font-size: 11px; color: #f85149; padding: 0; margin: 0;"
+                    "font-size: 11px; color: #f87171; background: #241518; "
+                    "border: 1px solid #4b1f28; border-radius: 8px; "
+                    "padding: 3px 8px; margin: 2px 0 0 2px;"
                 )
                 self.status_label.show()
             elif status == "cancelled":
                 self.status_label.setText("Stopped")
                 self.status_label.setStyleSheet(
-                    "font-size: 11px; color: #6b7280; padding: 0; margin: 0;"
+                    "font-size: 11px; color: #9ca3af; background: #171717; "
+                    "border: 1px solid #2a2a2a; border-radius: 8px; "
+                    "padding: 3px 8px; margin: 2px 0 0 2px;"
                 )
                 self.status_label.show()
             else:
@@ -319,7 +374,6 @@ class MessageWidget(QWidget):
             self._stats_bar.set_metrics(msg.metrics)
 
         # ── Text content (skip if unchanged) ──────────────────────────────
-        content = msg.content or ""
         if content == self._rendered_content:
             return
         self._rendered_content = content
@@ -355,7 +409,11 @@ class MessageWidget(QWidget):
     # Actions
     # ─────────────────────────────────────────────────────────────────────────
     def _copy_content(self):
-        QApplication.clipboard().setText(self.message.content)
+        text = self.message.content or ""
+        thought = self.message.thought or ""
+        if thought.strip():
+            text = f"{text}\n\n[Thought]\n{thought}".strip()
+        QApplication.clipboard().setText(text)
         if self._copy_btn:
             self._copy_btn.setText("Copied!")
             self._copy_timer.start(1500)

@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QSize, QPoint, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QFont, QCursor, QColor, QPixmap, QPainter
+
+from lmms.backend.config.config import ConfigManager
 import os
 try:
     from PyQt6.QtGui import QFileSystemModel
@@ -104,7 +106,9 @@ class MainWindow(QMainWindow):
         if QFileSystemModel is not None:
             self.file_model = QFileSystemModel()
             self.file_model.setIconProvider(CustomIconProvider())
-            cwd = os.getcwd()
+            cwd = ConfigManager().get("workspace_dir", os.getcwd())
+            if not os.path.exists(cwd):
+                cwd = os.getcwd()
             
             self.is_empty_workspace = (cwd == os.path.expanduser("~"))
             
@@ -523,21 +527,32 @@ class MainWindow(QMainWindow):
             folder = QFileDialog.getExistingDirectory(self, "Open Folder", os.path.expanduser("~"))
             
         if folder:
-            self.is_empty_workspace = False
-            self.file_model.setRootPath(folder)
-            project_name = os.path.basename(folder)
-            if not project_name: project_name = folder
-            self.project_label.setText(project_name.upper())
+            self.open_workspace(folder)
             
-            self.open_folder_btn.hide()
-            self.tree_view.show()
-            self.btn_new_file.show()
-            self.btn_new_folder.show()
-            self.btn_refresh.show()
-            self.tree_view.setRootIndex(self.file_model.index(folder))
-            
-            # Change actual working directory so terminal and new files default to it
-            os.chdir(folder)
+    def open_workspace(self, folder: str):
+        if not os.path.exists(folder):
+            return
+        
+        ConfigManager().set("workspace_dir", folder)
+        self.is_empty_workspace = False
+        self.file_model.setRootPath(folder)
+        project_name = os.path.basename(folder)
+        if not project_name: project_name = folder
+        self.project_label.setText(project_name.upper())
+        
+        self.open_folder_btn.hide()
+        self.tree_view.show()
+        self.btn_new_file.show()
+        self.btn_new_folder.show()
+        self.btn_refresh.show()
+        self.tree_view.setRootIndex(self.file_model.index(folder))
+        
+        # Change actual working directory so terminal and new files default to it
+        os.chdir(folder)
+        
+        # Notify chat page
+        if hasattr(self, 'chat_page') and hasattr(self.chat_page, 'update_workspace'):
+            self.chat_page.update_workspace(folder)
 
     def get_selected_explorer_path(self):
         if not hasattr(self, 'tree_view'): return os.getcwd()

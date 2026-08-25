@@ -67,27 +67,29 @@ class CodingAgent(BaseAgent):
         else:
             yield "No specific files provided in context. Proceeding...\n"
 
-        active_model = "default"
-        try:
-            resp = requests.get("http://localhost:11435/v1/models/ps", timeout=2)
-            if resp.status_code == 200:
-                data = resp.json()
-                loaded = data.get("loaded_models", [])
-                if loaded:
-                    active_model = loaded[0]
-        except Exception:
-            pass
-            
-        if active_model == "default":
-            active_f = os.path.expanduser("~/.lmms/logs/active_models.json")
-            if os.path.exists(active_f):
-                try:
-                    with open(active_f, "r") as f:
-                        d = json.load(f)
-                        if d:
-                            active_model = next(iter(d.keys()))
-                except Exception:
-                    pass
+        active_model = context.selected_model
+        if not active_model or active_model == "LMMs Engine":
+            active_model = "default"
+            try:
+                resp = requests.get("http://localhost:11435/v1/models/ps", timeout=2)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    loaded = data.get("loaded_models", [])
+                    if loaded:
+                        active_model = loaded[0]
+            except Exception:
+                pass
+                
+            if active_model == "default":
+                active_f = os.path.expanduser("~/.lmms/logs/active_models.json")
+                if os.path.exists(active_f):
+                    try:
+                        with open(active_f, "r") as f:
+                            d = json.load(f)
+                            if d:
+                                active_model = next(iter(d.keys()))
+                    except Exception:
+                        pass
                     
         yield f"Generating edit instructions via LLM ({active_model})...\n"
         

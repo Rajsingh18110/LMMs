@@ -1,7 +1,8 @@
 import os
 import json
 
-CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
+CONFIG_DIR = os.environ.get("LMMS_CONFIG_DIR", os.path.expanduser("~/.lmms"))
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
 class ConfigManager:
     def __init__(self):

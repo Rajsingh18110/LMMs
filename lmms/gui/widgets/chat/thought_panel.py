@@ -60,14 +60,14 @@ class ThoughtPanelWidget(QWidget):
         self._box_frame = QFrame()
         self._box_frame.setStyleSheet("""
             QFrame {
-                background-color: #212121;
-                border: 1px solid #333333;
+                background-color: #191919;
+                border: 1px solid #2b2b2b;
                 border-radius: 8px;
             }
         """)
         box_layout = QVBoxLayout(self._box_frame)
-        box_layout.setContentsMargins(12, 10, 12, 10)
-        box_layout.setSpacing(8)
+        box_layout.setContentsMargins(11, 8, 11, 8)
+        box_layout.setSpacing(6)
 
         # Header row: [arrow] [label]
         header_row = QHBoxLayout()
@@ -83,17 +83,17 @@ class ThoughtPanelWidget(QWidget):
             QToolButton {
                 background: transparent;
                 border: none;
-                color: #6b7280;
+                color: #7b8494;
                 padding: 0;
             }
-            QToolButton:hover { color: #9ca3af; }
+            QToolButton:hover { color: #c9d1d9; }
         """)
         self._toggle_btn.setFixedSize(14, 14)
         self._toggle_btn.toggled.connect(self._on_toggle)
 
         self._header_label = QLabel("Thinking…")
         self._header_label.setStyleSheet(
-            "font-size: 11px; color: #a1a1aa; padding: 0; border: none; background: transparent;"
+            "font-size: 11px; color: #a7adb8; padding: 0; border: none; background: transparent;"
         )
         self._header_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header_label.mousePressEvent = lambda _e: self._toggle_btn.toggle()
@@ -110,7 +110,7 @@ class ThoughtPanelWidget(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
         )
         content_layout = QVBoxLayout(self._content_widget)
-        content_layout.setContentsMargins(20, 4, 0, 0)
+        content_layout.setContentsMargins(20, 3, 0, 0)
         content_layout.setSpacing(0)
 
         self._content_label = QTextBrowser()
@@ -125,7 +125,7 @@ class ThoughtPanelWidget(QWidget):
             QTextBrowser {
                 background: transparent;
                 border: none;
-                color: #d1d5db;
+                color: #c7ced8;
                 font-size: 12px;
                 line-height: 1.5;
                 padding: 0;

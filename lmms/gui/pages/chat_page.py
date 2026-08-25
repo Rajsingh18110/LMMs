@@ -30,6 +30,7 @@ from lmms.backend.services.chat_event import ChatEvent
 from lmms.backend.agents.core_agents.agents.manager import AgentManager
 from lmms.gui.state.chat_message import ChatMessage
 from lmms.gui.widgets.chat import ChatInputEdit, MessageListWidget
+from lmms.backend.config.config import ConfigManager
 
 
 class ChatPage(QWidget):
@@ -37,8 +38,9 @@ class ChatPage(QWidget):
 
     def __init__(self):
         super().__init__()
+        workspace_dir = ConfigManager().get("workspace_dir", os.path.expanduser("~/.lmms/workspaces/default"))
         self.agent_manager = AgentManager(
-            workspace_dir=os.path.expanduser("~/.lmms/workspaces/default")
+            workspace_dir=workspace_dir
         )
         self.chat_service = ChatService(self.agent_manager)
 
@@ -128,6 +130,7 @@ class ChatPage(QWidget):
         self.input_field.setPlaceholderText("Message LMMs…")
         self.input_field.setMaximumHeight(140)
         self.input_field.send_callback = self.send_message
+        self.input_field.files_pasted.connect(self.add_attached_files)
         input_layout.addWidget(self.input_field)
 
         # Bottom toolbar
@@ -243,6 +246,18 @@ class ChatPage(QWidget):
         self.input_field.setReadOnly(True)
 
     # ─────────────────────────────────────────────────────────────────────────
+    def update_workspace(self, folder: str):
+        self.agent_manager = AgentManager(workspace_dir=folder)
+        self.chat_service = ChatService(self.agent_manager)
+        
+        # Re-connect signals to new ChatService
+        self.chat_service.event_received.connect(self.on_event_received)
+        self.chat_service.response_finished.connect(self.on_response_finished)
+        self.chat_service.error_occurred.connect(self.on_error_occurred)
+        self.chat_service.cancelled.connect(self.on_cancelled)
+        self.chat_service.no_response.connect(self.on_no_response)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Model management
     # ─────────────────────────────────────────────────────────────────────────
     def refresh_models(self):
@@ -267,8 +282,18 @@ class ChatPage(QWidget):
         self.model_combo.clear()
         if models:
             self.model_combo.addItems(models)
+            saved_model = ConfigManager().get("chat_selected_model", "")
+            if saved_model and saved_model in models:
+                self.model_combo.setCurrentText(saved_model)
         else:
             self.model_combo.addItem("No Models")
+            
+        # Connect change event to save preference
+        try: self.model_combo.currentTextChanged.disconnect()
+        except: pass
+        self.model_combo.currentTextChanged.connect(
+            lambda text: ConfigManager().set("chat_selected_model", text) if text and text != "Loading…" and text != "No Models" else None
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # File attachment
@@ -277,6 +302,9 @@ class ChatPage(QWidget):
         files, _ = QFileDialog.getOpenFileNames(
             self, "Select Files to Attach", "", "All Files (*)"
         )
+        self.add_attached_files(files)
+
+    def add_attached_files(self, files: list[str]):
         for f in files:
             if f not in self.attached_files and len(self.attached_files) < 20:
                 self.attached_files.append(f)
