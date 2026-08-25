@@ -248,6 +248,13 @@ class ChatPage(QWidget):
             # Strip out internal think and tool_call tags from being displayed
             content = re.sub(r'<think>.*?(</think>|$)', '', content, flags=re.DOTALL).strip()
             content = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', content, flags=re.DOTALL).strip()
+            
+            try:
+                from lmms.engine.response_cleaner import strip_hidden_reasoning
+                if role == "assistant":
+                    content = strip_hidden_reasoning(content)
+            except Exception:
+                pass
 
             html_content = markdown.markdown(content, extensions=['fenced_code', 'tables'])
             
