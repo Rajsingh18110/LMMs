@@ -13,6 +13,28 @@ from lmms.engine.manager import engine_manager
 
 app = FastAPI(title="LMMs Engine API")
 
+import time
+LAST_PING_TIME = time.time()
+
+@app.post("/v1/internal/ping")
+def ping():
+    global LAST_PING_TIME
+    LAST_PING_TIME = time.time()
+    return {"status": "ok"}
+
+async def heartbeat_monitor():
+    while True:
+        await asyncio.sleep(5)
+        # If no ping in 15 seconds, exit gracefully
+        if time.time() - LAST_PING_TIME > 15:
+            print("[Engine] No active clients. Shutting down to save memory.")
+            os._exit(0)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(heartbeat_monitor())
+
+
 # Ensure models directory exists
 MODELS_DIR = os.path.expanduser("~/.lmms/models")
 os.makedirs(MODELS_DIR, exist_ok=True)

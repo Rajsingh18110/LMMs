@@ -66,6 +66,19 @@ class MainWindow(QMainWindow):
         if state:
             WorkspaceService.apply_state(self, state)
 
+        # Heartbeat to keep Engine alive
+        self.heartbeat_timer = QTimer(self)
+        self.heartbeat_timer.timeout.connect(self.ping_engine)
+        self.heartbeat_timer.start(5000)
+
+    def ping_engine(self):
+        import requests
+        try:
+            requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
+        except Exception:
+            pass
+
+
     def init_ui(self):
         # Main layout: Horizontal (Sidebar + Content)
         main_widget = QWidget()

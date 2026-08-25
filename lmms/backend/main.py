@@ -219,6 +219,21 @@ def run_cli():
     nest_asyncio.apply()
     console = Console()
     console.clear()
+
+    def cli_heartbeat():
+        import requests
+        import time
+        while True:
+            try:
+                requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
+            except Exception:
+                pass
+            time.sleep(5)
+            
+    import threading
+    t = threading.Thread(target=cli_heartbeat, daemon=True)
+    t.start()
+
     
     engine_started = auto_start_engine()
     if engine_started and os.environ.get("LMMS_INTERNAL_TOKEN"):
@@ -1336,7 +1351,7 @@ lmms update
                                     "repetition_penalty": 1.15,
                                     "mode": current_mode.strip("/"),
                                     "think": True # Always get the stream to prevent connection hanging, we hide it client-side if needed
-                                }, stream=True, timeout=(10, 3600))
+                                }, stream=True, timeout=(10, 60))
                                 resp.raise_for_status()
                                 
                                 chunks_iterator = resp.iter_lines()
@@ -1344,6 +1359,9 @@ lmms update
                                     if line:
                                         first_line = line
                                         break
+                        except requests.exceptions.ReadTimeout:
+                            console.print(f"\n[bold red]❌ Engine Error: Model took too long to load or server died unexpectedly.[/bold red]")
+                            break
                         except requests.exceptions.HTTPError as e:
                             error_detail = str(e)
                             try:
@@ -1357,7 +1375,10 @@ lmms update
                                         messages[idx]["content"] = m["content"][:1000] + "\n...[Force Truncated]\n</observation>"
                                 iter_count -= 1
                                 continue
-                            console.print(f"\n[red]Engine Error: {error_detail}[/red]")
+                            console.print(f"\n[bold red]❌ Engine Error: {error_detail}[/bold red]")
+                            break
+                        except requests.exceptions.RequestException as e:
+                            console.print(f"\n[bold red]❌ Error communicating with AI: {str(e)}[/bold red]")
                             break
                         except Exception as e:
                             console.print(f"\n[red]Error communicating with AI: {e}[/red]")
