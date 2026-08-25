@@ -62,9 +62,9 @@ def ping():
 
 @app.post("/v1/internal/shutdown")
 def shutdown():
-    import os, signal
+    import os
     print("[Engine] Immediate shutdown requested by client.")
-    os.kill(os.getpid(), signal.SIGTERM)
+    os._exit(0)
     return {"status": "shutting down"}
 
 async def heartbeat_monitor():
@@ -76,7 +76,8 @@ async def heartbeat_monitor():
             
         if active_count == 0 and (time.time() - LAST_PING_TIME > 30):
             print("[Engine] No active clients. Shutting down gracefully to save memory.")
-            os.kill(os.getpid(), signal.SIGTERM)
+            import os
+            os._exit(0)
 
 @app.on_event("startup")
 async def startup_event():
