@@ -25,7 +25,7 @@ class LlamaCppRuntime(RuntimeContract):
     def _detect_chat_format(self, model_path: str) -> Optional[str]:
         filename = os.path.basename(model_path).lower()
         if any(token in filename for token in ["qwen3", "qwen2", "qwen"]):
-            return "qwen"
+            return "chatml"
         if "llama" in filename:
             return "llama-2"
         if "chatml" in filename:

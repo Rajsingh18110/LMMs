@@ -50,12 +50,18 @@ def test_response_cleaner_keeps_valid_short_answer():
     assert strip_hidden_reasoning("I need more information.") == "I need more information."
 
 
-def test_qwen3_models_use_qwen_chat_format_fallback():
+def test_qwen_models_use_chatml_format_fallback():
+    """
+    We previously forced 'qwen' format for Qwen 1.0 but this causes native aborts 
+    with `GGML_ASSERT(logits != nullptr)` in newer Qwen >= 1.5 models (like Qwen2, Qwen2.5, Qwen3).
+    Qwen models must be resolved to 'chatml' instead of 'qwen'.
+    """
+
     from lmms.engine.runtimes.llama_cpp import LlamaCppRuntime
 
     runtime = LlamaCppRuntime()
 
-    assert runtime._detect_chat_format("/tmp/Qwen3-8B-Q4_K_M.gguf") == "qwen"
-    assert runtime._detect_chat_format("/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf") == "qwen"
+    assert runtime._detect_chat_format("Qwen3-8B-Q4_K_M.gguf") == "chatml"
+    assert runtime._detect_chat_format("qwen2.5-coder.gguf") == "chatml"
     assert runtime._detect_chat_format("/tmp/Llama-3.1-8B-Instruct.gguf") == "llama-2"
     assert runtime._detect_chat_format("/tmp/custom-model.gguf") is None
