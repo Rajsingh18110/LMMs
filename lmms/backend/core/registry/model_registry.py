@@ -74,19 +74,45 @@ class ModelRegistry:
         if os.path.exists(hf_dir):
             for repo_dir in os.listdir(hf_dir):
                 if repo_dir.startswith("models--"):
-                    # models--author--repo_name
+                    repo_path = os.path.join(hf_dir, repo_dir)
+                    has_gguf = False
+                    for root, _, files in os.walk(repo_path):
+                        if any(f.endswith(".gguf") for f in files):
+                            has_gguf = True
+                            break
+                    if not has_gguf:
+                        continue
+                        
                     parts = repo_dir.split("--")
                     if len(parts) >= 3:
                         model_id = f"{parts[1]}/{parts[2]}"
                         if model_id not in registry:
-                            # Just mark the repo as linked, we don't scan deep for the exact file to save time
                             registry[model_id] = {
                                 "source": "Hugging Face",
-                                "path": os.path.join(hf_dir, repo_dir),
-                                "format": "Unknown",
+                                "path": repo_path,
+                                "format": "GGUF",
                                 "status": "Imported (Linked)"
                             }
                             added_count += 1
+                            
+        # Cleanup ghost entries (where path was deleted or doesn't have GGUF)
+        keys_to_delete = []
+        for mid, info in registry.items():
+            path = info.get("path", "")
+            if not os.path.exists(path):
+                keys_to_delete.append(mid)
+            elif info.get("source") == "Hugging Face":
+                has_gguf = False
+                for root, _, files in os.walk(path):
+                    if any(f.endswith(".gguf") for f in files):
+                        has_gguf = True
+                        break
+                if not has_gguf:
+                    keys_to_delete.append(mid)
+        
+        for mid in keys_to_delete:
+            del registry[mid]
+            added_count += 1 # force save
 
         if added_count > 0:
             ModelRegistry.save_registry(registry)
