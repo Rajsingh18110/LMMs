@@ -89,6 +89,8 @@ def should_force_tool_mode(prompt: str) -> bool:
     explicit_tool_signals = [
         "use browser.open_url",
         "browser.open_url",
+        "browser.crawl_url",
+        "crawl4ai",
         "browser.click_element",
         "browser.fill_form",
         "browser.scrape",
@@ -101,6 +103,8 @@ def should_force_tool_mode(prompt: str) -> bool:
         "read /",
         "write /",
         "open url",
+        "crawl_url",
+        "crawl this",
         "inspect the site",
         "summarize file",
         "debug this project",

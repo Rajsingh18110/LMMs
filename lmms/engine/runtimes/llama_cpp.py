@@ -1,7 +1,9 @@
 import os
+import re
 import threading
 from typing import Dict, Any, Optional
 from lmms.engine.runtimes.base import RuntimeContract
+from lmms.engine.response_cleaner import strip_hidden_reasoning
 try:
     import llama_cpp
     from llama_cpp import Llama, LlamaRAMCache
@@ -19,6 +21,19 @@ class LlamaCppRuntime(RuntimeContract):
     def __init__(self):
         self._models: Dict[str, Llama] = {}
         self._global_lock = threading.Lock()
+
+    def _detect_chat_format(self, model_path: str) -> Optional[str]:
+        filename = os.path.basename(model_path).lower()
+        if any(token in filename for token in ["qwen3", "qwen2", "qwen"]):
+            return "qwen2"
+        if "llama" in filename:
+            return "llama-2"
+        if "chatml" in filename:
+            return "chatml"
+        return None
+
+    def _strip_hidden_reasoning(self, text: str) -> str:
+        return strip_hidden_reasoning(text)
 
     def load_model(self, model_id: str) -> bool:
         if Llama is None:
@@ -93,8 +108,12 @@ class LlamaCppRuntime(RuntimeContract):
                     "flash_attn": True,
                     "verbose": False
                 }
-                # Initial guess for chat_format based on filename
-                if "qwen" in os.path.basename(full_path).lower() or "chatml" in os.path.basename(full_path).lower():
+                # Initial guess for chat_format based on filename.
+                # Qwen3 chat templates are more reliably handled via qwen2 format in llama.cpp.
+                detected_format = self._detect_chat_format(full_path)
+                if detected_format:
+                    kwargs["chat_format"] = detected_format
+                elif "chatml" in os.path.basename(full_path).lower():
                     kwargs["chat_format"] = "chatml"
                 elif "llama" in os.path.basename(full_path).lower():
                     kwargs["chat_format"] = "llama-2"
@@ -135,11 +154,13 @@ class LlamaCppRuntime(RuntimeContract):
             
         if not has_chat_template:
             self._model_fallback_stops[key] = ["<|im_end|>", "</s>", "<|endoftext|>"]
-            # Apply Bug 5 Fix: Reload model with 'chatml' if we missed it and no template exists
+            # Apply Burst/format fallback when metadata lacks a template. A lot of Qwen3 GGUFs
+            # still need the qwen2 chat format to stream correctly.
             if "chat_format" not in kwargs:
-                print(f"[Fallback] No chat_template found in metadata for {key}. Reloading with fallback 'chatml' format to prevent infinite repetition.")
+                fallback_format = self._detect_chat_format(full_path) or "chatml"
+                print(f"[Fallback] No chat_template found in metadata for {key}. Reloading with fallback '{fallback_format}' format to prevent infinite repetition.")
                 del model_instance
-                kwargs["chat_format"] = "chatml"
+                kwargs["chat_format"] = fallback_format
                 model_instance = Llama(**kwargs)
         else:
             self._model_fallback_stops[key] = None
@@ -244,6 +265,9 @@ class LlamaCppRuntime(RuntimeContract):
                     )
                 
                 recent_tokens = []
+                accumulated_text = ""
+                yielded_text = ""
+                
                 while True:
                     with self._global_lock:
                         try:
@@ -257,6 +281,15 @@ class LlamaCppRuntime(RuntimeContract):
                         delta = chunk["choices"][0].get("delta", {})
                         token = delta.get("content")
                         if token:
+                            if not think and mode not in ["fast"]:
+                                accumulated_text += token
+                                cleaned = self._strip_hidden_reasoning(accumulated_text)
+                                if len(cleaned) > len(yielded_text):
+                                    token = cleaned[len(yielded_text):]
+                                    yielded_text = cleaned
+                                else:
+                                    continue
+
                             # N-gram repetition tracker
                             recent_tokens.append(token)
                             if len(recent_tokens) > ngram_window * max_repeats:
@@ -295,7 +328,10 @@ class LlamaCppRuntime(RuntimeContract):
                     repeat_penalty=repeat_penalty,
                     stop=stop_tokens
                 )
-            return {"message": {"content": response["choices"][0]["message"]["content"]}}
+            content = response["choices"][0]["message"]["content"]
+            if not think and mode not in ["fast"]:
+                content = self._strip_hidden_reasoning(content)
+            return {"message": {"content": content}}
 
     def embed(self, text: str) -> list[float]:
         # Dummy for now
