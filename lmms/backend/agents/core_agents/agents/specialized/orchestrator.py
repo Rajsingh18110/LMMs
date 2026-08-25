@@ -119,20 +119,20 @@ class OrchestratorAgent(BaseAgent):
         from lmms.backend.router.planner import Planner
         import inspect
 
-        yield "Starting OrchestratorAgent execution...\n"
+        yield "<think>Starting OrchestratorAgent execution...</think>\n"
         
         task_desc = context.task.description if context.task else "Context task"
-        yield f"Calling Planner to decompose task: {task_desc}\n"
+        yield f"<think>Calling Planner to decompose task: {task_desc}</think>\n"
         
         planner = Planner()
         graph = planner.plan(task_desc, context)
         
-        yield f"Planner created ExecutionGraph with {len(graph.steps)} steps (Intent: {graph.intent}).\n"
+        yield f"<think>Planner created ExecutionGraph with {len(graph.steps)} steps (Intent: {graph.intent}).</think>\n"
         
         any_step_success = False
         
         for step in graph.steps:
-            yield f"\n[Step] Agent: {step.agent_name} | Action: {step.action_type}\n"
+            yield f"\n<think>[Step] Agent: {step.agent_name} | Action: {step.action_type}</think>\n"
             
             if step.agent_name == "coder":
                 try:
@@ -188,7 +188,7 @@ class OrchestratorAgent(BaseAgent):
                 yield f"  [Warning] Unknown agent '{step.agent_name}'. Skipping.\n"
                 
         if not graph.steps:
-            yield "\nOrchestrator execution completed, but no steps were generated.\n"
+            yield "\n<think>Orchestrator execution completed, but no steps were generated.</think>\n"
         elif any_step_success:
             yield "\nOrchestrator execution completed successfully.\n"
         else:

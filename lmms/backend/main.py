@@ -1396,10 +1396,7 @@ lmms update
                                             final_display = display_reply
                                                 
                                             if not display_reply:
-                                                if "<think>" in full_reply:
-                                                    display_reply = "🧠 *Model is thinking...*"
-                                                elif "<tool_call>" in full_reply:
-                                                    display_reply = "⚙️ *Model is preparing to use a tool...*"
+                                                pass # Don't show any thinking placeholder
                                                     
                                             if display_reply:
                                                 now = time.time()
