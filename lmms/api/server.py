@@ -60,6 +60,13 @@ def ping():
     LAST_PING_TIME = time.time()
     return {"status": "ok"}
 
+@app.post("/v1/internal/shutdown")
+def shutdown():
+    import os, signal
+    print("[Engine] Immediate shutdown requested by client.")
+    os.kill(os.getpid(), signal.SIGTERM)
+    return {"status": "shutting down"}
+
 async def heartbeat_monitor():
     while True:
         await asyncio.sleep(5)
