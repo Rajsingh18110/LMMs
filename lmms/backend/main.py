@@ -242,21 +242,22 @@ def run_cli():
     # Auto-detect current model
     if check_engine_health():
         try:
+            config_path = os.path.expanduser("~/.lmms/config.json")
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r") as f:
+                        cfg = json.load(f)
+                        saved_model = cfg.get("chat_selected_model") or cfg.get("default_model")
+                        if saved_model:
+                            current_model = saved_model
+                except: pass
+
             r = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
             stats = r.json()
             detected_model = extract_active_model_from_stats(stats)
-            if detected_model:
+            if detected_model and current_model == "None":
                 current_model = detected_model
             else:
-                config_path = os.path.expanduser("~/.lmms/config.json")
-                if os.path.exists(config_path):
-                    try:
-                        with open(config_path, "r") as f:
-                            cfg = json.load(f)
-                            if cfg.get("default_model"):
-                                current_model = cfg["default_model"]
-                    except: pass
-
                 if current_model == "None":
                     r_list = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=2)
                     models_list = r_list.json().get("models", [])
@@ -270,6 +271,15 @@ def run_cli():
     current_mode = "/fast"
     current_permission_level = "medium"
     show_thoughts = False
+
+    def visible_cli_reply(text: str) -> str:
+        display = text or ""
+        if not show_thoughts:
+            display = re.sub(r'<think>.*?(</think>|$)', '', display, flags=re.DOTALL).strip()
+            if "</think>" in display:
+                display = display.split("</think>", 1)[1].strip()
+        display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display, flags=re.DOTALL).strip()
+        return display
     
     # Init config files
     CONFIG_DIR = os.path.expanduser("~/.lmms/config")
@@ -1279,7 +1289,7 @@ lmms update
                 while iter_count < MAX_ITERATIONS:
                     iter_count += 1
                     
-                    with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave"):
+                    with console.status("[dim]Preparing request...[/dim]", spinner="lmms_wave"):
                         try:
                             # Clean history before sending to engine and truncate old large observations to save context
                             clean_messages = []
@@ -1325,7 +1335,7 @@ lmms update
                                     "top_p": req_top_p,
                                     "repetition_penalty": 1.15,
                                     "mode": current_mode.strip("/"),
-                                    "think": show_thoughts
+                                    "think": True # Always get the stream to prevent connection hanging, we hide it client-side if needed
                                 }, stream=True, timeout=(10, 3600))
                                 resp.raise_for_status()
                                 
@@ -1392,16 +1402,15 @@ lmms update
                                                         full_reply = cleaned
                                                     leak_check_done = True
                                                     
-                                            display_reply = full_reply
-                                            if not show_thoughts:
-                                                display_reply = re.sub(r'<think>.*?(</think>|$)', '', display_reply, flags=re.DOTALL).strip()
-                                            
-                                            display_reply = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                            display_reply = visible_cli_reply(full_reply)
                                             
                                             final_display = display_reply
                                                 
                                             if not display_reply:
-                                                pass # Don't show any thinking placeholder
+                                                if "<think>" in full_reply and "</think>" not in full_reply:
+                                                    display_reply = "[dim italic]Thinking...[/dim italic]"
+                                                else:
+                                                    pass
                                                     
                                             if display_reply:
                                                 now = time.time()
@@ -1427,14 +1436,13 @@ lmms update
                                     if cleaned_reply:
                                         full_reply = cleaned_reply
                                         
-                                final_display = full_reply
-                                if not show_thoughts:
-                                    final_display = re.sub(r'<think>.*?(</think>|$)', '', final_display, flags=re.DOTALL).strip()
-                                final_display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', final_display, flags=re.DOTALL).strip()
+                                final_display = visible_cli_reply(full_reply)
                                     
                                 # Force a final render
                                 if final_display:
                                     live_view.update(Markdown(final_display), refresh=True)
+                                elif full_reply:
+                                    console.print("[dim]No visible answer returned. The model only produced hidden/thinking text.[/dim]")
                         finally:
                             if live_view:
                                 live_view.stop()
