@@ -119,21 +119,21 @@ class OrchestratorAgent(BaseAgent):
         from lmms.backend.router.planner import Planner
         import inspect
 
-        yield "<think>Starting OrchestratorAgent execution...</think>\n"
-        
+        yield "<system_log>OrchestratorAgent: starting execution</system_log>\n"
+
         task_desc = context.task.description if context.task else "Context task"
-        yield f"<think>Calling Planner to decompose task: {task_desc}</think>\n"
-        
+        yield f"<system_log>Decomposing task via Planner: {task_desc}</system_log>\n"
+
         planner = Planner()
         graph = planner.plan(task_desc, context)
-        
-        yield f"<think>Planner created ExecutionGraph with {len(graph.steps)} steps (Intent: {graph.intent}).</think>\n"
-        
+
+        yield f"<system_log>ExecutionGraph: {len(graph.steps)} steps (Intent: {graph.intent})</system_log>\n"
+
         any_step_success = False
-        
+
         for step in graph.steps:
-            yield f"\n<think>[Step] Agent: {step.agent_name} | Action: {step.action_type}</think>\n"
-            
+            yield f"<system_log>[Step] Agent: {step.agent_name} | Action: {step.action_type}</system_log>\n"
+
             if step.agent_name == "coder":
                 try:
                     from lmms.backend.agents.core_agents.agents.specialized.coding import CodingAgent
@@ -144,7 +144,7 @@ class OrchestratorAgent(BaseAgent):
                         yield f"  [Coder] {chunk}"
                     any_step_success = True
                 except ImportError:
-                    yield f"  [Error] CodingAgent could not be loaded.\n"
+                    yield "  [Error] CodingAgent could not be loaded.\n"
             elif step.agent_name == "researcher":
                 try:
                     from lmms.backend.agents.specialized.research import ResearchAgent
@@ -161,7 +161,7 @@ class OrchestratorAgent(BaseAgent):
                         yield f"  [Researcher] {res}"
                     any_step_success = True
                 except ImportError:
-                    yield f"  [Error] ResearchAgent could not be loaded.\n"
+                    yield "  [Error] ResearchAgent could not be loaded.\n"
             elif step.agent_name == "tester":
                 try:
                     from lmms.backend.agents.core_agents.agents.specialized.tester import TesterAgent
@@ -172,7 +172,7 @@ class OrchestratorAgent(BaseAgent):
                         yield f"  [Tester] {chunk}"
                     any_step_success = True
                 except ImportError:
-                    yield f"  [Error] TesterAgent could not be loaded.\n"
+                    yield "  [Error] TesterAgent could not be loaded.\n"
             elif step.agent_name == "reviewer":
                 try:
                     from lmms.backend.agents.core_agents.agents.specialized.reviewer import ReviewerAgent
@@ -183,13 +183,13 @@ class OrchestratorAgent(BaseAgent):
                         yield f"  [Reviewer] {chunk}"
                     any_step_success = True
                 except ImportError:
-                    yield f"  [Error] ReviewerAgent could not be loaded.\n"
+                    yield "  [Error] ReviewerAgent could not be loaded.\n"
             else:
                 yield f"  [Warning] Unknown agent '{step.agent_name}'. Skipping.\n"
-                
+
         if not graph.steps:
-            yield "\n<think>Orchestrator execution completed, but no steps were generated.</think>\n"
+            yield "\n<system_log>Orchestrator: no steps were generated.</system_log>\n"
         elif any_step_success:
-            yield "\nOrchestrator execution completed successfully.\n"
+            yield "\nOrchestrator completed successfully.\n"
         else:
-            yield "\nOrchestrator execution failed: All sub-agent steps failed or produced no output.\n"
+            yield "\nOrchestrator failed: all sub-agent steps failed or produced no output.\n"

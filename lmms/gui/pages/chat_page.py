@@ -1,483 +1,581 @@
-import os
-import markdown
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-    QPushButton, QTextBrowser, QFrame, QFileDialog, QLabel
-)
-from PyQt6.QtCore import Qt, pyqtSlot
-from lmms.backend.services.chat_service import ChatService
-from lmms.backend.agents.core_agents.agents.manager import AgentManager
+"""
+chat_page.py
 
-class ChatInputEdit(QTextEdit):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.send_callback = None
-        
-    def keyPressEvent(self, event):
-        from PyQt6.QtCore import Qt
-        if event.key() == Qt.Key.Key_Return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
-            if self.send_callback:
-                self.send_callback()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
+Main chat interface page for LMMs.
+
+Signal architecture:
+    ChatService → ChatEvent → on_event_received() → message state → UI update
+
+Each ChatEvent is routed by type:
+  reasoning_delta  → message.thought  → ThoughtPanelWidget
+  assistant_delta  → message.content  → ChatTextBrowser(s)
+  tool_*           → message.tool_events (future TaskPanel)
+  completed        → finish_generation(done)
+  error            → finish_generation(error)
+  no_response      → finish_generation(error, "No response")
+  cancelled        → finish_generation(cancelled)
+"""
+import os
+import threading
+import re as _re
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
+    QPushButton, QFrame, QFileDialog, QLabel, QComboBox
+)
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer, pyqtSignal
+
+from lmms.backend.services.chat_service import ChatService
+from lmms.backend.services.chat_event import ChatEvent
+from lmms.backend.agents.core_agents.agents.manager import AgentManager
+from lmms.gui.state.chat_message import ChatMessage
+from lmms.gui.widgets.chat import ChatInputEdit, MessageListWidget
+
 
 class ChatPage(QWidget):
+    models_fetched = pyqtSignal(list)
+
     def __init__(self):
         super().__init__()
-        # Temporary instance for MVP, later we'll inject this via a manager
-        self.agent_manager = AgentManager(workspace_dir=os.path.expanduser("~/.lmms/workspaces/default"))
+        self.agent_manager = AgentManager(
+            workspace_dir=os.path.expanduser("~/.lmms/workspaces/default")
+        )
         self.chat_service = ChatService(self.agent_manager)
-        
+
+        # Connect ChatService signals
+        self.chat_service.event_received.connect(self.on_event_received)
         self.chat_service.response_finished.connect(self.on_response_finished)
         self.chat_service.error_occurred.connect(self.on_error_occurred)
-        self.chat_service.chunk_received.connect(self.on_chunk_received)
+        self.chat_service.cancelled.connect(self.on_cancelled)
+        self.chat_service.no_response.connect(self.on_no_response)
 
-        self.messages = []
-        self.attached_files = []
+        self.models_fetched.connect(self.on_models_fetched)
+
+        # Message state
+        self.messages: list[ChatMessage] = []
+        self.attached_files: list[str] = []
         self.is_streaming = False
+
+        # Active generation tracking by stable message ID
+        self.active_message_id: str | None = None
+
+        # Timer to throttle UI updates at 20fps
+        self.update_timer = QTimer()
+        self.update_timer.setInterval(50)
+        self.update_timer.timeout.connect(self.flush_ui_update)
+
+        # Pending deltas accumulated between timer ticks
+        self._pending_content = ""
+        self._pending_thought = ""
+        self._has_pending = False
+
         self.init_ui()
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # UI Construction
+    # ─────────────────────────────────────────────────────────────────────────
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # --- Chat Section ---
-        self.chat_container = QWidget()
-        chat_layout = QVBoxLayout(self.chat_container)
+        main_layout.setSpacing(0)
+
+        # ── Chat Area ─────────────────────────────────────────────────────
+        chat_container = QWidget()
+        chat_layout = QVBoxLayout(chat_container)
         chat_layout.setContentsMargins(0, 0, 0, 0)
         chat_layout.setSpacing(0)
 
-        # Message History
-        self.chat_history = QTextBrowser()
-        self.chat_history.setOpenExternalLinks(False) # We handle links manually for Copy Code
-        self.chat_history.anchorClicked.connect(self.on_anchor_clicked)
-        self.chat_history.setStyleSheet("""
-            QTextBrowser {
-                background-color: transparent;
-                border: none;
-                font-size: 15px;
-                line-height: 1.5;
-            }
-        """)
-        
-        self.code_blocks = {} # id -> code content
-        
-        # Display welcome message
-        self.append_message("system", "Welcome to LMMs! I'm your local AI powerhouse. How can I help you today?")
-        
-        chat_layout.addWidget(self.chat_history, stretch=1)
+        self.message_list = MessageListWidget()
+        self.message_list.link_clicked.connect(self.on_link_clicked)
+        self.message_list.edit_requested.connect(self.on_edit_requested)
+        self.message_list.delete_requested.connect(self.on_delete_requested)
+        self.message_list.retry_requested.connect(self.on_retry_requested)
+        chat_layout.addWidget(self.message_list, stretch=1)
 
-        # Input Area Container
+        # ── Input Area ────────────────────────────────────────────────────
+        input_outer = QHBoxLayout()
+        input_outer.setContentsMargins(16, 0, 16, 14)
+
         input_container = QFrame()
-        input_container.setObjectName("InputContainer")
+        input_container.setObjectName("ChatInputFrame")
         input_container.setStyleSheet("""
-            QFrame#InputContainer {
-                background-color: #161b22;
-                border: 1px solid #30363d;
+            QFrame#ChatInputFrame {
+                background-color: #111827;
+                border: 1px solid #1f2937;
                 border-radius: 8px;
+            }
+            QFrame#ChatInputFrame:focus-within {
+                border-color: #2563eb;
             }
         """)
         input_layout = QVBoxLayout(input_container)
-        input_layout.setContentsMargins(10, 10, 10, 10)
+        input_layout.setContentsMargins(10, 8, 10, 6)
+        input_layout.setSpacing(4)
 
+        # Attachment chips
         self.attachment_container = QWidget()
         self.attachment_layout = QHBoxLayout(self.attachment_container)
         self.attachment_layout.setContentsMargins(0, 0, 0, 0)
         self.attachment_container.setVisible(False)
+        input_layout.addWidget(self.attachment_container)
 
+        # Text input
         self.input_field = ChatInputEdit()
         self.input_field.setObjectName("chatInput")
-        self.input_field.setStyleSheet("border: none; background: transparent;")
-        self.input_field.setPlaceholderText("Type a message or command (e.g., /fast, /code, /help)...")
-        self.input_field.setMaximumHeight(100)
-        
-        # Send Button Row and Model Selector
-        bottom_row = QHBoxLayout()
-        bottom_row.setContentsMargins(0, 5, 0, 0)
-        
-        from PyQt6.QtWidgets import QComboBox
-        self.model_combo = QComboBox()
-        self.refresh_models()
-        self.model_combo.currentTextChanged.connect(self.on_model_changed)
-        self.model_combo.setStyleSheet("""
-            QComboBox {
-                background: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 11px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-        """)
-        
-        self.approvals_combo = QComboBox()
-        self.approvals_combo.addItems(["🛡 Default", "🛡 Auto"])
-        self.approvals_combo.setStyleSheet("""
-            QComboBox {
-                background: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 11px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-        """)
-        
-        self.attach_btn = QPushButton("+")
-        self.attach_btn.setObjectName("attachBtn")
-        self.attach_btn.setToolTip("Attach Context")
-        self.attach_btn.setFixedSize(24, 24)
+        self.input_field.setStyleSheet(
+            "border: none; background: transparent; color: #e5e7eb; font-size: 14px;"
+        )
+        self.input_field.setPlaceholderText("Message LMMs…")
+        self.input_field.setMaximumHeight(140)
+        self.input_field.send_callback = self.send_message
+        input_layout.addWidget(self.input_field)
+
+        # Bottom toolbar
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 2, 0, 0)
+        toolbar.setSpacing(6)
+
+        self.attach_btn = QPushButton("📎")
+        self.attach_btn.setToolTip("Attach file")
+        self.attach_btn.setFixedSize(26, 26)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.setStyleSheet("""
             QPushButton {
-                background: transparent;
-                border: none;
-                color: #8b949e;
-                font-size: 18px;
-                padding: 0px;
+                background: transparent; border: none;
+                color: #6b7280; font-size: 14px; border-radius: 4px;
             }
-            QPushButton:hover {
-                color: #c9d1d9;
-            }
+            QPushButton:hover { background: #1f2937; color: #9ca3af; }
         """)
         self.attach_btn.clicked.connect(self.attach_files)
-        
-        self.send_btn = QPushButton("Send")
-        self.send_btn.setObjectName("sendBtn")
-        self.send_btn.setMinimumSize(85, 26)
-        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.send_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #30363d;
-                color: #ffffff;
-                border-radius: 13px;
-                border: none;
-                font-size: 13px;
-                font-weight: bold;
-                padding: 0px 10px;
+
+        self.model_combo = QComboBox()
+        self.model_combo.setFixedHeight(24)
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background: #1f2937; border: 1px solid #374151;
+                border-radius: 4px; color: #9ca3af;
+                font-size: 11px; padding: 2px 8px;
             }
-            QPushButton:hover {
-                background-color: #58a6ff;
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background: #111827; color: #e5e7eb;
+                selection-background-color: #2563eb;
+                border: 1px solid #374151;
             }
         """)
+        self.refresh_models()
+
+        self.approvals_combo = QComboBox()
+        self.approvals_combo.addItems(["Low", "Medium", "Full"])
+        self.approvals_combo.setFixedHeight(24)
+        self.approvals_combo.setStyleSheet("""
+            QComboBox {
+                background: #1f2937; border: 1px solid #374151;
+                border-radius: 4px; color: #6b7280;
+                font-size: 11px; padding: 2px 8px;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background: #111827; color: #e5e7eb;
+                selection-background-color: #2563eb;
+                border: 1px solid #374151;
+            }
+        """)
+
+        self.send_btn = QPushButton("↑")
+        self.send_btn.setFixedSize(28, 28)
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._set_send_ready()
+
+        toolbar.addWidget(self.attach_btn)
+        toolbar.addWidget(self.model_combo)
+        toolbar.addWidget(self.approvals_combo)
+        toolbar.addStretch()
+        toolbar.addWidget(self.send_btn)
+        input_layout.addLayout(toolbar)
+
+        input_outer.addWidget(input_container)
+        chat_layout.addLayout(input_outer)
+        main_layout.addWidget(chat_container)
+
+        self.start_new_chat()
+
+    # ── Send button states ────────────────────────────────────────────────────
+    def _set_send_ready(self):
+        try:
+            self.send_btn.clicked.disconnect()
+        except TypeError:
+            pass
         self.send_btn.clicked.connect(self.send_message)
-        
-        bottom_row.addWidget(self.attach_btn)
-        bottom_row.addWidget(self.model_combo)
-        bottom_row.addWidget(self.approvals_combo)
-        bottom_row.addStretch()
-        bottom_row.addWidget(self.send_btn)
+        self.send_btn.setText("↑")
+        self.send_btn.setFixedSize(28, 28)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background: #2563eb; color: #fff;
+                border-radius: 14px; border: none;
+                font-size: 16px; font-weight: bold;
+            }
+            QPushButton:hover { background: #3b82f6; }
+            QPushButton:disabled { background: #1f2937; color: #6b7280; }
+        """)
+        self.input_field.setReadOnly(False)
 
-        input_layout.addWidget(self.attachment_container)
-        input_layout.addWidget(self.input_field)
-        self.input_field.send_callback = self.send_message
-        input_layout.addLayout(bottom_row)
+    # Keep old name for backward compat
+    def set_send_btn_ready(self):
+        self._set_send_ready()
 
-        chat_layout_wrapper = QHBoxLayout()
-        chat_layout_wrapper.setContentsMargins(10, 5, 10, 15)
-        chat_layout_wrapper.addWidget(input_container)
-        
-        chat_layout.addLayout(chat_layout_wrapper)
-        
-        main_layout.addWidget(self.chat_container)
+    def set_send_btn_stop(self):
+        try:
+            self.send_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        self.send_btn.clicked.connect(self.stop_generation)
+        self.send_btn.setText("■")
+        self.send_btn.setFixedSize(28, 28)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background: #374151; color: #f87171;
+                border-radius: 14px; border: none;
+                font-size: 14px; font-weight: bold;
+            }
+            QPushButton:hover { background: #4b5563; }
+        """)
+        self.input_field.setReadOnly(True)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Model management
+    # ─────────────────────────────────────────────────────────────────────────
+    def refresh_models(self):
+        self.model_combo.addItem("Loading…")
+
+        def worker():
+            try:
+                import requests
+                resp = requests.get("http://localhost:11435/v1/models/list", timeout=2)
+                if resp.status_code == 200:
+                    models = [m["name"] for m in resp.json().get("models", [])]
+                    self.models_fetched.emit(models)
+                else:
+                    self.models_fetched.emit([])
+            except Exception:
+                self.models_fetched.emit([])
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @pyqtSlot(list)
+    def on_models_fetched(self, models: list):
+        self.model_combo.clear()
+        if models:
+            self.model_combo.addItems(models)
+        else:
+            self.model_combo.addItem("No Models")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # File attachment
+    # ─────────────────────────────────────────────────────────────────────────
     def attach_files(self):
-        files = []
-        import sys
-        use_zenity = False
-        if sys.platform.startswith("linux"):
-            import subprocess, shutil
-            if shutil.which('zenity'):
-                use_zenity = True
-                try:
-                    result = subprocess.run(['zenity', '--file-selection', '--multiple', '--title=Select Files to Attach'], capture_output=True, text=True)
-                    if result.returncode == 0 and result.stdout.strip():
-                        files = result.stdout.strip().split('|')
-                except Exception:
-                    use_zenity = False
-                
-        if not use_zenity and not files:
-            from PyQt6.QtWidgets import QFileDialog
-            files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Attach", "", "All Files (*)")
-            
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select Files to Attach", "", "All Files (*)"
+        )
+        for f in files:
+            if f not in self.attached_files and len(self.attached_files) < 20:
+                self.attached_files.append(f)
+        self.update_attachment_ui()
 
-        if files:
-            for f in files:
-                if len(self.attached_files) >= 20:
-                    break
-                if f not in self.attached_files:
-                    self.attached_files.append(f)
-            self.update_attachment_ui()
-
-    def remove_attachment(self, file_path):
+    def remove_attachment(self, file_path: str):
         if file_path in self.attached_files:
             self.attached_files.remove(file_path)
-            self.update_attachment_ui()
+        self.update_attachment_ui()
 
     def update_attachment_ui(self):
-        # Clear current tags
         while self.attachment_layout.count():
             item = self.attachment_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
+            if item.widget():
+                item.widget().deleteLater()
         if not self.attached_files:
             self.attachment_container.setVisible(False)
             return
-
         self.attachment_container.setVisible(True)
         for f in self.attached_files:
-            tag = QFrame()
-            tag.setStyleSheet("background-color: #21262d; border-radius: 4px; border: 1px solid #30363d;")
-            tag_layout = QHBoxLayout(tag)
-            tag_layout.setContentsMargins(5, 2, 5, 2)
-            
+            chip = QFrame()
+            chip.setStyleSheet(
+                "background: #1f2937; border-radius: 4px; border: 1px solid #374151;"
+            )
+            cl = QHBoxLayout(chip)
+            cl.setContentsMargins(5, 2, 5, 2)
+            cl.setSpacing(4)
             lbl = QLabel(os.path.basename(f))
-            lbl.setStyleSheet("color: #c9d1d9; font-size: 11px;")
-            
-            rm_btn = QPushButton("x")
-            rm_btn.setStyleSheet("color: #ff7b72; border: none; background: transparent; font-weight: bold;")
-            rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            rm_btn.clicked.connect(lambda checked, path=f: self.remove_attachment(path))
-            
-            tag_layout.addWidget(lbl)
-            tag_layout.addWidget(rm_btn)
-            self.attachment_layout.addWidget(tag)
-            
+            lbl.setStyleSheet("color: #9ca3af; font-size: 11px;")
+            rm = QPushButton("×")
+            rm.setStyleSheet(
+                "color: #ef4444; border: none; background: transparent; font-size: 13px;"
+            )
+            rm.setCursor(Qt.CursorShape.PointingHandCursor)
+            rm.clicked.connect(lambda _, p=f: self.remove_attachment(p))
+            cl.addWidget(lbl)
+            cl.addWidget(rm)
+            self.attachment_layout.addWidget(chip)
         self.attachment_layout.addStretch()
 
-    def render_messages(self):
-        import re
-        import uuid
-        
-        html = ""
-        self.code_blocks.clear()
-        
-        for msg in self.messages:
-            role = msg["role"]
-            content = msg["content"]
-            
-            # Strip out internal think and tool_call tags from being displayed
-            content = re.sub(r'<think>.*?(</think>|$)', '', content, flags=re.DOTALL).strip()
-            content = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', content, flags=re.DOTALL).strip()
-            
-            try:
-                from lmms.engine.response_cleaner import strip_hidden_reasoning
-                if role == "assistant":
-                    content = strip_hidden_reasoning(content)
-            except Exception:
-                pass
-
-            html_content = markdown.markdown(content, extensions=['fenced_code', 'tables'])
-            
-            # Inject Copy Code buttons
-            def replace_code_block(match):
-                code_id = str(uuid.uuid4())
-                import html as html_lib
-                code = match.group(1)
-                raw_code = html_lib.unescape(code)
-                raw_code = re.sub(r'<[^>]+>', '', raw_code)
-                self.code_blocks[code_id] = raw_code
-                return f'<div style="background-color: #0d1117; padding: 8px; border: 1px solid #30363d; border-radius: 5px; margin-bottom: 10px;"><div style="text-align: right;"><a href="copy:{code_id}" style="color: #58a6ff; text-decoration: none; font-size: 12px; font-weight: bold;">[Copy Code]</a></div><pre style="margin: 0; padding-top: 5px;"><code>{code}</code></pre></div>'
-            
-            html_content = re.sub(r'<pre><code>(.*?)</code></pre>', replace_code_block, html_content, flags=re.DOTALL)
-            
-            if role == "user":
-                html += f"""
-                <div style="text-align: right; margin: 10px 0;">
-                    <span style="background-color: #2b2d31; color: white; padding: 10px 15px; border-radius: 8px; display: inline-block;">
-                        <b style="color: #58a6ff;">You</b><br>
-                        {html_content}
-                    </span>
-                </div>
-                """
-            elif role == "system":
-                html += f"""
-                <div style="text-align: center; margin: 10px 0;">
-                    <span style="background-color: transparent; color: #8b949e; padding: 10px 15px; display: inline-block; text-align: center;">
-                        <b style="color: #58a6ff;">System</b><br>
-                        {html_content}
-                    </span>
-                </div>
-                """
-            else:
-                html += f"""
-                <div style="text-align: left; margin: 10px 0;">
-                    <span style="background-color: transparent; color: #cccccc; padding: 10px 15px; display: inline-block;">
-                        <b style="color: #58a6ff;">Assistant</b><br>
-                        {html_content}
-                    </span>
-                </div>
-                """
-                
-        self.chat_history.setHtml(html)
-        scrollbar = self.chat_history.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-
-    def append_message(self, role: str, content: str):
-        self.messages.append({"role": role, "content": content})
-        self.render_messages()
-
+    # ─────────────────────────────────────────────────────────────────────────
+    # Send / Stop
+    # ─────────────────────────────────────────────────────────────────────────
     def start_new_chat(self):
-        self.messages.clear()
-        self.append_message("system", "Started a new conversation. How can I help you?")
+        self.message_list.clear()
 
     @pyqtSlot()
     def send_message(self):
         text = self.input_field.toPlainText().strip()
         if not text and not self.attached_files:
             return
-            
+        if self.is_streaming:
+            return
+
+        # Build the full prompt for the backend (includes file contents)
         full_text = text
         num_attached = len(self.attached_files)
+
         if self.attached_files:
             if full_text:
                 full_text += "\n\n"
             full_text += "[Attached Files]:\n"
-            import os
             for file_path in self.attached_files:
                 try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        file_content = f.read()
-                        full_text += f"\n--- {os.path.basename(file_path)} ---\n{file_content}\n"
+                    with open(file_path, "r", encoding="utf-8") as fh:
+                        full_text += f"\n--- {os.path.basename(file_path)} ---\n{fh.read()}\n"
                 except Exception as e:
-                    full_text += f"\n--- {os.path.basename(file_path)} ---\n[Error reading file: {e}]\n"
-            
-            # Clear attachments after processing
+                    full_text += f"\n--- {os.path.basename(file_path)} ---\n[Error: {e}]\n"
             self.attached_files.clear()
             self.update_attachment_ui()
-            
-            # Append a UI-friendly message for the user's view
-            if text:
-                display_msg = f"{text}\n\n📎 *Attached {num_attached} files*"
-            else:
-                display_msg = f"📎 *Attached {num_attached} files*"
+            display_msg = (
+                f"{text}\n\n📎 *{num_attached} file(s) attached*" if text
+                else f"📎 *{num_attached} file(s) attached*"
+            )
         else:
-            display_msg = text
+            display_msg = text  # Just the plain text — no permission label
 
         self.input_field.clear()
-        self.append_message("user", display_msg)
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("Stop")
-        try:
-            self.send_btn.clicked.disconnect()
-        except TypeError:
-            pass
-        self.send_btn.clicked.connect(self.stop_generation)
-        
-        self.chat_service.start_chat(full_text)
 
-    @pyqtSlot(str)
-    def on_chunk_received(self, chunk: str):
-        from lmms.engine.response_cleaner import strip_hidden_reasoning
-        # Do not render internal thinking tags in the UI
-        clean_text = strip_hidden_reasoning(chunk)
-        
-        is_thinking = "<think>" in chunk and chunk.count("<think>") > chunk.count("</think>")
-        if is_thinking:
-            indicator = "\n\n*🧠 Model is thinking...*"
-            if not clean_text.strip():
-                clean_text = indicator.strip()
-            else:
-                clean_text += indicator
-                
-        if clean_text:
-            if not self.is_streaming:
-                self.messages.append({"role": "assistant", "content": clean_text})
-                self.is_streaming = True
-            else:
-                self.messages[-1]["content"] = clean_text
-            self.render_messages()
+        # Create and display user message
+        user_msg = ChatMessage(role="user", content=display_msg)
+        self.messages.append(user_msg)
+        self.message_list.add_message(user_msg)
 
-    @pyqtSlot(str)
-    def on_response_finished(self, status):
-        self.is_streaming = False
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("Send")
+        # Determine active model name
+        active_model = self.model_combo.currentText().strip()
+        if active_model in ("Loading…", "No Models", ""):
+            active_model = "LMMs Engine"
 
-    @pyqtSlot(str)
-    def on_error_occurred(self, error_msg):
-        self.is_streaming = False
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("Send")
-        self.append_message("system", f"<b>Error:</b> {error_msg}")
+        # Create assistant placeholder
+        asst_msg = ChatMessage(
+            role="assistant",
+            status="generating",
+            model_name=active_model
+        )
+        self.messages.append(asst_msg)
+        self.message_list.add_message(asst_msg)
 
-    def on_anchor_clicked(self, url):
-        url_str = url.toString()
-        if url_str.startswith("copy:"):
-            code_id = url_str.split("copy:")[1]
-            if code_id in self.code_blocks:
-                from PyQt6.QtWidgets import QApplication
-                QApplication.clipboard().setText(self.code_blocks[code_id])
-                # Show subtle notification in input field placeholder
-                original_placeholder = self.input_field.placeholderText()
-                self.input_field.setPlaceholderText("Code copied to clipboard!")
-                import threading
-                def reset_placeholder():
-                    self.input_field.setPlaceholderText(original_placeholder)
-                threading.Timer(2.0, reset_placeholder).start()
-        else:
-            import webbrowser
-            webbrowser.open(url_str)
+        # Track active generation by stable ID
+        self.active_message_id = asst_msg.id
+        self.is_streaming = True
+        self._pending_content = ""
+        self._pending_thought = ""
+        self._has_pending = False
+        self.set_send_btn_stop()
 
-    def cleanup(self):
-        self.is_streaming = False
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("Send")
-        try:
-            self.send_btn.clicked.disconnect()
-        except TypeError:
-            pass
-        self.send_btn.clicked.connect(self.send_message)
+        # Start backend generation — pass message_id so ChatService can tag events
+        self.chat_service.start_chat(full_text, message_id=asst_msg.id, model_name=active_model)
 
     def stop_generation(self):
-        if hasattr(self, 'chat_service') and self.chat_service.isRunning():
-            self.chat_service.terminate()
-            self.chat_service.wait()
-        self.cleanup()
-        self.append_message("system", "\n[Generation Stopped by User]\n")
+        self.chat_service.cancel()
 
-    def refresh_models(self):
-        try:
-            import requests
-            r = requests.get("http://localhost:11435/v1/models/list", timeout=1)
-            if r.status_code == 200:
-                models = r.json().get("models", [])
-                self.model_combo.blockSignals(True)
-                self.model_combo.clear()
-                self.model_combo.addItem("☁ Cloud: openai")
-                for m in models:
-                    name = m["name"] if isinstance(m, dict) else m
-                    self.model_combo.addItem(f"🖥 Local: {name}")
-                self.model_combo.blockSignals(False)
-            
-            r_active = requests.get("http://localhost:11435/v1/models/ps", timeout=1)
-            if r_active.status_code == 200:
-                active = r_active.json().get("loaded_models", [])
-                if active:
-                    active_name = active[0]
-                    for i in range(self.model_combo.count()):
-                        if active_name in self.model_combo.itemText(i):
-                            self.model_combo.blockSignals(True)
-                            self.model_combo.setCurrentIndex(i)
-                            self.model_combo.blockSignals(False)
-                            break
-        except Exception:
-            self.model_combo.addItems(["🖥 Local: default", "☁ Cloud: openai"])
+    # ─────────────────────────────────────────────────────────────────────────
+    # Event routing
+    # ─────────────────────────────────────────────────────────────────────────
+    @pyqtSlot(object)
+    def on_event_received(self, event: ChatEvent):
+        """Route a ChatEvent to the correct message state field."""
+        if event.message_id != self.active_message_id:
+            return  # Stale event from a cancelled generation
 
-    def on_model_changed(self, text: str):
-        if not text or "Local:" not in text:
+        if event.type == "reasoning_delta":
+            self._pending_thought += event.content
+            self._has_pending = True
+            if not self.update_timer.isActive():
+                self.update_timer.start()
+
+        elif event.type == "assistant_delta":
+            self._pending_content += event.content
+            self._has_pending = True
+            if not self.update_timer.isActive():
+                self.update_timer.start()
+
+        # Future: tool_started, tool_finished, task_started, task_step → TaskPanel
+        # For now, silently accept them
+
+    @pyqtSlot()
+    def flush_ui_update(self):
+        """Apply accumulated deltas to the active message and redraw."""
+        if not self._has_pending:
             return
-        model_name = text.split("Local: ")[-1].strip()
-        import threading
-        def do_load():
-            try:
-                import requests
-                requests.post("http://localhost:11435/v1/models/load", json={"model_name": model_name}, timeout=10)
-            except Exception:
-                pass
-        threading.Thread(target=do_load, daemon=True).start()
+        msg = self._active_message()
+        if not msg:
+            self.update_timer.stop()
+            return
+
+        if self._pending_thought:
+            msg.thought += self._pending_thought
+            self._pending_thought = ""
+        if self._pending_content:
+            msg.content += self._pending_content
+            self._pending_content = ""
+        self._has_pending = False
+
+        self.message_list.update_message(msg)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Lifecycle signals
+    # ─────────────────────────────────────────────────────────────────────────
+    @pyqtSlot(str)
+    def on_response_finished(self, _status: str):
+        self.finish_generation()
+
+    @pyqtSlot()
+    def on_cancelled(self):
+        self.finish_generation(is_cancelled=True)
+
+    @pyqtSlot()
+    def on_no_response(self):
+        msg = self._active_message()
+        if msg and not msg.content.strip():
+            msg.content = (
+                "No response received.\n\n"
+                "Check that the model is loaded and the engine is running."
+            )
+        self.finish_generation(is_error=True)
+
+    @pyqtSlot(str)
+    def on_error_occurred(self, error_msg: str):
+        msg = self._active_message()
+        if msg:
+            msg.content = f"Generation failed: {error_msg}"
+        self.finish_generation(is_error=True)
+
+    def finish_generation(self, is_error: bool = False, is_cancelled: bool = False):
+        self.is_streaming = False
+        self.update_timer.stop()
+
+        # Final flush
+        if self._has_pending:
+            self.flush_ui_update()
+
+        msg = self._active_message()
+        if msg:
+            if is_error:
+                msg.set_status("error")
+            elif is_cancelled:
+                msg.set_status("cancelled")
+            else:
+                msg.set_status("done")
+            self.message_list.update_message(msg)
+
+        self.active_message_id = None
+        self._pending_content = ""
+        self._pending_thought = ""
+        self._has_pending = False
+        self._set_send_ready()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Message lookup helpers
+    # ─────────────────────────────────────────────────────────────────────────
+    def _active_message(self) -> ChatMessage | None:
+        if not self.active_message_id:
+            return None
+        return self._find_message(self.active_message_id)
+
+    def _find_message(self, msg_id: str) -> ChatMessage | None:
+        for m in self.messages:
+            if m.id == msg_id:
+                return m
+        return None
+
+    def _find_paired_assistant(self, user_msg_id: str) -> ChatMessage | None:
+        for i, m in enumerate(self.messages):
+            if m.id == user_msg_id:
+                if i + 1 < len(self.messages) and self.messages[i + 1].role == "assistant":
+                    return self.messages[i + 1]
+        return None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Message actions: Edit / Delete / Retry
+    # ─────────────────────────────────────────────────────────────────────────
+    def on_edit_requested(self, msg_id: str):
+        if self.is_streaming:
+            return
+        user_msg = self._find_message(msg_id)
+        if not user_msg or user_msg.role != "user":
+            return
+        # Restore plain text to input field (strip any markdown/HTML)
+        plain = _re.sub(r'<[^>]+>', '', user_msg.content).strip()
+        self.input_field.setPlainText(plain)
+        self.input_field.setFocus()
+        # Remove associated assistant response
+        paired = self._find_paired_assistant(msg_id)
+        if paired:
+            self.message_list.remove_message(paired.id)
+            self.messages = [m for m in self.messages if m.id != paired.id]
+        self.message_list.remove_message(msg_id)
+        self.messages = [m for m in self.messages if m.id != msg_id]
+
+    def on_delete_requested(self, msg_id: str):
+        if self.is_streaming:
+            return
+        user_msg = self._find_message(msg_id)
+        if not user_msg or user_msg.role != "user":
+            return
+        paired = self._find_paired_assistant(msg_id)
+        if paired:
+            self.message_list.remove_message(paired.id)
+            self.messages = [m for m in self.messages if m.id != paired.id]
+        self.message_list.remove_message(msg_id)
+        self.messages = [m for m in self.messages if m.id != msg_id]
+
+    def on_retry_requested(self, asst_msg_id: str):
+        if self.is_streaming:
+            return
+        asst_msg = self._find_message(asst_msg_id)
+        if not asst_msg or asst_msg.role != "assistant":
+            return
+        # Find the preceding user message
+        user_msg = None
+        for i, m in enumerate(self.messages):
+            if m.id == asst_msg_id and i > 0 and self.messages[i - 1].role == "user":
+                user_msg = self.messages[i - 1]
+                break
+        if not user_msg:
+            return
+        # Remove old assistant message
+        self.message_list.remove_message(asst_msg_id)
+        self.messages = [m for m in self.messages if m.id != asst_msg_id]
+        # Create fresh assistant message
+        active_model = self.model_combo.currentText().strip() or "LMMs Engine"
+        new_asst = ChatMessage(role="assistant", status="generating", model_name=active_model)
+        self.messages.append(new_asst)
+        self.message_list.add_message(new_asst)
+        self.active_message_id = new_asst.id
+        self.is_streaming = True
+        self._pending_content = ""
+        self._pending_thought = ""
+        self._has_pending = False
+        self.set_send_btn_stop()
+        # Re-send original prompt (strip HTML from display_msg)
+        plain_prompt = _re.sub(r'<[^>]+>', '', user_msg.content).strip()
+        self.chat_service.start_chat(plain_prompt, message_id=new_asst.id)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Misc
+    # ─────────────────────────────────────────────────────────────────────────
+    def on_link_clicked(self, url: str):
+        if url.startswith(("http://", "https://")):
+            import webbrowser
+            webbrowser.open(url)

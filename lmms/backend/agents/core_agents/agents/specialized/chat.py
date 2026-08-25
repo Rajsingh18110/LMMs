@@ -24,16 +24,18 @@ class PlainChatAgent(BaseAgent):
 
     async def execute(self, context: ExecutionContext) -> AsyncGenerator[str, None]:
         # Determine the active model
-        active_model = "default"
-        try:
-            resp = requests.get("http://localhost:11435/v1/models/ps", timeout=2)
-            if resp.status_code == 200:
-                data = resp.json()
-                loaded = data.get("loaded_models", [])
-                if loaded:
-                    active_model = loaded[0]
-        except Exception:
-            pass
+        active_model = context.selected_model
+        if not active_model or active_model == "LMMs Engine":
+            active_model = "default"
+            try:
+                resp = requests.get("http://localhost:11435/v1/models/ps", timeout=2)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    loaded = data.get("loaded_models", [])
+                    if loaded:
+                        active_model = loaded[0]
+            except Exception:
+                pass
 
         # Build prompt using task description
         user_prompt = context.task.description if context.task else ""

@@ -61,57 +61,48 @@ class AgentManager:
 
     async def execute_task(self, context: ExecutionContext) -> AsyncGenerator[str, None]:
         """
-        Main entrypoint for task execution. 
+        Main entrypoint for task execution.
         Routes to the correct agent, retrieves plan, and executes it.
+        Only real model-generated <think>...</think> content is treated as reasoning.
+        System routing logs are tagged <system_log> so the UI can strip them silently.
         """
         agent = self.route_context(context)
-        
+
         if not agent:
-            yield "No suitable specialized agent found for this task. Falling back to general chat.\n"
+            yield "[Error]: No suitable agent found for this task.\n"
             return
-            
-        yield f"<think>Routing task to {agent.name} (Confidence matched based on context)\n"
-        
-        # Generate Plan
-        plan = agent.plan(context)
-        yield f"[{agent.name} Plan]: {plan.get('strategy', 'Proceeding with default strategy')}</think>\n"
-        
-        # Execute the specialized logic
+
+        # Emit routing info as a system_log — UI strips this, never shows it as assistant text
+        yield f"<system_log>Routing to {agent.name}</system_log>\n"
+
         import asyncio
         user_prompt = context.task.description if context.task else ""
         timeout_seconds = 600 if "/deep" in user_prompt or "/research" in user_prompt else 300
-        
+
         try:
             generator = agent.execute(context)
             while True:
                 try:
-                    # anext fallback for older Python versions
-                    next_fut = anext(generator) if 'anext' in globals() or 'anext' in __builtins__ else generator.__anext__()
-                    chunk = await asyncio.wait_for(next_fut, timeout=timeout_seconds)
-                    
-                    if agent.name not in ["PlainChatAgent", "ChatAgent"]:
-                        clean_chunk = chunk.replace("<think>", "").replace("</think>", "")
-                        if not clean_chunk.endswith('\n'): clean_chunk += '\n'
-                        chunk = f"<think>{clean_chunk}</think>\n"
-                        
+                    chunk = await asyncio.wait_for(anext(generator), timeout=timeout_seconds)
+                    # Pass chunks through unmodified.
+                    # Never wrap agent output in fake <think> tags.
+                    # Only the model itself may emit <think>...</think> reasoning.
                     yield chunk
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
-                    yield f"\n[Error]: Task timed out after {timeout_seconds} seconds. Cancelling background operations...\n"
+                    yield f"\n[Error]: Task timed out after {timeout_seconds}s.\n"
                     await generator.aclose()
                     self.action_history.record_command_executed(agent.name, "execute_timeout", exit_code=1)
                     break
         except Exception as e:
-            yield f"\n[Error during execution by {agent.name}]: {str(e)}\n"
+            yield f"\n[Error]: {str(e)}\n"
             self.action_history.record_command_executed(agent.name, "execute", exit_code=1)
             raise e
-            
-        # Example of tracking the completion action
+
         task_desc = context.task.description if context.task else "Context task"
         self.action_history._record_action(agent.name, "TASK_COMPLETED", {"task": task_desc})
         
-        yield f"\n<think>{agent.name} finished execution.</think>\n"
 
 if __name__ == "__main__":
     # Simple verification script

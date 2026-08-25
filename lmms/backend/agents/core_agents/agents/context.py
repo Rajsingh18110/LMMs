@@ -12,6 +12,7 @@ class ExecutionContext:
     """
     workspace_id: Optional[str] = None
     task: Optional[Task] = None
+    selected_model: Optional[str] = None
     
     # Conversation or task memory context
     memory: List[Dict[str, str]] = field(default_factory=list)

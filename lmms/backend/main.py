@@ -1326,7 +1326,7 @@ lmms update
                                     "repetition_penalty": 1.15,
                                     "mode": current_mode.strip("/"),
                                     "think": show_thoughts
-                                }, stream=True, timeout=(10, 300))
+                                }, stream=True, timeout=(10, 3600))
                                 resp.raise_for_status()
                                 
                                 chunks_iterator = resp.iter_lines()
@@ -1629,8 +1629,23 @@ lmms update
                 # Note: we only store text in the history so we don't blow up context limits with multiple images.
                 now_str = datetime.now().isoformat()
                 chat_history.append({"role": "user", "content": cmd, "timestamp": now_str})
-                chat_history.append({"role": "assistant", "content": reply, "timestamp": now_str, "model": current_model})
                 
+                thought_content = ""
+                answer_content = reply
+                if "<think>" in reply and "</think>" in reply:
+                    think_start = reply.find("<think>")
+                    think_end = reply.find("</think>") + len("</think>")
+                    thought_content = reply[think_start + len("<think>"):reply.find("</think>")].strip()
+                    answer_content = (reply[:think_start] + reply[think_end:]).strip()
+                elif "</think>" in reply:
+                    think_end = reply.find("</think>") + len("</think>")
+                    thought_content = reply[:reply.find("</think>")].strip()
+                    answer_content = reply[think_end:].strip()
+                
+                msg_data = {"role": "assistant", "content": answer_content, "timestamp": now_str, "model": current_model}
+                if thought_content:
+                    msg_data["thought"] = thought_content
+                chat_history.append(msg_data)
                 # Save chat history
                 chat_data = {
                     "id": current_chat_id,
