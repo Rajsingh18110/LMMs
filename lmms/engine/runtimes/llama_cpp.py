@@ -25,7 +25,7 @@ class LlamaCppRuntime(RuntimeContract):
     def _detect_chat_format(self, model_path: str) -> Optional[str]:
         filename = os.path.basename(model_path).lower()
         if any(token in filename for token in ["qwen3", "qwen2", "qwen"]):
-            return "qwen2"
+            return "qwen"
         if "llama" in filename:
             return "llama-2"
         if "chatml" in filename:
@@ -113,7 +113,7 @@ class LlamaCppRuntime(RuntimeContract):
                     "verbose": False
                 }
                 # Initial guess for chat_format based on filename.
-                # Qwen3 chat templates are more reliably handled via qwen2 format in llama.cpp.
+                # This llama-cpp-python build exposes the Qwen handler as "qwen".
                 detected_format = self._detect_chat_format(full_path)
                 if detected_format:
                     kwargs["chat_format"] = detected_format
@@ -121,6 +121,8 @@ class LlamaCppRuntime(RuntimeContract):
                     kwargs["chat_format"] = "chatml"
                 elif "llama" in os.path.basename(full_path).lower():
                     kwargs["chat_format"] = "llama-2"
+                else:
+                    kwargs["chat_format"] = "chatml"
                 
                 model_instance = Llama(**kwargs)
                 break
@@ -158,8 +160,8 @@ class LlamaCppRuntime(RuntimeContract):
             
         if not has_chat_template:
             self._model_fallback_stops[key] = ["<|im_end|>", "</s>", "<|endoftext|>"]
-            # Apply Burst/format fallback when metadata lacks a template. A lot of Qwen3 GGUFs
-            # still need the qwen2 chat format to stream correctly.
+            # Apply Burst/format fallback when metadata lacks a template. Qwen GGUFs
+            # need the registered qwen chat format in this llama-cpp-python build.
             if "chat_format" not in kwargs:
                 fallback_format = self._detect_chat_format(full_path) or "chatml"
                 print(f"[Fallback] No chat_template found in metadata for {key}. Reloading with fallback '{fallback_format}' format to prevent infinite repetition.")
@@ -246,7 +248,9 @@ class LlamaCppRuntime(RuntimeContract):
             pass # Tokenization failed, just proceed and let the engine handle it
         
         # Prepare context-aware repeat penalty
-        repeat_penalty = 1.05 if mode == "code" else 1.1
+        repeat_penalty = context.get("repetition_penalty") or (1.05 if mode == "code" else 1.1)
+        temperature = context.get("temperature")
+        top_p = context.get("top_p")
         
         # Prepare fallback stop tokens
         fallback_stops = getattr(self, "_model_fallback_stops", {}).get(model_name)
@@ -265,6 +269,8 @@ class LlamaCppRuntime(RuntimeContract):
                         stream=True,
                         max_tokens=context.get("max_tokens", max(1024, int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)),
                         repeat_penalty=repeat_penalty,
+                        temperature=temperature if temperature is not None else 0.7,
+                        top_p=top_p if top_p is not None else 0.95,
                         stop=stop_tokens
                     )
                 
@@ -330,6 +336,8 @@ class LlamaCppRuntime(RuntimeContract):
                     stream=False,
                     max_tokens=context.get("max_tokens", max(1024, int(active_model.n_ctx() * 0.18) if active_model.n_ctx() > 0 else 1024)),
                     repeat_penalty=repeat_penalty,
+                    temperature=temperature if temperature is not None else 0.7,
+                    top_p=top_p if top_p is not None else 0.95,
                     stop=stop_tokens
                 )
             content = response["choices"][0]["message"]["content"]
