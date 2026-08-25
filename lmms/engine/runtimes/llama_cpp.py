@@ -36,6 +36,10 @@ class LlamaCppRuntime(RuntimeContract):
         return strip_hidden_reasoning(text)
 
     def load_model(self, model_id: str) -> bool:
+        with self._global_lock:
+            return self._load_model_internal(model_id)
+
+    def _load_model_internal(self, model_id: str) -> bool:
         if Llama is None:
             print("ERROR: llama-cpp-python not installed.")
             return False

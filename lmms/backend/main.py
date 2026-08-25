@@ -102,6 +102,7 @@ def should_force_tool_mode(prompt: str) -> bool:
         "use tools",
         "read /",
         "write /",
+        "[attached files]",
         "open url",
         "crawl_url",
         "crawl this",

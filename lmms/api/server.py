@@ -112,7 +112,7 @@ def air_cache():
     }
 
 @app.post("/v1/air/generate")
-def air_generate(req: ChatRequest):
+async def air_generate(req: ChatRequest):
     model_name = req.model_name
     
     # We don't forcefully evict everything anymore.
