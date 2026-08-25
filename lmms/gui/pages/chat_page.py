@@ -244,6 +244,10 @@ class ChatPage(QWidget):
         for msg in self.messages:
             role = msg["role"]
             content = msg["content"]
+            
+            # Strip out internal think and tool_call tags from being displayed
+            content = re.sub(r'<think>.*?(</think>|$)', '', content, flags=re.DOTALL).strip()
+            content = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', content, flags=re.DOTALL).strip()
 
             html_content = markdown.markdown(content, extensions=['fenced_code', 'tables'])
             
