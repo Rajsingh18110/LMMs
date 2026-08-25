@@ -1472,7 +1472,7 @@ lmms update
                                                 
                                             if not display_reply:
                                                 if "<think>" in full_reply and "</think>" not in full_reply:
-                                                    display_reply = "[dim italic]Thinking...[/dim italic]"
+                                                    display_reply = "*Thinking...*"
                                                 else:
                                                     pass
                                                     
