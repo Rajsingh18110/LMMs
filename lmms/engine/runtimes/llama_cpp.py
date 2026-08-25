@@ -195,6 +195,30 @@ class LlamaCppRuntime(RuntimeContract):
                 
             messages.insert(0, {"role": "system", "content": sys_msg})
 
+        # Estimate token count to prevent C++ crash
+        total_tokens = 0
+        try:
+            for m in messages:
+                content = m.get("content", "")
+                if isinstance(content, list):
+                    for part in content:
+                        if part.get("type") == "text":
+                            total_tokens += len(active_model.tokenize(part.get("text", "").encode("utf-8")))
+                else:
+                    total_tokens += len(active_model.tokenize(str(content).encode("utf-8")))
+            
+            total_tokens += len(messages) * 10 # Chat template overhead
+            
+            if total_tokens > active_model.n_ctx() - 128:
+                err_msg = f"Context length exceeded! Prompt is ~{total_tokens} tokens, but model context (n_ctx) is {active_model.n_ctx()}."
+                if stream:
+                    def err_stream():
+                        yield {"message": {"role": "assistant", "content": f"\n\n❌ **Engine Error**: {err_msg}"}}
+                    return err_stream()
+                else:
+                    return {"message": {"content": f"\n\n❌ **Engine Error**: {err_msg}"}}
+        except Exception as e:
+            pass # Tokenization failed, just proceed and let the engine handle it
         
         # Prepare context-aware repeat penalty
         repeat_penalty = 1.05 if mode == "code" else 1.1

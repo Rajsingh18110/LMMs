@@ -5,12 +5,10 @@ import requests
 import secrets
 import subprocess
 import asyncio
-import nest_asyncio
 import websockets
 import json
 import re
 from datetime import datetime
-nest_asyncio.apply()
 from lmms.backend.memory.persona import get_persona, auto_extract_persona
 from lmms.backend.tools.search import web_search
 from lmms.backend.tools.browser import BrowserTool
@@ -212,6 +210,8 @@ def start_api():
 
 
 def run_cli():
+    import nest_asyncio
+    nest_asyncio.apply()
     console = Console()
     console.clear()
     
@@ -1310,17 +1310,25 @@ lmms update
                             if iter_count == MAX_ITERATIONS - 1:
                                 messages.append({"role": "user", "content": "System Note: You are about to reach the maximum number of tool iterations (8/8). If you have not solved the problem, please output a final summary of what you tried and the current errors without calling more tools."})
 
-                            resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
-                                "model_name": current_model,
-                                "messages": clean_messages,
-                                "stream": True,
-                                "temperature": req_temp,
-                                "top_p": req_top_p,
-                                "repetition_penalty": 1.15,
-                                "mode": current_mode.strip("/"),
-                                "think": show_thoughts
-                            }, stream=True)
-                            resp.raise_for_status()
+                            first_line = None
+                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model...[/dim]", spinner="lmms_wave"):
+                                resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
+                                    "model_name": current_model,
+                                    "messages": clean_messages,
+                                    "stream": True,
+                                    "temperature": req_temp,
+                                    "top_p": req_top_p,
+                                    "repetition_penalty": 1.15,
+                                    "mode": current_mode.strip("/"),
+                                    "think": show_thoughts
+                                }, stream=True, timeout=(10, 300))
+                                resp.raise_for_status()
+                                
+                                chunks_iterator = resp.iter_lines()
+                                for line in chunks_iterator:
+                                    if line:
+                                        first_line = line
+                                        break
                         except requests.exceptions.HTTPError as e:
                             error_detail = str(e)
                             try:
@@ -1344,16 +1352,7 @@ lmms update
                     try:
                         live_view = None
                         try:
-                            # Run spinner while waiting for TTFT (Time To First Token)
-                            chunks_iterator = resp.iter_lines()
-                            first_line = None
-                            with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave"):
-                                for line in chunks_iterator:
-                                    if line:
-                                        first_line = line
-                                        break
-                                        
-                            # Spinner exits as soon as we break from the with block
+                            # Spinner has already exited
                             if first_line:
                                 console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
                                 live_view = Live(console=console, refresh_per_second=15, auto_refresh=True)
@@ -1362,9 +1361,10 @@ lmms update
                                 import time
                                 last_refresh = time.time()
                                 final_display = ""
+                                leak_check_done = False
                                 
                                 def process_line(line_bytes):
-                                    nonlocal full_reply, last_refresh, final_display
+                                    nonlocal full_reply, last_refresh, final_display, leak_check_done
                                     line_str = line_bytes.decode("utf-8")
                                     if line_str.startswith("data: "):
                                         data_str = line_str[6:]
@@ -1377,11 +1377,22 @@ lmms update
                                                 return False
                                                 
                                             full_reply += chunk.get("content", "")
+                                            
+                                            if not leak_check_done:
+                                                if len(full_reply) < 80:
+                                                    return True  # Buffer it, don't render yet
+                                                else:
+                                                    cleaned = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
+                                                    if cleaned:
+                                                        full_reply = cleaned
+                                                    leak_check_done = True
+                                                    
                                             display_reply = full_reply
                                             if not show_thoughts:
                                                 display_reply = re.sub(r'<think>.*?(</think>|$)', '', display_reply, flags=re.DOTALL).strip()
                                             
                                             display_reply = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display_reply, flags=re.DOTALL).strip()
+                                            
                                             final_display = display_reply
                                                 
                                             if not display_reply:
@@ -1408,14 +1419,16 @@ lmms update
                                             if not process_line(line):
                                                 break
                                                 
-                                # Apply leak cleanup to fully completed full_reply
-                                cleaned_reply = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
-                                if cleaned_reply and len(cleaned_reply) >= len(full_reply) * 0.2:
-                                    full_reply = cleaned_reply
-                                    final_display = full_reply
-                                    if not show_thoughts:
-                                        final_display = re.sub(r'<think>.*?(</think>|$)', '', final_display, flags=re.DOTALL).strip()
-                                    final_display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', final_display, flags=re.DOTALL).strip()
+                                # Apply leak cleanup to fully completed full_reply if not done
+                                if not leak_check_done:
+                                    cleaned_reply = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
+                                    if cleaned_reply:
+                                        full_reply = cleaned_reply
+                                        
+                                final_display = full_reply
+                                if not show_thoughts:
+                                    final_display = re.sub(r'<think>.*?(</think>|$)', '', final_display, flags=re.DOTALL).strip()
+                                final_display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', final_display, flags=re.DOTALL).strip()
                                     
                                 # Force a final render
                                 if final_display:
@@ -1423,6 +1436,10 @@ lmms update
                         finally:
                             if live_view:
                                 live_view.stop()
+                            try:
+                                resp.close()
+                            except:
+                                pass
 
                     except KeyboardInterrupt:
                         if not check_engine_health():
@@ -1554,10 +1571,14 @@ lmms update
                                                     observation = "Invalid profile selection."
                                 elif t_name == "vector_db.search":
                                     import hashlib
+                                    from lmms.backend.tools.rag import RAGTool
                                     ws_id = hashlib.md5(current_workspace.encode()).hexdigest() if current_workspace != "None" else "global"
-                                    vdb = VectorDB(workspace_id=ws_id)
-                                    results = vdb.search(t_kwargs.get("query", ""))
-                                    observation = f"Search Results:\\n{json.dumps(results, indent=2)}" if results else "No matches found in Vector DB."
+                                    
+                                    _, _, available_for_input = get_context_budget(current_model)
+                                    max_tool_tokens = int(available_for_input * 0.3)
+                                    
+                                    rag_tool = RAGTool(workspace_id=ws_id)
+                                    observation = rag_tool.search(t_kwargs.get("query", ""), max_tokens=max_tool_tokens)
                                 else:
                                     observation = f"Tool {t_name} not found."
                                     

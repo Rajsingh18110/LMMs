@@ -343,6 +343,12 @@ def main():
         from lmms.backend.main import run_cli
         run_cli()
         sys.exit(0)
+        
+    # GUI mode bypass
+    if clean_args and clean_args[0] in ["gui", "-gui", "--gui", "-g"]:
+        import lmms_gui_entry
+        lmms_gui_entry.main()
+        sys.exit(0)
     
     # Engine CLI Commands Bypass
     if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]:

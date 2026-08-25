@@ -66,7 +66,7 @@ async def load_model(req: LoadRequest):
     engine_manager.cache.load_model(req.model_name, size_gb)
 
     # Actually load into runtime (llama_cpp)
-    success = engine_manager.runtime.load_model(path)
+    success = await asyncio.to_thread(engine_manager.runtime.load_model, path)
     if not success:
         engine_manager.cache.unload_model(req.model_name)
         raise HTTPException(status_code=500, detail="Failed to initialize runtime")
@@ -158,7 +158,7 @@ def air_generate(req: ChatRequest):
             raise Exception("Insufficient VRAM to load this model, even after eviction.")
             
         # Physically load it
-        success = engine_manager.runtime.load_model(path)
+        success = await asyncio.to_thread(engine_manager.runtime.load_model, path)
         if not success:
             raise HTTPException(status_code=500, detail="Engine failed to load model into VRAM (Possible OOM or driver issue).")
         
@@ -239,7 +239,7 @@ async def delete_model(model_name: str):
     path = os.path.join(MODELS_DIR, f"{model_name}.gguf")
     if model_name in engine_manager.runtime._models or (model_name + ".gguf") in engine_manager.runtime._models:
         engine_manager.cache.unload_model(model_name)
-        engine_manager.runtime.unload_model(model_name)
+        await asyncio.to_thread(engine_manager.runtime.unload_model, model_name)
     if os.path.exists(path):
         os.remove(path)
         return {"status": "success", "message": f"Deleted {model_name}"}
@@ -513,7 +513,7 @@ async def chat_completions(req: ChatRequest):
             size_gb = os.path.getsize(path) / (1024**3)
             if engine_manager.cache.can_fit(size_gb):
                 engine_manager.cache.load_model(req.model_name, size_gb)
-                success = engine_manager.runtime.load_model(path)
+                success = await asyncio.to_thread(engine_manager.runtime.load_model, path)
                 if not success:
                     engine_manager.cache.unload_model(req.model_name)
                     raise HTTPException(status_code=500, detail="Failed to load model. Is llama-cpp-python installed?")
@@ -522,7 +522,7 @@ async def chat_completions(req: ChatRequest):
                 raise HTTPException(status_code=507, detail="Insufficient memory to auto-load")
         else:
             # Fallback to PyTorch Runtime
-            success = engine_manager.pytorch_runtime.load_model(req.model_name)
+            success = await asyncio.to_thread(engine_manager.pytorch_runtime.load_model, req.model_name)
             if success:
                 runtime = engine_manager.pytorch_runtime
             else:

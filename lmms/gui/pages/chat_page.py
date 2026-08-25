@@ -330,6 +330,8 @@ class ChatPage(QWidget):
     @pyqtSlot(str)
     def on_error_occurred(self, error_msg):
         self.is_streaming = False
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("Send")
         self.append_message("system", f"<b>Error:</b> {error_msg}")
 
     def on_anchor_clicked(self, url):

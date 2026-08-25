@@ -40,6 +40,13 @@ def main():
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
     
+    # Auto-start the background API server if it's not running
+    try:
+        from lmms.backend.main import auto_start_engine
+        auto_start_engine()
+    except Exception as e:
+        print(f"Warning: Failed to auto-start engine: {e}")
+    
     window = MainWindow()
     if os.path.exists(icon_path):
         window.setWindowIcon(QIcon(icon_path))

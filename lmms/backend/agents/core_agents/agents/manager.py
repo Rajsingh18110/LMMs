@@ -26,12 +26,14 @@ class AgentManager:
             from lmms.backend.agents.core_agents.agents.specialized.orchestrator import OrchestratorAgent
             from lmms.backend.agents.core_agents.agents.specialized.tester import TesterAgent
             from lmms.backend.agents.core_agents.agents.specialized.reviewer import ReviewerAgent
+            from lmms.backend.agents.core_agents.agents.specialized.chat import PlainChatAgent
             
             self.register_agent(CodingAgent())
             self.register_agent(VisionAgent())
             self.register_agent(OrchestratorAgent())
             self.register_agent(TesterAgent())
             self.register_agent(ReviewerAgent())
+            self.register_agent(PlainChatAgent())
         except ImportError as e:
             print(f"Failed to load default agents: {e}")
 
@@ -75,9 +77,25 @@ class AgentManager:
         yield f"[{agent.name} Plan]: {plan.get('strategy', 'Proceeding with default strategy')}\n"
         
         # Execute the specialized logic
+        import asyncio
+        user_prompt = context.task.description if context.task else ""
+        timeout_seconds = 600 if "/deep" in user_prompt or "/research" in user_prompt else 300
+        
         try:
-            async for chunk in agent.execute(context):
-                yield chunk
+            generator = agent.execute(context)
+            while True:
+                try:
+                    # anext fallback for older Python versions
+                    next_fut = anext(generator) if 'anext' in globals() or 'anext' in __builtins__ else generator.__anext__()
+                    chunk = await asyncio.wait_for(next_fut, timeout=timeout_seconds)
+                    yield chunk
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    yield f"\n[Error]: Task timed out after {timeout_seconds} seconds. Cancelling background operations...\n"
+                    await generator.aclose()
+                    self.action_history.record_command_executed(agent.name, "execute_timeout", exit_code=1)
+                    break
         except Exception as e:
             yield f"\n[Error during execution by {agent.name}]: {str(e)}\n"
             self.action_history.record_command_executed(agent.name, "execute", exit_code=1)

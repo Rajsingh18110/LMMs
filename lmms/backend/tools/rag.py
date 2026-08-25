@@ -3,6 +3,18 @@ import glob
 import urllib.request
 from bs4 import BeautifulSoup
 from lmms.backend.memory.embeddings.faiss_provider import VectorDB
+from concurrent.futures import ProcessPoolExecutor
+
+_process_pool = None
+
+def _crawl4ai_worker(url: str) -> str:
+    import asyncio
+    from crawl4ai import AsyncWebCrawler
+    async def _crawl():
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url)
+            return result.markdown
+    return asyncio.run(_crawl())
 
 class RAGTool:
     def __init__(self, workspace_id: str):
@@ -12,19 +24,33 @@ class RAGTool:
         else:
             self.db = None
 
-    def _chunk_text(self, text: str, chunk_size: int = 1000) -> list:
+    def _get_token_count(self, text: str) -> int:
+        try:
+            from lmms.engine.manager import engine_manager
+            if engine_manager.runtime and hasattr(engine_manager.runtime, '_models') and engine_manager.runtime._models:
+                model_name = list(engine_manager.runtime._models.keys())[0]
+                model = engine_manager.runtime._models[model_name]["model"]
+                return len(model.tokenize(text.encode('utf-8')))
+        except Exception:
+            pass
+        return max(1, len(text) // 4)
+
+    def _chunk_text(self, text: str, max_tokens: int = 250) -> list:
+        # Fast chunking using character heuristic ~ 4 chars per token
+        chunk_size_chars = max_tokens * 4
         words = text.split()
         chunks = []
         current_chunk = []
         current_len = 0
         for word in words:
-            current_len += len(word) + 1
-            if current_len > chunk_size:
+            word_len = len(word) + 1
+            if current_len + word_len > chunk_size_chars:
                 chunks.append(" ".join(current_chunk))
                 current_chunk = [word]
-                current_len = len(word) + 1
+                current_len = word_len
             else:
                 current_chunk.append(word)
+                current_len += word_len
         if current_chunk:
             chunks.append(" ".join(current_chunk))
         return chunks
@@ -73,15 +99,18 @@ class RAGTool:
         if not self.db:
             return "Error: No active workspace."
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                html = response.read()
-            soup = BeautifulSoup(html, 'html.parser')
-            # Extract text from p, h1, h2, h3, li, etc.
-            text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'article'])
-            content = " ".join([elem.get_text(separator=' ', strip=True) for elem in text_elements])
-            if not content.strip():
-                content = soup.get_text(separator=' ', strip=True)
+            global _process_pool
+            if _process_pool is None:
+                _process_pool = ProcessPoolExecutor(max_workers=1)
+                
+            try:
+                future = _process_pool.submit(_crawl4ai_worker, url)
+                content = future.result(timeout=60)
+            except Exception as worker_exc:
+                return f"Error: Crawl4AI worker failed to process {url}. Details: {str(worker_exc)}"
+
+            if not content or not content.strip():
+                return f"Error: No content could be extracted from {url}."
                 
             chunks = self._chunk_text(content)
             metas = [{"source": url, "type": "url", "chunk": i} for i in range(len(chunks))]
@@ -90,7 +119,7 @@ class RAGTool:
         except Exception as e:
             return f"Error scraping url {url}: {str(e)}"
 
-    def search(self, query: str, k: int = 5) -> str:
+    def search(self, query: str, k: int = 5, max_tokens: int = None) -> str:
         if not self.db:
             return "Error: No active workspace. Cannot search."
         try:
@@ -99,11 +128,27 @@ class RAGTool:
                 return "No relevant context found in RAG memory."
             
             out = []
+            total_tokens = 0
             for r in results:
                 src = r.get('source', 'Unknown')
                 text = r.get('text', '')
                 dist = r.get('distance', 0)
-                out.append(f"--- Source: {src} (Dist: {dist:.2f}) ---\n{text}\n")
+                
+                chunk_str = f"--- Source: {src} (Dist: {dist:.2f}) ---\n{text}\n"
+                tokens = self._get_token_count(chunk_str)
+                
+                if max_tokens is not None:
+                    if total_tokens + tokens > max_tokens:
+                        remaining = max_tokens - total_tokens
+                        if remaining > 50:
+                            allowed_chars = remaining * 4
+                            chunk_str = chunk_str[:allowed_chars] + "...[truncated to fit budget]\n"
+                            out.append(chunk_str)
+                        break
+                        
+                out.append(chunk_str)
+                total_tokens += tokens
+                
             return "\n".join(out)
         except Exception as e:
             return f"Error searching vector db: {str(e)}"

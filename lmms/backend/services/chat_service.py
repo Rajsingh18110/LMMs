@@ -22,6 +22,17 @@ class ChatService(QThread):
 
     def run(self):
         try:
+            import sys
+            import asyncio
+            
+            # Force a standard Python asyncio loop for this worker thread
+            # to prevent qasync (QEventLoop) from being created, which causes QSocketNotifier errors.
+            if sys.platform == 'win32':
+                loop = asyncio.ProactorEventLoop()
+            else:
+                loop = asyncio.SelectorEventLoop()
+            asyncio.set_event_loop(loop)
+
             # Construct a basic task context
             context = ExecutionContext(
                 task=Task(
@@ -38,7 +49,9 @@ class ChatService(QThread):
                     full_text += chunk
                     self.chunk_received.emit(full_text)
                     
-            asyncio.run(run_async())
+            loop.run_until_complete(run_async())
+            loop.close()
+            
             self.response_finished.emit("Done")
         except Exception as e:
             self.error_occurred.emit(str(e))

@@ -96,9 +96,18 @@ class OrchestratorAgent(BaseAgent):
         )
 
     def evaluate(self, context: ExecutionContext) -> float:
-        # The Orchestrator is the default entry point for any multi-step or general task.
-        # It yields a high score to ensure it overrides specialized agents for complex routing.
-        return 0.95
+        task_desc = context.task.description.lower() if context.task else ""
+        if context.memory and not task_desc:
+            task_desc = context.memory[-1].get("content", "").lower()
+            
+        keywords = ["fix", "add", "test", "implement", "debug", "refactor", "create", "write", "change", "update"]
+        if any(k in task_desc for k in keywords):
+            return 0.85
+            
+        if len(task_desc.split()) > 10:
+            return 0.85
+            
+        return 0.2
 
     def plan(self, context: ExecutionContext) -> Dict[str, Any]:
         return {
@@ -120,6 +129,8 @@ class OrchestratorAgent(BaseAgent):
         
         yield f"Planner created ExecutionGraph with {len(graph.steps)} steps (Intent: {graph.intent}).\n"
         
+        any_step_success = False
+        
         for step in graph.steps:
             yield f"\n[Step] Agent: {step.agent_name} | Action: {step.action_type}\n"
             
@@ -131,6 +142,7 @@ class OrchestratorAgent(BaseAgent):
                         if not chunk.endswith('\n'):
                             chunk += '\n'
                         yield f"  [Coder] {chunk}"
+                    any_step_success = True
                 except ImportError:
                     yield f"  [Error] CodingAgent could not be loaded.\n"
             elif step.agent_name == "researcher":
@@ -147,6 +159,7 @@ class OrchestratorAgent(BaseAgent):
                         if not res.endswith('\n'):
                             res += '\n'
                         yield f"  [Researcher] {res}"
+                    any_step_success = True
                 except ImportError:
                     yield f"  [Error] ResearchAgent could not be loaded.\n"
             elif step.agent_name == "tester":
@@ -157,6 +170,7 @@ class OrchestratorAgent(BaseAgent):
                         if not chunk.endswith('\n'):
                             chunk += '\n'
                         yield f"  [Tester] {chunk}"
+                    any_step_success = True
                 except ImportError:
                     yield f"  [Error] TesterAgent could not be loaded.\n"
             elif step.agent_name == "reviewer":
@@ -167,9 +181,15 @@ class OrchestratorAgent(BaseAgent):
                         if not chunk.endswith('\n'):
                             chunk += '\n'
                         yield f"  [Reviewer] {chunk}"
+                    any_step_success = True
                 except ImportError:
                     yield f"  [Error] ReviewerAgent could not be loaded.\n"
             else:
                 yield f"  [Warning] Unknown agent '{step.agent_name}'. Skipping.\n"
                 
-        yield "\nOrchestrator execution completed successfully.\n"
+        if not graph.steps:
+            yield "\nOrchestrator execution completed, but no steps were generated.\n"
+        elif any_step_success:
+            yield "\nOrchestrator execution completed successfully.\n"
+        else:
+            yield "\nOrchestrator execution failed: All sub-agent steps failed or produced no output.\n"
