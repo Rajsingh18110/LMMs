@@ -1343,24 +1343,43 @@ lmms update
                                 messages.append({"role": "user", "content": "System Note: You are about to reach the maximum number of tool iterations (8/8). If you have not solved the problem, please output a final summary of what you tried and the current errors without calling more tools."})
 
                             first_line = None
-                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model...[/dim]", spinner="lmms_wave"):
-                                resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
-                                    "model_name": current_model,
-                                    "messages": clean_messages,
-                                    "stream": True,
-                                    "temperature": req_temp,
-                                    "top_p": req_top_p,
-                                    "repetition_penalty": 1.15,
-                                    "mode": current_mode.strip("/"),
-                                    "think": True # Always get the stream to prevent connection hanging, we hide it client-side if needed
-                                }, stream=True, timeout=(10, 60))
-                                resp.raise_for_status()
+                            import threading
+                            import time
+                            
+                            running_status = True
+                            status_start_time = time.time()
+                            
+                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model... (0s)[/dim]", spinner="lmms_wave") as status:
+                                def update_status():
+                                    while running_status:
+                                        elapsed = int(time.time() - status_start_time)
+                                        status.update(f"[bold blue]{current_model}:[/bold blue] [dim]Waiting for model... ({elapsed}s)[/dim]")
+                                        time.sleep(1)
+                                        
+                                t_status = threading.Thread(target=update_status, daemon=True)
+                                t_status.start()
                                 
-                                chunks_iterator = resp.iter_lines()
-                                for line in chunks_iterator:
-                                    if line:
-                                        first_line = line
-                                        break
+                                try:
+                                    resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
+                                        "model_name": current_model,
+                                        "messages": clean_messages,
+                                        "stream": True,
+                                        "temperature": req_temp,
+                                        "top_p": req_top_p,
+                                        "repetition_penalty": 1.15,
+                                        "mode": current_mode.strip("/"),
+                                        "think": True
+                                    }, stream=True, timeout=(10, 120))
+                                    resp.raise_for_status()
+                                    
+                                    chunks_iterator = resp.iter_lines()
+                                    for line in chunks_iterator:
+                                        if line:
+                                            first_line = line
+                                            break
+                                finally:
+                                    running_status = False
+                                    t_status.join(timeout=1.0)
                         except requests.exceptions.ReadTimeout:
                             console.print(f"\n[bold red]❌ Engine Error: Model took too long to load or server died unexpectedly.[/bold red]")
                             break
