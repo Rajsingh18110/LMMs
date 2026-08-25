@@ -10,14 +10,23 @@ class HuggingFaceProvider(ProviderContract):
         if os.path.exists(hf_dir):
             for repo_dir in os.listdir(hf_dir):
                 if repo_dir.startswith("models--"):
+                    repo_path = os.path.join(hf_dir, repo_dir)
+                    has_gguf = False
+                    for root, _, files in os.walk(repo_path):
+                        if any(f.endswith(".gguf") for f in files):
+                            has_gguf = True
+                            break
+                    if not has_gguf:
+                        continue
+                        
                     parts = repo_dir.split("--")
                     if len(parts) >= 3:
                         model_id = f"{parts[1]}/{parts[2]}"
                         manifest = {
                             "id": model_id,
                             "provider": "Hugging Face",
-                            "path": os.path.join(hf_dir, repo_dir),
-                            "format": "Unknown",
+                            "path": repo_path,
+                            "format": "GGUF",
                             "source": "Imported (HF Cache)"
                         }
                         manifests.append(manifest)

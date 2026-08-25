@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 
 from .lmstudio.provider import LMStudioProvider
 from .huggingface.provider import HuggingFaceProvider
+from .native.provider import NativeProvider
 from lmms.backend.services.core_services.services.events import event_bus
 
 class ProviderManager:
@@ -11,13 +12,34 @@ class ProviderManager:
     def __init__(self, registry):
         self.registry = registry
         self.providers = [
-
+            NativeProvider(),
             LMStudioProvider(),
             HuggingFaceProvider()
         ]
 
     def scan_local_providers(self) -> int:
         """Scans all registered providers and adds them to the registry."""
+        import os
+        
+        # 1. Cleanup ghost entries from registry first
+        models = self.registry.load_models()
+        keys_to_delete = []
+        for mid, info in models.items():
+            path = info.get("path", "")
+            if not path or not os.path.exists(path):
+                keys_to_delete.append(mid)
+            elif info.get("source") == "Imported (HF Cache)":
+                has_gguf = False
+                for root, _, files in os.walk(path):
+                    if any(f.endswith(".gguf") for f in files):
+                        has_gguf = True
+                        break
+                if not has_gguf:
+                    keys_to_delete.append(mid)
+                    
+        for mid in keys_to_delete:
+            self.registry.remove_model(mid)
+            
         added_count = 0
         for provider in self.providers:
             try:
