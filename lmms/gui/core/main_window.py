@@ -72,11 +72,14 @@ class MainWindow(QMainWindow):
         self.heartbeat_timer.start(5000)
 
     def ping_engine(self):
+        import threading
         import requests
-        try:
-            requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
-        except Exception:
-            pass
+        def ping():
+            try:
+                requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
+            except Exception:
+                pass
+        threading.Thread(target=ping, daemon=True).start()
 
 
     def init_ui(self):

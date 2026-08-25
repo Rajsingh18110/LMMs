@@ -82,6 +82,7 @@ class LlamaCppRuntime(RuntimeContract):
         mem_gb = max(vram_gb, ram_gb)
         
         if mem_gb > 0:
+            print(f"\n[TIMING LOG] Detected file_size_gb: {file_size_gb:.2f}GB, System RAM: {ram_gb:.2f}GB, VRAM: {vram_gb:.2f}GB, mem_gb limit used: {mem_gb:.2f}GB")
             if file_size_gb > mem_gb * 1.5:
                 import time
                 print(f"\n\033[91mWARNING: You are attempting to run a massive model ({file_size_gb:.1f}GB) on a machine with limited memory ({mem_gb:.1f}GB).\033[0m")
@@ -103,6 +104,8 @@ class LlamaCppRuntime(RuntimeContract):
         current_ctx = safe_n_ctx
         model_instance = None
         first_try = True
+        attempt = 1
+        import time
         while current_ctx >= 512 or first_try:
             try:
                 kwargs = {
@@ -121,12 +124,18 @@ class LlamaCppRuntime(RuntimeContract):
                     kwargs["chat_format"] = "chatml"
                 elif "llama" in os.path.basename(full_path).lower():
                     kwargs["chat_format"] = "llama-2"
-                else:
                     kwargs["chat_format"] = "chatml"
                 
+                print(f"[TIMING LOG] Attempt {attempt}: Loading Llama with n_ctx={current_ctx}, n_gpu_layers=-1...")
+                start_time = time.time()
                 model_instance = Llama(**kwargs)
+                end_time = time.time()
+                print(f"[TIMING LOG] Attempt {attempt} SUCCEEDED in {end_time - start_time:.2f}s")
                 break
             except Exception as e:
+                end_time = time.time()
+                print(f"[TIMING LOG] Attempt {attempt} FAILED in {end_time - start_time:.2f}s: {e}")
+                attempt += 1
                 err_msg = str(e).lower()
                 if "llama_context" in err_msg or "kv cache" in err_msg or "memory" in err_msg or "alloc" in err_msg:
                     if current_ctx == 0:
@@ -256,10 +265,25 @@ class LlamaCppRuntime(RuntimeContract):
         fallback_stops = getattr(self, "_model_fallback_stops", {}).get(model_name)
         stop_tokens = fallback_stops if fallback_stops else []
         
-        # N-gram repetition safety net config (avoid hardcoding too tightly)
-        # We read from context for configurability, defaulting to user's requested (5 tokens, 4 repeats)
-        ngram_window = context.get("ngram_window", 5)
-        max_repeats = context.get("ngram_repeats", 4)
+        # Determine model file size for dynamic thresholds
+        try:
+            model_path = active_model.model_path
+            size_gb = os.path.getsize(model_path) / (1024**3)
+            if size_gb < 2.0:
+                default_repeats = 6
+                default_window = 4
+            elif size_gb < 8.0:
+                default_repeats = 5
+                default_window = 5
+            else:
+                default_repeats = 4
+                default_window = 5
+        except Exception:
+            default_repeats = 4
+            default_window = 5
+            
+        ngram_window = context.get("ngram_window", default_window)
+        max_repeats = context.get("ngram_repeats", default_repeats)
 
         if stream:
             def stream_response():
@@ -319,10 +343,23 @@ class LlamaCppRuntime(RuntimeContract):
                                             is_rep = False
                                             break
                                     if is_rep:
-                                        is_repeating = True
-                                        break
+                                        window_str = "".join(window)
+                                        import string
+                                        is_only_punct = all(c in string.punctuation or c.isspace() for c in window_str)
+                                        
+                                        if len(window_str) < 15 or is_only_punct:
+                                            # False positive due to short/punctuation sequence
+                                            is_rep = False
+                                        else:
+                                            is_repeating = True
+                                            break
 
                             if is_repeating:
+                                print(f"\n--- REPETITION SAFETY-NET TRIGGERED ---")
+                                print(f"Recent Tokens Array: {recent_tokens}")
+                                print(f"Matched Window Size: {w}")
+                                print(f"Accumulated Text snippet: {accumulated_text[-200:]}")
+                                print("---------------------------------------\n")
                                 print("Model repetition detected, generation stopped early.")
                                 yield {"message": {"role": "assistant", "content": "\n\n[System: Model repeated itself, please rephrase your question or switch model.]"}}
                                 break

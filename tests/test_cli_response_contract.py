@@ -55,7 +55,7 @@ def test_qwen3_models_use_qwen_chat_format_fallback():
 
     runtime = LlamaCppRuntime()
 
-    assert runtime._detect_chat_format("/tmp/Qwen3-8B-Q4_K_M.gguf") == "qwen2"
-    assert runtime._detect_chat_format("/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf") == "qwen2"
+    assert runtime._detect_chat_format("/tmp/Qwen3-8B-Q4_K_M.gguf") == "qwen"
+    assert runtime._detect_chat_format("/tmp/qwen2.5-1.5b-instruct-q4_k_m.gguf") == "qwen"
     assert runtime._detect_chat_format("/tmp/Llama-3.1-8B-Instruct.gguf") == "llama-2"
     assert runtime._detect_chat_format("/tmp/custom-model.gguf") is None

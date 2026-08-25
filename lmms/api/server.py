@@ -14,7 +14,45 @@ from lmms.engine.manager import engine_manager
 app = FastAPI(title="LMMs Engine API")
 
 import time
+import signal
+import threading
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import StreamingResponse
+
 LAST_PING_TIME = time.time()
+ACTIVE_REQUESTS = 0
+REQUEST_LOCK = threading.Lock()
+
+class ActiveRequestsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        global ACTIVE_REQUESTS
+        with REQUEST_LOCK:
+            ACTIVE_REQUESTS += 1
+            
+        try:
+            response = await call_next(request)
+            if isinstance(response, StreamingResponse):
+                original_body = response.body_iterator
+                async def wrapped_body():
+                    try:
+                        async for chunk in original_body:
+                            yield chunk
+                    finally:
+                        global ACTIVE_REQUESTS
+                        with REQUEST_LOCK:
+                            ACTIVE_REQUESTS -= 1
+                response.body_iterator = wrapped_body()
+                return response
+            else:
+                with REQUEST_LOCK:
+                    ACTIVE_REQUESTS -= 1
+                return response
+        except Exception:
+            with REQUEST_LOCK:
+                ACTIVE_REQUESTS -= 1
+            raise
+
+app.add_middleware(ActiveRequestsMiddleware)
 
 @app.post("/v1/internal/ping")
 def ping():
@@ -25,10 +63,13 @@ def ping():
 async def heartbeat_monitor():
     while True:
         await asyncio.sleep(5)
-        # If no ping in 15 seconds, exit gracefully
-        if time.time() - LAST_PING_TIME > 15:
-            print("[Engine] No active clients. Shutting down to save memory.")
-            os._exit(0)
+        # If no ping in 30 seconds, and no active requests, exit gracefully
+        with REQUEST_LOCK:
+            active_count = ACTIVE_REQUESTS
+            
+        if active_count == 0 and (time.time() - LAST_PING_TIME > 30):
+            print("[Engine] No active clients. Shutting down gracefully to save memory.")
+            os.kill(os.getpid(), signal.SIGTERM)
 
 @app.on_event("startup")
 async def startup_event():
@@ -55,6 +96,9 @@ class ChatRequest(BaseModel):
     stream: bool = True
     mode: Optional[str] = "deep"
     think: Optional[bool] = True
+    temperature: Optional[float] = 0.8
+    top_p: Optional[float] = 0.95
+    repetition_penalty: Optional[float] = 1.15
 
 class DoctorRequest(BaseModel):
     fix: bool = False
@@ -558,7 +602,7 @@ async def chat_completions(req: ChatRequest):
             def producer():
                 try:
                     generator = runtime.generate(
-                        {"messages": req.messages, "mode": req.mode, "think": req.think}, 
+                        {"messages": req.messages, "mode": req.mode, "think": req.think, "model_name": req.model_name, "temperature": req.temperature, "top_p": req.top_p, "repetition_penalty": req.repetition_penalty}, 
                         stream=True
                     )
                     for chunk in generator:
@@ -586,7 +630,7 @@ async def chat_completions(req: ChatRequest):
         # Run synchronous generate in a thread to avoid blocking the event loop
         response = await asyncio.to_thread(
             runtime.generate, 
-            {"messages": req.messages, "mode": req.mode, "think": req.think}, 
+            {"messages": req.messages, "mode": req.mode, "think": req.think, "model_name": req.model_name, "temperature": req.temperature, "top_p": req.top_p, "repetition_penalty": req.repetition_penalty}, 
             stream=False
         )
         return response

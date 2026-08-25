@@ -230,16 +230,18 @@ def run_cli():
                 pass
             time.sleep(5)
             
-    import threading
-    t = threading.Thread(target=cli_heartbeat, daemon=True)
-    t.start()
 
-    
     engine_started = auto_start_engine()
     if engine_started and os.environ.get("LMMS_INTERNAL_TOKEN"):
         asyncio.run(ipc_handshake())
         
     status = "[bold green]ONLINE[/bold green]" if check_engine_health() else "[bold red]OFFLINE[/bold red]"
+    
+    if check_engine_health():
+        import threading
+        t = threading.Thread(target=cli_heartbeat, daemon=True)
+        t.start()
+
     
     # State tracking
     current_workspace = "None"
