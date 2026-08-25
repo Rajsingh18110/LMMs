@@ -84,7 +84,8 @@ class ChatPage(QWidget):
         
         from PyQt6.QtWidgets import QComboBox
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["🖥 Local: qwen3:8b", "🖥 Local: gemma4", "☁ Cloud: openai"])
+        self.refresh_models()
+        self.model_combo.currentTextChanged.connect(self.on_model_changed)
         self.model_combo.setStyleSheet("""
             QComboBox {
                 background: transparent;

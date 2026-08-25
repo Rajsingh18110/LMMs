@@ -88,6 +88,12 @@ class AgentManager:
                     # anext fallback for older Python versions
                     next_fut = anext(generator) if 'anext' in globals() or 'anext' in __builtins__ else generator.__anext__()
                     chunk = await asyncio.wait_for(next_fut, timeout=timeout_seconds)
+                    
+                    if agent.name not in ["PlainChatAgent", "ChatAgent"]:
+                        clean_chunk = chunk.replace("<think>", "").replace("</think>", "")
+                        if not clean_chunk.endswith('\n'): clean_chunk += '\n'
+                        chunk = f"<think>{clean_chunk}</think>\n"
+                        
                     yield chunk
                 except StopAsyncIteration:
                     break
