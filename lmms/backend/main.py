@@ -1474,7 +1474,7 @@ lmms update
                             continue
 
                         full_reply = "No response from AI."
-                        console.print(f"\\n[bold yellow]⚠️ {current_model}[/bold yellow]")
+                        console.print(f"\n[bold yellow]⚠️ {current_model}[/bold yellow]")
                         console.print(Markdown(full_reply))
                         reply = full_reply
                         break
