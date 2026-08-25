@@ -130,9 +130,9 @@ class ChatPage(QWidget):
         """)
         self.attach_btn.clicked.connect(self.attach_files)
         
-        self.send_btn = QPushButton("↑")
+        self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("sendBtn")
-        self.send_btn.setFixedSize(26, 26)
+        self.send_btn.setMinimumSize(60, 26)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.setStyleSheet("""
             QPushButton {
@@ -140,9 +140,9 @@ class ChatPage(QWidget):
                 color: #ffffff;
                 border-radius: 13px;
                 border: none;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
-                padding: 0px;
+                padding: 0px 10px;
             }
             QPushButton:hover {
                 background-color: #58a6ff;
@@ -302,15 +302,42 @@ class ChatPage(QWidget):
     @pyqtSlot()
     def send_message(self):
         text = self.input_field.toPlainText().strip()
-        if not text:
+        if not text and not self.attached_files:
             return
             
+        full_text = text
+        num_attached = len(self.attached_files)
+        if self.attached_files:
+            if full_text:
+                full_text += "\n\n"
+            full_text += "[Attached Files]:\n"
+            import os
+            for file_path in self.attached_files:
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        file_content = f.read()
+                        full_text += f"\n--- {os.path.basename(file_path)} ---\n{file_content}\n"
+                except Exception as e:
+                    full_text += f"\n--- {os.path.basename(file_path)} ---\n[Error reading file: {e}]\n"
+            
+            # Clear attachments after processing
+            self.attached_files.clear()
+            self.update_attachment_ui()
+            
+            # Append a UI-friendly message for the user's view
+            if text:
+                display_msg = f"{text}\n\n📎 *Attached {num_attached} files*"
+            else:
+                display_msg = f"📎 *Attached {num_attached} files*"
+        else:
+            display_msg = text
+
         self.input_field.clear()
-        self.append_message("user", text)
+        self.append_message("user", display_msg)
         self.send_btn.setEnabled(False)
         self.send_btn.setText("Thinking...")
 
-        self.chat_service.start_chat(text)
+        self.chat_service.start_chat(full_text)
 
     @pyqtSlot(str)
     def on_chunk_received(self, text):

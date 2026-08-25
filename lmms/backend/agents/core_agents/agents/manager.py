@@ -70,11 +70,11 @@ class AgentManager:
             yield "No suitable specialized agent found for this task. Falling back to general chat.\n"
             return
             
-        yield f"Routing task to {agent.name} (Confidence matched based on context)\n"
+        yield f"<think>Routing task to {agent.name} (Confidence matched based on context)\n"
         
         # Generate Plan
         plan = agent.plan(context)
-        yield f"[{agent.name} Plan]: {plan.get('strategy', 'Proceeding with default strategy')}\n"
+        yield f"[{agent.name} Plan]: {plan.get('strategy', 'Proceeding with default strategy')}</think>\n"
         
         # Execute the specialized logic
         import asyncio
@@ -105,7 +105,7 @@ class AgentManager:
         task_desc = context.task.description if context.task else "Context task"
         self.action_history._record_action(agent.name, "TASK_COMPLETED", {"task": task_desc})
         
-        yield f"\n{agent.name} finished execution."
+        yield f"\n<think>{agent.name} finished execution.</think>\n"
 
 if __name__ == "__main__":
     # Simple verification script
