@@ -129,6 +129,8 @@ class LlamaCppRuntime(RuntimeContract):
                 print(f"[TIMING LOG] Attempt {attempt}: Loading Llama with n_ctx={current_ctx}, n_gpu_layers=-1...")
                 start_time = time.time()
                 model_instance = Llama(**kwargs)
+                if "chat_format" in kwargs:
+                    model_instance.chat_format = kwargs["chat_format"]
                 end_time = time.time()
                 print(f"[TIMING LOG] Attempt {attempt} SUCCEEDED in {end_time - start_time:.2f}s")
                 break

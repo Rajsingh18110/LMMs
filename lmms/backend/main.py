@@ -1380,7 +1380,7 @@ lmms update
                                         "repetition_penalty": 1.15,
                                         "mode": current_mode.strip("/"),
                                         "think": True
-                                    }, stream=True, timeout=(10, 120))
+                                    }, stream=True, timeout=(10, 3600))
                                     resp.raise_for_status()
                                     
                                     chunks_iterator = resp.iter_lines()
