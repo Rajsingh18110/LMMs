@@ -454,6 +454,14 @@ class ModelItemDelegate(QStyledItemDelegate):
         name   = mid.split("/")[-1] if "/" in mid else mid
         dl     = m.get("downloads", 0)
         tags   = m.get("tags", [])
+        caps   = m.get("capabilities", {})
+        if isinstance(caps, list): # fallback for old HF records
+            pass 
+        else:
+            if caps.get("vision"): tags.append("Vision")
+            if caps.get("thinking"): tags.append("Thinking")
+            if caps.get("tools"): tags.append("Tools")
+            
         updated = format_relative_time(m.get("lastModified", ""))
 
         params  = next((t for t in tags if t.endswith("B") and t[:-1].replace(".","").isdigit()), "?B")
@@ -462,6 +470,15 @@ class ModelItemDelegate(QStyledItemDelegate):
             if params_match: params = params_match.group(1)
 
         quant   = next((t for t in tags if t in ("Q4_K_M","Q8_0","IQ4_NL","Q5_K_M","Q2_K")), "GGUF")
+        
+        cap_strings = []
+        if "Vision" in tags or "👁 Vision" in tags: cap_strings.append("👁 Vision")
+        if "Thinking" in tags or "🧠 Reasoning" in tags: cap_strings.append("🧠 Thinking")
+        if "Tools" in tags or "🔧 Tool Use" in tags: cap_strings.append("🔧 Tools")
+        
+        extras = "  ·  ".join(cap_strings)
+        if extras: extras = "  ·  " + extras
+        
         if dl == "Local":
             compat = "ok"
             dl_str = "Local"
@@ -502,7 +519,7 @@ class ModelItemDelegate(QStyledItemDelegate):
         painter.drawEllipse(tx, cy + 8, 6, 6)
         painter.setPen(QColor("#8b949e"))
         painter.setFont(QFont("Arial", 10))
-        painter.drawText(tx + 12, y + rect.height() - 10, f"{params}  ·  {quant}")
+        painter.drawText(tx + 12, y + rect.height() - 10, f"{params}  ·  {quant}{extras}")
 
         right_x = rect.right() - 65
         painter.setFont(QFont("Arial", 10))
@@ -768,30 +785,30 @@ class ModelBrowser(QDockWidget):
         self.downloads_list.clear()
         
         from lmms.backend.logic.manager import BackendManager
+        from lmms.backend.core.registry.model_registry import ModelRegistry
         backend = BackendManager()
         
-        # Scan and load
-        backend.provider.scan_local_providers()
-        models_dict = backend.registry.load_models()
+        # Scan and load using the unified provider manager
+        backend.provider.scan_all_models()
+        models_list = ModelRegistry.list()
         connected_models = backend.connection.get_connected_models()
 
         models = []
         seen_paths = set()
         
-        for mid, info in models_dict.items():
-            path = info.get("path")
-            if path in seen_paths:
-                continue
-            
-            source = info.get("source", "")
-            
-            # User ONLY wants to see models downloaded via LMMs in this list,
-            # hide HuggingFace cache models as it confuses them.
-            if source not in ["lmms", "Local"]:
-                continue
+        for m in models_list:
+            meta = m.get("metadata", {})
+            path = meta.get("path")
+            if path:
+                if path in seen_paths:
+                    continue
+                seen_paths.add(path)
                 
-            seen_paths.add(path)
+            source = meta.get("source", "")
+            if source not in ["lmms", "Local"] and not m.get("provider_id", "").startswith("local_native"):
+                continue
             
+            mid = m.get("id")
             state = "Downloaded"
             
             if mid in connected_models:
@@ -799,13 +816,18 @@ class ModelBrowser(QDockWidget):
 
             models.append({
                 "id": mid,
-                "modelId": mid,
+                "modelId": m.get("model_id"),
+                "title": m.get("display_name"),
                 "downloads": "Local",
-                "tags": [info.get("format", "Unknown")],
-                "source": info.get("source", "Unknown"),
-                "status": state
+                "tags": [meta.get("format", "Unknown")],
+                "lastModified": m.get("updated_at", ""),
+                "capabilities": m.get("capabilities", {}),
+                "state": state
             })
-            
+        
+        # Sort by recently updated
+        models.sort(key=lambda x: x.get("lastModified", ""), reverse=True)
+
         for m in models:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
@@ -1046,6 +1068,14 @@ class ModelDetailsTab(QWidget):
         
         tags = self.model_info.get("tags", [])
         params, arch, ctx, fmt, caps = parse_model_tags(self.repo_id, tags)
+        
+        # Inject capabilities from dict for local/custom models
+        model_caps = self.model_info.get("capabilities", {})
+        if isinstance(model_caps, dict):
+            if model_caps.get("vision") and "👁 Vision" not in caps: caps.append("👁 Vision")
+            if model_caps.get("thinking") and "🧠 Reasoning" not in caps: caps.append("🧠 Reasoning")
+            if model_caps.get("tools") and "🔧 Tool Use" not in caps: caps.append("🔧 Tool Use")
+            
         if not params or params == "?B":
             params_match = re.search(r'(\d+(?:\.\d+)?B)', desc_text)
             if params_match: params = params_match.group(1)

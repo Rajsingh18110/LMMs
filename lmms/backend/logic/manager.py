@@ -62,10 +62,10 @@ class BackendManager:
         return RegistryService()
 
     @property
-    def provider(self) -> ProviderContract:
+    def provider(self):
         if self._provider is None:
             from lmms.backend.providers.manager import ProviderManager
-            self._provider = ProviderManager(self.registry)
+            self._provider = ProviderManager()
         return self._provider
 
     @property
