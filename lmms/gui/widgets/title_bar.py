@@ -52,6 +52,13 @@ class CustomTitleBar(QWidget):
         self.btn_toggle_left.setToolTip("Toggle Left Panel")
         layout.addWidget(self.btn_toggle_left)
 
+        # Toggle Bottom Panel Button
+        # Made by markanm
+        self.btn_toggle_bottom = QPushButton("⬒")
+        self.btn_toggle_bottom.setObjectName("toggleBtn")
+        self.btn_toggle_bottom.setToolTip("Toggle Bottom Panel")
+        layout.addWidget(self.btn_toggle_bottom)
+
         # Toggle Right Panel Button
         self.btn_toggle_right = QPushButton("◨")
         self.btn_toggle_right.setObjectName("toggleBtn")

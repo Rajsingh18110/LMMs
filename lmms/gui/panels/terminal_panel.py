@@ -1,6 +1,10 @@
+# Made by markanm
 import os
 import re
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QTextEdit
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTextEdit,
+    QPushButton, QComboBox, QStackedWidget, QToolButton, QLabel, QFrame
+)
 from PyQt6.QtCore import QProcess, pyqtSlot, Qt, QProcessEnvironment
 from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont
 
@@ -28,9 +32,17 @@ class TerminalEdit(QTextEdit):
         self.process.setProcessEnvironment(env)
         
         self.process.setWorkingDirectory(os.getcwd())
-        self.process.start("bash", ["-i"])
+        
+        shell_path = os.environ.get("SHELL", "bash")
+        self.shell_name = os.path.basename(shell_path)
+        self.process.start(shell_path, ["-i"])
         
         self.readonly_pos = 0
+
+    def close_process(self):
+        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+            self.process.kill()
+            self.process.waitForFinished(100)
 
     def on_ready_read(self):
         data = self.process.readAllStandardOutput().data()
@@ -50,7 +62,6 @@ class TerminalEdit(QTextEdit):
         text = re.sub(r'\x1b\].*?(?:\x07|\x1b\\)', '', text)
         
         # Extremely basic ANSI color parser
-        # \x1b[31;1m etc
         parts = re.split(r'\x1b\[([0-9;]*)m', text)
         
         format = QTextCharFormat()
@@ -58,7 +69,6 @@ class TerminalEdit(QTextEdit):
         
         for i, part in enumerate(parts):
             if i % 2 == 1:
-                # This is a color code
                 codes = part.split(';')
                 for code in codes:
                     if code in ANSI_COLORS:
@@ -69,9 +79,7 @@ class TerminalEdit(QTextEdit):
                     elif code == '1':
                         format.setFontWeight(QFont.Weight.Bold)
             else:
-                # This is text
                 if part:
-                    # Filter out other escape sequences we don't support
                     clean_part = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', part)
                     cursor.insertText(clean_part, format)
                     
@@ -93,15 +101,12 @@ class TerminalEdit(QTextEdit):
             cursor.movePosition(QTextCursor.MoveOperation.End)
             self.setTextCursor(cursor)
             
-            # Get the command user typed
             cursor.setPosition(self.readonly_pos, QTextCursor.MoveMode.KeepAnchor)
             cmd = cursor.selectedText().replace('\u2029', '\n').replace('\u00a0', ' ')
             
-            # Remove the locally typed command to avoid duplication because interactive bash echoes it back
             cursor.removeSelectedText()
             self.setTextCursor(cursor)
             
-            # Send to process
             self.process.write((cmd + "\n").encode('utf-8'))
             return
 
@@ -109,8 +114,10 @@ class TerminalEdit(QTextEdit):
 
 
 class TerminalPanel(QWidget):
-    def __init__(self):
+    def __init__(self, main_window=None):
         super().__init__()
+        self.main_window = main_window
+        self.terminals = []
         self.init_ui()
         
     def init_ui(self):
@@ -127,7 +134,7 @@ class TerminalPanel(QWidget):
                 color: #8b949e;
                 padding: 6px 15px;
                 border: none;
-                font-size: 12px;
+                font-size: 11px;
                 text-transform: uppercase;
                 border-bottom: 1px solid transparent;
             }
@@ -143,53 +150,179 @@ class TerminalPanel(QWidget):
         # Problems Tab
         self.problems_text = QTextEdit()
         self.problems_text.setReadOnly(True)
-        self.problems_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.problems_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
         self.problems_text.setPlainText("No problems have been detected in the workspace.")
         self.tabs.addTab(self.problems_text, "Problems")
         
         # Output Tab
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
-        self.output_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.output_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
         self.tabs.addTab(self.output_text, "Output")
         
         # Debug Console Tab
         self.debug_text = QTextEdit()
         self.debug_text.setReadOnly(True)
-        self.debug_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.debug_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
         self.tabs.addTab(self.debug_text, "Debug Console")
         
         # Terminal Tab
-        self.terminal_text = TerminalEdit()
-        self.tabs.addTab(self.terminal_text, "Terminal")
+        self.terminal_container = QWidget()
+        terminal_layout = QVBoxLayout(self.terminal_container)
+        terminal_layout.setContentsMargins(0,0,0,0)
+        terminal_layout.setSpacing(0)
+        
+        self.terminal_stack = QStackedWidget()
+        terminal_layout.addWidget(self.terminal_stack)
+        self.tabs.addTab(self.terminal_container, "Terminal")
         
         # Ports Tab
         self.ports_text = QTextEdit()
         self.ports_text.setReadOnly(True)
-        self.ports_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.ports_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
         self.ports_text.setPlainText("No forwarded ports.")
         self.tabs.addTab(self.ports_text, "Ports")
         
-        # Set Terminal as default selected tab
-        self.tabs.setCurrentIndex(3)
+        # --- Corner Widget Toolbars ---
+        self.corner_widget = QStackedWidget()
+        self.tabs.setCornerWidget(self.corner_widget)
         
-        # Add "Send all problems to AI" button to the corner of the tab widget
-        from PyQt6.QtWidgets import QPushButton
+        btn_style = """
+            QToolButton { background: transparent; color: #c9d1d9; border: none; font-size: 14px; padding: 4px 6px; }
+            QToolButton:hover { background: #30363d; border-radius: 4px; }
+        """
+        
+        # 1. Problems Toolbar
+        problems_tb = QWidget()
+        p_layout = QHBoxLayout(problems_tb)
+        p_layout.setContentsMargins(0, 0, 15, 0)
+        p_layout.setSpacing(10)
         self.btn_send_ai = QPushButton("✨ Send all problems to AI")
         self.btn_send_ai.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send_ai.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #58a6ff;
-                border: none;
-                font-size: 11px;
-                padding: 4px 8px;
-            }
-            QPushButton:hover {
-                color: #79c0ff;
-                text-decoration: underline;
-            }
+            QPushButton { background: transparent; color: #58a6ff; border: none; font-size: 11px; padding: 4px 8px; }
+            QPushButton:hover { color: #79c0ff; text-decoration: underline; }
         """)
-        self.tabs.setCornerWidget(self.btn_send_ai)
+        p_layout.addWidget(self.btn_send_ai)
+        
+        self.add_window_controls(p_layout, btn_style)
+        self.corner_widget.addWidget(problems_tb)
+        
+        # 2. Terminal Toolbar
+        terminal_tb = QWidget()
+        t_layout = QHBoxLayout(terminal_tb)
+        t_layout.setContentsMargins(0, 0, 15, 0)
+        t_layout.setSpacing(4)
+        
+        self.term_selector = QComboBox()
+        self.term_selector.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.term_selector.setStyleSheet("""
+            QComboBox { background: transparent; color: #c9d1d9; border: none; font-size: 11px; padding: 2px 5px; }
+            QComboBox::drop-down { border: none; }
+            QComboBox:hover { background: #30363d; border-radius: 4px; }
+        """)
+        self.term_selector.currentIndexChanged.connect(self.switch_terminal)
+        t_layout.addWidget(self.term_selector)
+        
+        self.btn_new_term = QToolButton(); self.btn_new_term.setText("＋"); self.btn_new_term.setStyleSheet(btn_style); self.btn_new_term.setToolTip("New Terminal"); self.btn_new_term.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_new_term.clicked.connect(self.add_new_terminal)
+        
+        self.btn_kill_term = QToolButton(); self.btn_kill_term.setText("🗑"); self.btn_kill_term.setStyleSheet(btn_style); self.btn_kill_term.setToolTip("Kill Terminal"); self.btn_kill_term.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_kill_term.clicked.connect(self.kill_current_terminal)
+        
+        t_layout.addWidget(self.btn_new_term)
+        t_layout.addWidget(self.btn_kill_term)
+        
+        div = QFrame(); div.setFrameShape(QFrame.Shape.VLine); div.setStyleSheet("color: #30363d; margin: 4px 6px;")
+        t_layout.addWidget(div)
+        
+        self.add_window_controls(t_layout, btn_style)
+        self.corner_widget.addWidget(terminal_tb)
+        
+        # 3. Default Toolbar (for Output, Debug Console, Ports)
+        default_tb = QWidget()
+        d_layout = QHBoxLayout(default_tb)
+        d_layout.setContentsMargins(0, 0, 15, 0)
+        d_layout.setSpacing(4)
+        self.add_window_controls(d_layout, btn_style)
+        self.corner_widget.addWidget(default_tb)
+        
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        
+        # Initialize the first terminal
+        self.add_new_terminal()
         
         layout.addWidget(self.tabs)
+        self.tabs.setCurrentIndex(3) # Set to Terminal
+        self.on_tab_changed(3)
+        
+    def add_window_controls(self, layout, btn_style):
+        btn_max = QToolButton(); btn_max.setText("⛶"); btn_max.setStyleSheet(btn_style); btn_max.setToolTip("Maximize Panel"); btn_max.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_max.clicked.connect(self.maximize_panel)
+        
+        btn_close = QToolButton(); btn_close.setText("✕"); btn_close.setStyleSheet(btn_style); btn_close.setToolTip("Close Panel"); btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.clicked.connect(self.close_panel)
+        
+        layout.addWidget(btn_max)
+        layout.addWidget(btn_close)
+
+    def add_new_terminal(self):
+        term = TerminalEdit()
+        self.terminals.append(term)
+        self.terminal_stack.addWidget(term)
+        
+        idx = len(self.terminals)
+        name = term.shell_name
+        self.term_selector.addItem(f">_  {name}")
+        self.term_selector.setCurrentIndex(idx - 1)
+        
+    def switch_terminal(self, index):
+        if 0 <= index < len(self.terminals):
+            self.terminal_stack.setCurrentIndex(index)
+            
+    def kill_current_terminal(self):
+        idx = self.term_selector.currentIndex()
+        if 0 <= idx < len(self.terminals):
+            term = self.terminals.pop(idx)
+            term.close_process()
+            self.terminal_stack.removeWidget(term)
+            term.deleteLater()
+            self.term_selector.removeItem(idx)
+            
+            if not self.terminals:
+                self.add_new_terminal()
+                
+    def on_tab_changed(self, index):
+        title = self.tabs.tabText(index)
+        if title == "Problems":
+            self.corner_widget.setCurrentIndex(0)
+        elif title == "Terminal":
+            self.corner_widget.setCurrentIndex(1)
+        else:
+            self.corner_widget.setCurrentIndex(2)
+            
+    def maximize_panel(self):
+        if self.main_window and hasattr(self.main_window, 'central_splitter'):
+            splitter = self.main_window.central_splitter
+            sizes = splitter.sizes()
+            if not sizes:
+                return
+            # If editor is visible (size > 50), maximize panel
+            if sizes[0] > 50:
+                self._old_sizes = sizes
+                splitter.setSizes([0, sum(sizes)])
+            else:
+                if hasattr(self, '_old_sizes'):
+                    splitter.setSizes(self._old_sizes)
+                else:
+                    total = sum(sizes)
+                    splitter.setSizes([int(total * 0.7), int(total * 0.3)])
+                    
+    def close_panel(self):
+        if self.main_window and hasattr(self.main_window, 'central_splitter'):
+            splitter = self.main_window.central_splitter
+            sizes = splitter.sizes()
+            if not sizes:
+                return
+            self._old_sizes = sizes
+            splitter.setSizes([sum(sizes), 0])

@@ -1,3 +1,4 @@
+# Made by markanm
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QStackedWidget, QPushButton, QLabel, QSplitter,
@@ -125,9 +126,14 @@ class MainWindow(QMainWindow):
         self.inner_window = QMainWindow()
         self.inner_window.setDockOptions(QMainWindow.DockOption.AllowNestedDocks | QMainWindow.DockOption.AnimatedDocks)
         
-        # Central Widget: Multi-tab Editor
+        # Central Widget: Multi-tab Editor and Terminal in a Splitter
         self.editor_manager = EditorManager()
-        self.inner_window.setCentralWidget(self.editor_manager)
+        
+        self.central_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.central_splitter.setChildrenCollapsible(False)
+        self.central_splitter.addWidget(self.editor_manager)
+        
+        self.inner_window.setCentralWidget(self.central_splitter)
 
         # Docks Dictionary
         self.docks = {}
@@ -323,19 +329,12 @@ class MainWindow(QMainWindow):
             Qt.Orientation.Horizontal
         )
         
-        # 5. Terminal/Panel Dock
-        self.terminal_dock = QDockWidget("Panel", self.inner_window)
-        self.terminal_dock.setObjectName("TerminalDock")
-        self.terminal_panel = TerminalPanel()
-        self.terminal_dock.setWidget(self.terminal_panel)
-        self.terminal_dock.setTitleBarWidget(QWidget()) # Hide native dock title bar for cleaner look
-        self.docks["Panel"] = self.terminal_dock
+        # 5. Terminal/Panel (Now inside the central splitter)
+        self.terminal_panel = TerminalPanel(self)
+        self.central_splitter.addWidget(self.terminal_panel)
         
-        # Add Terminal to bottom
-        self.inner_window.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.terminal_dock)
-        
-        # Set default height for bottom dock
-        self.inner_window.resizeDocks([self.terminal_dock], [250], Qt.Orientation.Vertical)
+        # Set default sizes for the splitter (e.g., 70% editor, 30% terminal)
+        self.central_splitter.setSizes([700, 300])
 
         # Sidebar Buttons
         self.nav_buttons = {}
@@ -431,6 +430,7 @@ class MainWindow(QMainWindow):
         
         # Connect Toggles
         self.title_bar.btn_toggle_left.clicked.connect(self.toggle_left_panel)
+        self.title_bar.btn_toggle_bottom.clicked.connect(self.toggle_bottom_panel)
         self.title_bar.btn_toggle_right.clicked.connect(self.toggle_right_panel)
 
         container_widget = QWidget()
@@ -468,14 +468,6 @@ class MainWindow(QMainWindow):
                 self.nav_buttons["Explorer"].setChecked(True)
 
     def toggle_right_panel(self):
-        if self.chat_dock.isVisible():
-            self.chat_dock.hide()
-            if "Chats" in self.nav_buttons:
-                self.nav_buttons["Chats"].setChecked(False)
-        else:
-            self.chat_dock.show()
-            self.chat_dock.raise_()
-            if "Chats" in self.nav_buttons:
                 self.nav_buttons["Chats"].setChecked(True)
 
     def on_editor_tab_changed(self, index):
@@ -735,3 +727,21 @@ class MainWindow(QMainWindow):
                 self.editor_manager.close_tab(0)
                 
         super().closeEvent(event)
+
+    def toggle_bottom_panel(self):
+        if not hasattr(self, 'central_splitter'):
+            return
+            
+        sizes = self.central_splitter.sizes()
+        if not sizes:
+            return
+            
+        if sizes[1] > 0: # Panel is visible, hide it
+            self._old_splitter_sizes = sizes
+            self.central_splitter.setSizes([sum(sizes), 0])
+        else: # Panel is hidden, show it
+            if hasattr(self, '_old_splitter_sizes') and self._old_splitter_sizes[1] > 0:
+                self.central_splitter.setSizes(self._old_splitter_sizes)
+            else:
+                total = sum(sizes)
+                self.central_splitter.setSizes([int(total * 0.7), int(total * 0.3)])
