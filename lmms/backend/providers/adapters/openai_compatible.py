@@ -12,31 +12,80 @@ class OpenAICompatibleRuntime(ModelRuntime):
         self._cancel = False
 
     async def generate(self, request: GenerationRequest) -> GenerationEvent:
-        # In full implementation, this will do the non-streaming REST call.
-        # For Phase 1, we just return a skeleton event.
-        return GenerationEvent(
-            type="generation_completed",
-            content="[Skeleton Response]",
-            usage=None
-        )
+        messages = []
+        for m in request.messages:
+            messages.append({"role": m.role, "content": m.content})
+            
+        payload = {
+            "model": request.model_id,
+            "messages": messages,
+        }
+        if request.temperature is not None: payload["temperature"] = request.temperature
+        if request.max_tokens is not None: payload["max_tokens"] = request.max_tokens
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        b_url = self.base_url if self.base_url.endswith("/v1") else f"{self.base_url}/v1"
+        url = f"{b_url}/chat/completions"
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, headers=headers, timeout=60.0)
+            resp.raise_for_status()
+            data = resp.json()
+            content = data["choices"][0]["message"].get("content", "")
+            return GenerationEvent(
+                type="generation_completed",
+                content=content,
+                usage=None # Parse usage later if needed
+            )
 
     async def stream(self, request: GenerationRequest) -> AsyncGenerator[GenerationEvent, None]:
-        # Skeleton for streaming response
         self._cancel = False
         yield GenerationEvent(type="generation_started")
         
-        # Real implementation would make httpx stream request here
-        # parsing `data: {...}` lines for content, reasoning, usage
-        
-        if self._cancel:
-            yield GenerationEvent(type="generation_cancelled")
-            return
+        messages = []
+        for m in request.messages:
+            messages.append({"role": m.role, "content": m.content})
             
-        yield GenerationEvent(type="content_delta", content="[Skeleton Stream Content]")
+        payload = {
+            "model": request.model_id,
+            "messages": messages,
+            "stream": True
+        }
+        if request.temperature is not None: payload["temperature"] = request.temperature
+        if request.max_tokens is not None: payload["max_tokens"] = request.max_tokens
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        b_url = self.base_url if self.base_url.endswith("/v1") else f"{self.base_url}/v1"
+        url = f"{b_url}/chat/completions"
+        async with httpx.AsyncClient() as client:
+            async with client.stream("POST", url, json=payload, headers=headers, timeout=60.0) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if self._cancel:
+                        yield GenerationEvent(type="generation_cancelled")
+                        return
+                    if line.startswith("data: "):
+                        line = line[6:].strip()
+                        if line == "[DONE]":
+                            break
+                        if line:
+                            try:
+                                chunk = json.loads(line)
+                                delta = chunk["choices"][0].get("delta", {})
+                                if "content" in delta and delta["content"]:
+                                    yield GenerationEvent(type="content_delta", content=delta["content"])
+                            except Exception:
+                                pass
+                                
         yield GenerationEvent(type="generation_completed")
 
     async def estimate_tokens(self, request: GenerationRequest) -> int:
-        return 0
+        return sum(len(str(m.content)) // 4 for m in request.messages)
 
     def cancel(self) -> None:
         self._cancel = True
