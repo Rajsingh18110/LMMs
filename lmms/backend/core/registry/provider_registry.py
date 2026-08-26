@@ -30,8 +30,12 @@ class ProviderRegistry:
 
     @staticmethod
     def create(name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "") -> str:
-        data = ProviderRegistry._load_raw()
         p_id = str(uuid.uuid4())
+        return ProviderRegistry.create_with_id(p_id, name, p_type, base_url, api_key, webhook_url)
+
+    @staticmethod
+    def create_with_id(p_id: str, name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "") -> str:
+        data = ProviderRegistry._load_raw()
         
         # TODO: In future, integrate with OS Keychain for api_key.
         # For now we store it, but when retrieving via `get_safe()`, we mask it.

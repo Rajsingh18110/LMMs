@@ -269,12 +269,12 @@ class ChatPage(QWidget):
             saved_model_id = ConfigManager().get("chat_selected_model", "")
             idx = 0
             for i, m in enumerate(models):
-                d_name = m.get("display_name", "")
-                p_id = m.get("provider_id", "")
+                d_name = m.get("display_name") or m.get("model_id") or m.get("id", "Unknown")
+                p_id = m.get("provider_id") or m.get("provider", "Unknown")
                 full_name = f"{d_name} ({p_id})"
-                self.model_combo.addItem(full_name, userData=m["id"])
+                self.model_combo.addItem(full_name, userData=m.get("internal_id", m.get("id")))
                 
-                if m["id"] == saved_model_id:
+                if m.get("internal_id", m.get("id")) == saved_model_id:
                     idx = i
                     
             self.model_combo.setCurrentIndex(idx)

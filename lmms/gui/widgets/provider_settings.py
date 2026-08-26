@@ -40,8 +40,9 @@ class ProviderDialog(QDialog):
                 if index >= 0:
                     self.type_combo.setCurrentIndex(index)
                 self.base_url_input.setText(provider.get("base_url", ""))
-                # DO NOT show real API key, show masked one
-                self.api_key_input.setText(provider.get("api_key", ""))
+                # Clear input for edit and add placeholder
+                self.api_key_input.setText("")
+                self.api_key_input.setPlaceholderText("Leave blank to keep existing key")
                 self.webhook_input.setText(provider.get("webhook_url", ""))
                 
         btn_layout = QHBoxLayout()
@@ -88,9 +89,10 @@ class ProviderSettingsWidget(QWidget):
         
         self.list_widget = QListWidget()
         self.list_widget.setStyleSheet("""
-            QListWidget { background-color: #0d1117; border: 1px solid #30363d; border-radius: 4px; }
-            QListWidget::item { padding: 10px; border-bottom: 1px solid #21262d; }
-            QListWidget::item:selected { background-color: #1f6feb; color: white; }
+            QListWidget { background-color: #010409; border: 1px solid #30363d; border-radius: 6px; font-size: 14px;}
+            QListWidget::item { padding: 14px; border-bottom: 1px solid #21262d; color: #e6edf3;}
+            QListWidget::item:selected { background-color: #1f6feb; color: white; border-radius: 4px;}
+            QListWidget::item:hover:!selected { background-color: #161b22; }
         """)
         self.layout.addWidget(self.list_widget)
         
@@ -98,6 +100,33 @@ class ProviderSettingsWidget(QWidget):
         add_btn = QPushButton("Add Provider")
         edit_btn = QPushButton("Edit")
         del_btn = QPushButton("Delete")
+        
+        btn_style = """
+            QPushButton {
+                background-color: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+                border-radius: 6px; padding: 6px 16px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #30363d; }
+        """
+        primary_btn_style = """
+            QPushButton {
+                background-color: #238636; color: #ffffff; border: 1px solid #2ea043;
+                border-radius: 6px; padding: 6px 16px; font-weight: 600;
+            }
+            QPushButton:hover { background-color: #2ea043; }
+        """
+        danger_btn_style = """
+            QPushButton {
+                background-color: #da3633; color: #ffffff; border: 1px solid #f85149;
+                border-radius: 6px; padding: 6px 16px; font-weight: 600;
+            }
+            QPushButton:hover { background-color: #f85149; }
+        """
+        
+        add_btn.setStyleSheet(primary_btn_style)
+        edit_btn.setStyleSheet(btn_style)
+        del_btn.setStyleSheet(danger_btn_style)
+
         
         add_btn.clicked.connect(self.add_provider)
         edit_btn.clicked.connect(self.edit_provider)
