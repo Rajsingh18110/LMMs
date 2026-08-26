@@ -1,23 +1,28 @@
 """
-Extensions Panel — sidebar list + click opens a VS Code-style detail tab
-in the main editor area via editor_manager.open_custom_tab().
+Extensions Panel — VS Code-accurate sidebar + full detail tab.
+
+Sidebar list: icon · name · description · publisher · downloads · Install btn
+Detail tab:   QWebEngineView rendering a full VS Code-style extension page
 """
 import os
 import requests
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDockWidget, QLineEdit,
-    QPushButton, QListWidget, QListWidgetItem, QProgressBar, QApplication,
-    QMessageBox
+    QPushButton, QListWidget, QListWidgetItem, QProgressBar, QSizePolicy,
+    QMessageBox, QScrollArea, QFrame
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QUrl
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer
+from PyQt6.QtGui import QPixmap, QFont, QColor
 
 
-# ─── Background threads ───────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Background threads
+# ══════════════════════════════════════════════════════════════════════════════
 
 class ExtensionSearchThread(QThread):
-    results_ready = pyqtSignal(list)
+    results_ready  = pyqtSignal(list)
     error_occurred = pyqtSignal(str)
 
     def __init__(self, query):
@@ -27,17 +32,34 @@ class ExtensionSearchThread(QThread):
     def run(self):
         try:
             url = (f"https://open-vsx.org/api/-/search"
-                   f"?query={self.query}&size=20&sortBy=relevance")
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            self.results_ready.emit(resp.json().get("extensions", []))
+                   f"?query={self.query}&size=25&sortBy=relevance")
+            r = requests.get(url, timeout=10)
+            r.raise_for_status()
+            self.results_ready.emit(r.json().get("extensions", []))
         except Exception as e:
             self.error_occurred.emit(str(e))
 
 
+class IconThread(QThread):
+    """Downloads one icon; payload = (row_index, bytes)."""
+    icon_ready = pyqtSignal(int, bytes)
+
+    def __init__(self, row: int, url: str):
+        super().__init__()
+        self.row = row
+        self.url = url
+
+    def run(self):
+        try:
+            r = requests.get(self.url, timeout=6)
+            if r.ok:
+                self.icon_ready.emit(self.row, r.content)
+        except Exception:
+            pass
+
+
 class ExtensionDetailThread(QThread):
-    """Fetches full Open VSX detail JSON for one extension."""
-    detail_ready = pyqtSignal(dict)
+    detail_ready   = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
     def __init__(self, namespace, name):
@@ -47,16 +69,17 @@ class ExtensionDetailThread(QThread):
 
     def run(self):
         try:
-            url = f"https://open-vsx.org/api/{self.namespace}/{self.name}"
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            self.detail_ready.emit(resp.json())
+            r = requests.get(
+                f"https://open-vsx.org/api/{self.namespace}/{self.name}",
+                timeout=10
+            )
+            r.raise_for_status()
+            self.detail_ready.emit(r.json())
         except Exception as e:
             self.error_occurred.emit(str(e))
 
 
 class ReadmeThread(QThread):
-    """Downloads the README for an extension."""
     ready = pyqtSignal(str)
 
     def __init__(self, url):
@@ -65,341 +88,552 @@ class ReadmeThread(QThread):
 
     def run(self):
         try:
-            resp = requests.get(self.url, timeout=8)
-            if resp.ok:
-                self.ready.emit(resp.text)
+            r = requests.get(self.url, timeout=10)
+            self.ready.emit(r.text if r.ok else "")
         except Exception:
             self.ready.emit("")
 
 
-# ─── Extension Detail Tab (opens in main editor area) ────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Extension card widget (one row in the sidebar list)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class ExtensionCard(QWidget):
+    """
+    VS Code-style extension list card:
+    ┌────┬──────────────────────────────┬──────┐
+    │icon│ Name (bold)         ⬇ 56.4M  │Instal│
+    │    │ Description truncated…       │      │
+    │    │ publisher  v1.0.0            │      │
+    └────┴──────────────────────────────┴──────┘
+    """
+    ICON_SIZE = 40
+
+    def __init__(self, ext: dict, row: int, parent=None):
+        super().__init__(parent)
+        self._ext = ext
+        self.row  = row
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._build()
+
+    def _build(self):
+        ext = self._ext
+        name        = ext.get("displayName") or ext.get("name", "")
+        publisher   = ext.get("namespace", "")
+        description = ext.get("description", "")
+        version     = ext.get("version", "")
+        downloads   = int(ext.get("downloadCount", 0) or 0)
+        dl_str      = self._fmt_dl(downloads)
+        icon_url    = (ext.get("files") or {}).get("icon", "")
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(10, 8, 8, 8)
+        outer.setSpacing(10)
+
+        # ── Icon ──────────────────────────────────────────────────────────────
+        self.icon_lbl = QLabel()
+        self.icon_lbl.setFixedSize(self.ICON_SIZE, self.ICON_SIZE)
+        self.icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_lbl.setStyleSheet(
+            "background:#2d2d2d; border-radius:4px; color:#555; font-size:18px;"
+        )
+        self.icon_lbl.setText("⬜")
+        outer.addWidget(self.icon_lbl)
+
+        # ── Text block ────────────────────────────────────────────────────────
+        text_col = QVBoxLayout()
+        text_col.setSpacing(1)
+
+        # Row 1: name + downloads
+        row1 = QHBoxLayout()
+        row1.setSpacing(4)
+        name_lbl = QLabel(name)
+        name_font = QFont()
+        name_font.setBold(True)
+        name_font.setPointSize(9)
+        name_lbl.setFont(name_font)
+        name_lbl.setStyleSheet("color:#e6edf3; background:transparent;")
+        row1.addWidget(name_lbl, 1)
+
+        dl_lbl = QLabel(f"⬇ {dl_str}")
+        dl_lbl.setStyleSheet("color:#8b949e; font-size:10px; background:transparent;")
+        dl_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row1.addWidget(dl_lbl)
+        text_col.addLayout(row1)
+
+        # Row 2: description
+        short_desc = description[:72] + ("…" if len(description) > 72 else "")
+        desc_lbl = QLabel(short_desc)
+        desc_lbl.setStyleSheet("color:#9e9e9e; font-size:11px; background:transparent;")
+        desc_lbl.setWordWrap(False)
+        text_col.addWidget(desc_lbl)
+
+        # Row 3: publisher · version
+        pub_lbl = QLabel(f"{publisher}  v{version}")
+        pub_lbl.setStyleSheet("color:#6e7681; font-size:10px; background:transparent;")
+        text_col.addWidget(pub_lbl)
+
+        outer.addLayout(text_col, 1)
+
+        # ── Install button ─────────────────────────────────────────────────────
+        self.btn_install = QPushButton("Install")
+        self.btn_install.setFixedSize(60, 22)
+        self.btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_install.setStyleSheet("""
+            QPushButton {
+                background: #0e639c; color: white; border: none;
+                border-radius: 2px; font-size: 11px; font-weight: 600;
+            }
+            QPushButton:hover { background: #1177bb; }
+            QPushButton:pressed { background: #0a4f7e; }
+        """)
+        outer.addWidget(self.btn_install, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def set_icon(self, data: bytes):
+        px = QPixmap()
+        px.loadFromData(data)
+        if not px.isNull():
+            px = px.scaled(
+                self.ICON_SIZE, self.ICON_SIZE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.icon_lbl.setPixmap(px)
+            self.icon_lbl.setText("")
+
+    @staticmethod
+    def _fmt_dl(n: int) -> str:
+        if n >= 1_000_000:
+            return f"{n/1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n/1_000:.0f}K"
+        return str(n)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Extension Detail Tab  (QWebEngineView opened in main editor)
+# ══════════════════════════════════════════════════════════════════════════════
 
 class ExtensionDetailTab(QWebEngineView):
-    """
-    A QWebEngineView that renders a VS Code-style extension detail page.
-    It starts with the search-result summary, then enriches itself with
-    the full Open VSX detail JSON once fetched.
-    """
-
-    LOADING_HTML = """
-    <html><body style="background:#1e1e1e;color:#ccc;font-family:sans-serif;
-                        display:flex;align-items:center;justify-content:center;
-                        height:100vh;margin:0;">
-      <div style="text-align:center">
-        <div style="font-size:32px;margin-bottom:12px">⏳</div>
-        <p style="color:#888">Loading extension details…</p>
-      </div>
-    </body></html>
-    """
+    """Full VS Code-style extension detail page rendered in a WebEngine tab."""
 
     def __init__(self, ext: dict, parent=None):
         super().__init__(parent)
-        self._ext = ext
+        self._ext   = ext
         self._detail = {}
-        self._readme_html = ""
-        self.setHtml(self.LOADING_HTML)
+        self._readme = ""
         self.setProperty("is_custom", True)
-        ns = ext.get("namespace", "")
+        ns   = ext.get("namespace", "")
         name = ext.get("name", "")
-        identifier = f"ext:{ns}.{name}"
-        self.setProperty("identifier", identifier)
+        self.setProperty("identifier", f"ext:{ns}.{name}")
+        # Show skeleton immediately
+        self.setHtml(self._skeleton_html())
+        # Fetch detail
+        self._dt = ExtensionDetailThread(ns, name)
+        self._dt.detail_ready.connect(self._on_detail)
+        self._dt.error_occurred.connect(lambda _: self._render())
+        self._dt.start()
 
-        # Fetch detail + README in background
-        self._detail_thread = ExtensionDetailThread(ns, name)
-        self._detail_thread.detail_ready.connect(self._on_detail)
-        self._detail_thread.error_occurred.connect(lambda _: self._render())
-        self._detail_thread.start()
-
-    # ── Data handlers ─────────────────────────────────────────────────────────
+    # ── data ──────────────────────────────────────────────────────────────────
 
     def _on_detail(self, detail: dict):
         self._detail = detail
-        # Kick off README fetch if available
-        readme_url = detail.get("files", {}).get("readme", "")
+        readme_url = (detail.get("files") or {}).get("readme", "")
         if readme_url:
-            self._readme_thread = ReadmeThread(readme_url)
-            self._readme_thread.ready.connect(self._on_readme)
-            self._readme_thread.start()
+            self._rt = ReadmeThread(readme_url)
+            self._rt.ready.connect(self._on_readme)
+            self._rt.start()
         else:
             self._render()
 
-    def _on_readme(self, raw: str):
-        self._readme_html = self._md_to_html(raw)
+    def _on_readme(self, text: str):
+        self._readme = text
         self._render()
 
-    # ── Markdown → HTML (minimal) ─────────────────────────────────────────────
+    # ── markdown → html ───────────────────────────────────────────────────────
 
     @staticmethod
-    def _md_to_html(md: str) -> str:
+    def _md(md: str) -> str:
         import re
-        # Headings
-        md = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', md, flags=re.M)
-        md = re.sub(r'^### (.+)$',  r'<h3>\1</h3>', md, flags=re.M)
-        md = re.sub(r'^## (.+)$',   r'<h2>\1</h2>', md, flags=re.M)
-        md = re.sub(r'^# (.+)$',    r'<h1>\1</h1>', md, flags=re.M)
-        # Bold / italic
+        # fenced code blocks
+        md = re.sub(r'```[a-z]*\n?(.*?)```', lambda m:
+            f'<pre><code>{m.group(1).strip()}</code></pre>', md, flags=re.S)
+        # headings
+        for i in range(4, 0, -1):
+            md = re.sub(r'^#{%d} (.+)$' % i, r'<h%d>\1</h%d>' % (i, i), md, flags=re.M)
+        # bold / italic
         md = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', md)
-        md = re.sub(r'\*(.+?)\*',     r'<em>\1</em>', md)
-        # Inline code
-        md = re.sub(r'`([^`]+)`', r'<code>\1</code>', md)
-        # Links  [text](url)
-        md = re.sub(r'\[([^\]]+)\]\(([^)]+)\)',
-                    r'<a href="\2" style="color:#4db2ff">\1</a>', md)
-        # Images  ![alt](url)
+        md = re.sub(r'\*(.+?)\*',     r'<em>\1</em>',         md)
+        # inline code
+        md = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', md)
+        # images before links (order matters)
         md = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)',
-                    r'<img src="\2" alt="\1" style="max-width:100%;border-radius:4px">', md)
-        # Paragraphs / newlines
-        md = re.sub(r'\n{2,}', '</p><p>', md)
-        md = md.replace('\n', '<br>')
-        return f"<p>{md}</p>"
+                    r'<img src="\2" alt="\1" style="max-width:100%;border-radius:4px;margin:6px 0">', md)
+        # links
+        md = re.sub(r'\[([^\]]+)\]\(([^)]+)\)',
+                    r'<a href="\2">\1</a>', md)
+        # horizontal rule
+        md = re.sub(r'^---+$', r'<hr>', md, flags=re.M)
+        # unordered lists
+        md = re.sub(r'^[ \t]*[-*] (.+)$', r'<li>\1</li>', md, flags=re.M)
+        md = re.sub(r'(<li>.*?</li>)+', lambda m: f'<ul>{m.group(0)}</ul>', md, flags=re.S)
+        # paragraphs
+        paragraphs = re.split(r'\n{2,}', md)
+        out = []
+        for p in paragraphs:
+            p = p.strip()
+            if not p:
+                continue
+            if p.startswith(('<h', '<ul', '<pre', '<hr', '<img')):
+                out.append(p)
+            else:
+                out.append(f'<p>{p.replace(chr(10), " ")}</p>')
+        return '\n'.join(out)
 
-    # ── Render ─────────────────────────────────────────────────────────────────
+    # ── skeleton while loading ────────────────────────────────────────────────
+
+    def _skeleton_html(self) -> str:
+        ext  = self._ext
+        name = ext.get("displayName") or ext.get("name", "")
+        return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>
+          body{{background:#1e1e1e;color:#ccc;font-family:'Segoe UI',sans-serif;margin:0;padding:28px}}
+          .pulse{{animation:pulse 1.4s ease-in-out infinite}}
+          @keyframes pulse{{0%,100%{{opacity:.6}}50%{{opacity:1}}}}
+          .bar{{background:#2d2d2d;border-radius:3px;height:14px;margin:6px 0}}
+        </style></head><body>
+        <h2 style="color:#e6edf3">{name}</h2>
+        <div class="bar pulse" style="width:60%"></div>
+        <div class="bar pulse" style="width:80%"></div>
+        <div class="bar pulse" style="width:45%"></div>
+        <p style="color:#555;margin-top:24px">Loading extension details…</p>
+        </body></html>"""
+
+    # ── full render ───────────────────────────────────────────────────────────
 
     def _render(self):
-        ext = {**self._ext, **self._detail}  # merge; detail wins on conflicts
+        ext = {**self._ext, **self._detail}
 
         name        = ext.get("displayName") or ext.get("name", "")
         namespace   = ext.get("namespace", "")
+        ext_name    = ext.get("name", "")
         description = ext.get("description", "")
         version     = ext.get("version", "—")
-        stars       = float(ext.get("averageRating", 0) or 0)
-        downloads   = int(ext.get("downloadCount", 0) or 0)
-        timestamp   = (ext.get("timestamp", "") or "")[:10]
-        categories  = ext.get("categories", []) or []
-        tags        = ext.get("tags", []) or []
-        icon_url    = (ext.get("files", {}) or {}).get("icon", "")
-        ext_id      = f"{namespace}.{ext.get('name', '')}"
-        published   = ext.get("publishedDate", "")
-        size        = ext.get("packageSizes", {}).get("download", 0)
-        size_str    = f"{size/1024:.1f} KB" if size else "—"
+        stars       = float(ext.get("averageRating") or 0)
+        review_cnt  = int(ext.get("reviewCount") or 0)
+        downloads   = int(ext.get("downloadCount") or 0)
+        timestamp   = (ext.get("timestamp") or "")[:10]
+        published   = (ext.get("publishedDate") or "")[:10]
+        categories  = list(ext.get("categories") or [])
+        tags        = list(ext.get("tags") or [])
+        icon_url    = (ext.get("files") or {}).get("icon", "")
+        ext_id      = f"{namespace}.{ext_name}"
+        size_bytes  = (ext.get("packageSizes") or {}).get("download", 0)
+        size_str    = f"{size_bytes/1_000_000:.2f}MB" if size_bytes else "—"
 
-        star_full  = "★" * round(stars)
-        star_empty = "☆" * (5 - round(stars))
+        # stars
+        full  = round(stars)
+        s_str = "★" * full + "☆" * (5 - full)
 
-        # Category/tag pills
-        all_tags  = list(dict.fromkeys(categories + tags))[:8]
-        pills_html = " ".join(
-            f'<span style="background:#2d3139;border-radius:3px;'
-            f'padding:2px 8px;font-size:11px;color:#aab0b8">{t}</span>'
+        # downloads formatted
+        def fmt(n):
+            if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+            if n >= 1_000:     return f"{n/1_000:.0f}K"
+            return str(n)
+
+        # icon
+        icon_html = (
+            f'<img id="extIcon" src="{icon_url}" width="120" height="120"'
+            f' style="border-radius:8px;object-fit:contain"'
+            f' onerror="this.style.display=\'none\';document.getElementById(\'iconFallback\').style.display=\'flex\'">'
+            f'<div id="iconFallback" style="display:none;width:120px;height:120px;'
+            f'background:#2d2d2d;border-radius:8px;align-items:center;'
+            f'justify-content:center;font-size:48px">⬛</div>'
+            if icon_url else
+            '<div style="width:120px;height:120px;background:#2d2d2d;border-radius:8px;'
+            'display:flex;align-items:center;justify-content:center;font-size:48px">⬛</div>'
+        )
+
+        # pills
+        all_tags = list(dict.fromkeys(categories + tags))[:8]
+        pills = "".join(
+            f'<span style="background:transparent;border:1px solid #555;'
+            f'border-radius:2px;padding:1px 6px;font-size:11px;color:#aab0b8;'
+            f'margin:2px 2px 0 0;display:inline-block">{t}</span>'
             for t in all_tags
         )
 
-        # Icon or placeholder
-        icon_tag = (
-            f'<img src="{icon_url}" width="80" height="80" '
-            f'style="border-radius:8px;object-fit:contain" onerror="this.style.display=\'none\'">'
-            if icon_url else
-            '<div style="width:80px;height:80px;background:#2d2d2d;border-radius:8px;'
-            'display:flex;align-items:center;justify-content:center;font-size:36px">⬛</div>'
-        )
-
-        readme_section = (
-            f'<div class="readme">{self._readme_html}</div>'
-            if self._readme_html else
+        readme_html = self._md(self._readme) if self._readme else \
             '<p style="color:#666">No README available for this extension.</p>'
-        )
 
         html = f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    background: #1e1e1e; color: #cccccc;
-    font-family: -apple-system, 'Segoe UI', sans-serif;
-    font-size: 13px; line-height: 1.6;
-    padding: 0; overflow-x: hidden;
-  }}
+:root {{
+  --bg:       #1e1e1e;
+  --bg2:      #252526;
+  --border:   #3c3c3c;
+  --text:     #cccccc;
+  --dim:      #8b949e;
+  --accent:   #4db2ff;
+  --yellow:   #cca700;
+  --green:    #0e639c;
+  --green-h:  #1177bb;
+}}
+* {{ box-sizing: border-box; margin:0; padding:0; }}
+html, body {{
+  background: var(--bg); color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px; line-height: 1.5;
+}}
+a {{ color: var(--accent); text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
 
-  /* ── Top hero ── */
-  .hero {{
-    background: #252526;
-    padding: 24px 28px 18px;
-    border-bottom: 1px solid #3d3d3d;
-    display: flex; gap: 20px; align-items: flex-start;
-  }}
-  .hero .icon-wrap {{ flex-shrink: 0; }}
-  .hero .info {{ flex: 1; }}
-  .hero h1 {{ font-size: 22px; color: #e6edf3; margin-bottom: 2px; }}
-  .hero .pub {{ color: #4db2ff; font-size: 12px; margin-bottom: 6px; cursor: pointer; }}
-  .hero .meta {{
-    color: #f0b429; font-size: 12px; margin-bottom: 6px;
-  }}
-  .hero .desc {{ color: #9aa0a6; font-size: 12px; margin-bottom: 12px; }}
-  .hero .btns {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+/* ── Hero ── */
+.hero {{
+  background: var(--bg2);
+  padding: 20px 24px 16px;
+  display: flex; gap: 18px; align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+}}
+.hero-icon {{ flex-shrink: 0; line-height:0; }}
+.hero-body {{ flex: 1; min-width: 0; }}
+.hero-name  {{ font-size:20px; font-weight:700; color:#e6edf3; line-height:1.2; margin-bottom:2px; }}
+.hero-pub   {{ font-size:12px; color:var(--accent); margin-bottom:5px; cursor:pointer; }}
+.hero-meta  {{ font-size:12px; color:var(--dim); margin-bottom:6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
+.hero-stars {{ color:var(--yellow); letter-spacing:1px; }}
+.hero-desc  {{ font-size:13px; color:#9e9e9e; margin-bottom:14px; }}
 
-  /* ── Buttons ── */
-  .btn-install {{
-    background: #0e639c; color: white; border: none; border-radius: 3px;
-    padding: 6px 16px; font-size: 12px; font-weight: 600; cursor: pointer;
-  }}
-  .btn-install:hover {{ background: #1177bb; }}
-  .btn-disable {{
-    background: #3c3c3c; color: #ccc; border: 1px solid #555; border-radius: 3px;
-    padding: 6px 14px; font-size: 12px; cursor: pointer;
-  }}
-  .btn-disable:hover {{ background: #505050; }}
-  .btn-prerelease {{
-    background: #4d2600; color: #f0a500; border: 1px solid #704000; border-radius: 3px;
-    padding: 6px 14px; font-size: 12px; cursor: pointer;
-  }}
+/* ── Action buttons ── */
+.actions {{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }}
+.btn {{
+  border:none; border-radius:2px; padding:5px 14px;
+  font-size:12px; font-weight:600; cursor:pointer; line-height:1.4;
+}}
+.btn-primary  {{ background:var(--green); color:#fff; }}
+.btn-primary:hover  {{ background:var(--green-h); }}
+.btn-secondary {{ background:#3c3c3c; color:var(--text); border:1px solid #555; font-weight:400; }}
+.btn-secondary:hover {{ background:#505050; }}
+.btn-prerelease {{ background:#4b3800; color:#e8a12d; border:1px solid #6b5100; font-weight:400; }}
+.btn-prerelease:hover {{ background:#5a4500; }}
+.autoupdate {{ display:flex; align-items:center; gap:4px; font-size:12px; color:var(--dim); cursor:pointer; }}
+.autoupdate input {{ accent-color: var(--accent); cursor:pointer; }}
 
-  /* ── Nav tabs ── */
-  .nav {{
-    background: #252526; border-bottom: 1px solid #3d3d3d;
-    display: flex; padding: 0 28px;
-  }}
-  .nav a {{
-    color: #8b949e; text-decoration: none; font-size: 12px; font-weight: 500;
-    padding: 10px 14px; display: inline-block; border-bottom: 2px solid transparent;
-  }}
-  .nav a.active {{
-    color: #e6edf3; border-bottom: 2px solid #4db2ff;
-  }}
-  .nav a:hover {{ color: #ccc; }}
+/* ── Nav tabs ── */
+.nav {{
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex; padding: 0 24px; overflow-x:auto;
+}}
+.nav-tab {{
+  color: var(--dim); font-size: 11px; font-weight: 500;
+  padding: 10px 16px; cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}}
+.nav-tab.active {{ color: #e6edf3; border-bottom-color: var(--accent); }}
+.nav-tab:hover:not(.active) {{ color: var(--text); }}
 
-  /* ── Two-column layout ── */
-  .body-wrap {{
-    display: flex; gap: 0;
-  }}
-  .main-col {{
-    flex: 1; padding: 24px 28px; min-width: 0; overflow-wrap: break-word;
-  }}
-  .side-col {{
-    width: 240px; flex-shrink: 0; padding: 24px 20px;
-    border-left: 1px solid #3d3d3d;
-  }}
+/* ── Page layout ── */
+.page {{ display:flex; min-height:100%; }}
+.content {{ flex:1; padding:24px; min-width:0; overflow-x:hidden; }}
+.sidebar {{
+  width:220px; flex-shrink:0; padding:20px 16px;
+  border-left: 1px solid var(--border); font-size:12px;
+}}
 
-  /* ── README ── */
-  .readme h1, .readme h2, .readme h3, .readme h4 {{
-    color: #e6edf3; margin: 18px 0 8px;
-  }}
-  .readme h1 {{ font-size: 20px; border-bottom: 1px solid #3d3d3d; padding-bottom: 6px; }}
-  .readme h2 {{ font-size: 17px; }}
-  .readme h3 {{ font-size: 15px; }}
-  .readme p  {{ margin-bottom: 12px; color: #bcc4ce; }}
-  .readme code {{
-    background: #2d2d2d; border-radius: 3px; padding: 1px 5px;
-    font-family: 'Fira Code', monospace; font-size: 12px; color: #e6edf3;
-  }}
-  .readme a {{ color: #4db2ff; }}
-  .readme img {{ max-width: 100%; border-radius: 6px; margin: 8px 0; }}
-  .readme ul, .readme ol {{ padding-left: 20px; margin-bottom: 12px; color: #bcc4ce; }}
+/* ── README ── */
+.content h1 {{ font-size:18px; color:#e6edf3; margin:20px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); }}
+.content h2 {{ font-size:15px; color:#e6edf3; margin:18px 0 8px; }}
+.content h3 {{ font-size:13px; color:#e6edf3; margin:14px 0 6px; }}
+.content h4 {{ font-size:12px; color:#e6edf3; margin:12px 0 4px; }}
+.content p  {{ color:#bcc4ce; margin-bottom:10px; word-break:break-word; }}
+.content ul, .content ol {{ padding-left:20px; color:#bcc4ce; margin-bottom:10px; }}
+.content li {{ margin-bottom:3px; }}
+.content code {{
+  background:#2d2d2d; border-radius:3px; padding:1px 5px;
+  font-family:'Fira Code','Cascadia Code',monospace; font-size:11.5px; color:#e6edf3;
+}}
+.content pre {{
+  background:#2d2d2d; border-radius:4px; padding:12px 14px;
+  margin:10px 0; overflow-x:auto; font-size:11.5px; line-height:1.6;
+  font-family:'Fira Code','Cascadia Code',monospace; color:#e6edf3;
+}}
+.content pre code {{ background:none; padding:0; }}
+.content a {{ color:var(--accent); }}
+.content img {{ max-width:100%; border-radius:4px; margin:8px 0; }}
+.content hr {{ border:none; border-top:1px solid var(--border); margin:16px 0; }}
 
-  /* ── Sidebar sections ── */
-  .side-section {{ margin-bottom: 22px; }}
-  .side-section h3 {{
-    font-size: 11px; font-weight: 700; color: #8b949e;
-    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
-  }}
-  .meta-row {{ display: flex; margin-bottom: 5px; font-size: 11px; }}
-  .meta-row .key {{ color: #8b949e; width: 90px; flex-shrink: 0; }}
-  .meta-row .val {{ color: #cccccc; word-break: break-all; }}
-  .pills {{ display: flex; flex-wrap: wrap; gap: 4px; }}
-  .pill {{
-    background: #2d3139; border-radius: 3px; padding: 2px 8px;
-    font-size: 10px; color: #aab0b8;
-  }}
-  .resource-link {{
-    display: block; color: #4db2ff; font-size: 11px;
-    text-decoration: none; margin-bottom: 4px;
-  }}
-  .resource-link:hover {{ text-decoration: underline; }}
+/* ── Sidebar ── */
+.sidebar-section {{ margin-bottom:20px; }}
+.sidebar-section h3 {{
+  font-size:10px; font-weight:700; color:var(--dim);
+  text-transform:uppercase; letter-spacing:0.08em;
+  margin-bottom:8px;
+}}
+.meta-row {{ display:flex; gap:8px; margin-bottom:5px; }}
+.meta-key {{ color:var(--dim); width:88px; flex-shrink:0; }}
+.meta-val {{ color:var(--text); flex:1; word-break:break-all; }}
+.meta-val a {{ color:var(--accent); }}
+.resource {{ display:flex; align-items:center; gap:6px; color:var(--accent); margin-bottom:5px; text-decoration:none; font-size:12px; }}
+.resource:hover {{ text-decoration:underline; }}
 </style>
 </head>
 <body>
 
-<!-- ── Hero ── -->
+<!-- ══ Hero ══ -->
 <div class="hero">
-  <div class="icon-wrap">{icon_tag}</div>
-  <div class="info">
-    <h1>{name}</h1>
-    <div class="pub">{namespace}</div>
-    <div class="meta">
-      <span style="color:#f0b429">{star_full}{star_empty}</span>
-      &nbsp;({round(stars,1)})&nbsp;&nbsp;
-      <span style="color:#8b949e">⬇ {downloads:,}</span>
+  <div class="hero-icon">{icon_html}</div>
+  <div class="hero-body">
+    <div class="hero-name">{name}</div>
+    <div class="hero-pub">{namespace}</div>
+    <div class="hero-meta">
+      <span class="hero-stars">{s_str}</span>
+      <span>({review_cnt})</span>
+      <span>|</span>
+      <span>⬇ {fmt(downloads)}</span>
     </div>
-    <div class="desc">{description}</div>
-    <div class="btns">
-      <button class="btn-install">Install</button>
-      <button class="btn-disable">Disable</button>
-      <button class="btn-prerelease">Switch to Pre-Release Version</button>
+    <div class="hero-desc">{description}</div>
+    <div class="actions">
+      <button class="btn btn-primary">Install</button>
+      <button class="btn btn-secondary">Disable ▾</button>
+      <button class="btn btn-secondary">Uninstall ▾</button>
+      <button class="btn btn-prerelease">Switch to Pre-Release Version</button>
+      <label class="autoupdate">
+        <input type="checkbox" checked> Auto Update
+      </label>
     </div>
   </div>
 </div>
 
-<!-- ── Nav ── -->
+<!-- ══ Nav ══ -->
 <div class="nav">
-  <a href="#" class="active">DETAILS</a>
-  <a href="#">FEATURES</a>
-  <a href="#">CHANGELOG</a>
-  <a href="#">DEPENDENCIES</a>
+  <div class="nav-tab active">Details</div>
+  <div class="nav-tab">Features</div>
+  <div class="nav-tab">Changelog</div>
+  <div class="nav-tab">Dependencies</div>
 </div>
 
-<!-- ── Body: main + sidebar ── -->
-<div class="body-wrap">
+<!-- ══ Page body ══ -->
+<div class="page">
 
   <!-- README -->
-  <div class="main-col">
-    {readme_section}
+  <div class="content">
+    {readme_html}
   </div>
 
   <!-- Sidebar -->
-  <div class="side-col">
+  <div class="sidebar">
 
-    <div class="side-section">
+    <div class="sidebar-section">
       <h3>Installation</h3>
-      <div class="meta-row"><span class="key">Identifier</span><span class="val">{ext_id}</span></div>
-      <div class="meta-row"><span class="key">Version</span><span class="val">{version}</span></div>
-      <div class="meta-row"><span class="key">Last Updated</span><span class="val">{timestamp}</span></div>
-      <div class="meta-row"><span class="key">Size</span><span class="val">{size_str}</span></div>
+      <div class="meta-row">
+        <span class="meta-key">Identifier</span>
+        <span class="meta-val">{ext_id}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-key">Version</span>
+        <span class="meta-val">{version}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-key">Last Updated</span>
+        <span class="meta-val">{timestamp}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-key">Size</span>
+        <span class="meta-val"><a href="#">{size_str}</a></span>
+      </div>
     </div>
 
-    <div class="side-section">
+    <div class="sidebar-section">
       <h3>Marketplace</h3>
-      <div class="meta-row"><span class="key">Published</span><span class="val">{published[:10] if published else '—'}</span></div>
-      <div class="meta-row"><span class="key">Last Released</span><span class="val">{timestamp}</span></div>
+      <div class="meta-row">
+        <span class="meta-key">Published</span>
+        <span class="meta-val">{published or '—'}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-key">Last Released</span>
+        <span class="meta-val">{timestamp or '—'}</span>
+      </div>
     </div>
 
-    {"<div class='side-section'><h3>Categories</h3><div class='pills'>" + pills_html + "</div></div>" if pills_html else ""}
+    {"<div class='sidebar-section'><h3>Categories</h3>" + pills + "</div>" if pills else ""}
 
-    <div class="side-section">
+    <div class="sidebar-section">
       <h3>Resources</h3>
-      <a class="resource-link" href="https://open-vsx.org/extension/{namespace}/{ext.get('name','')}">🌐 Marketplace</a>
-      <a class="resource-link" href="#">📄 License</a>
-      <a class="resource-link" href="#">📦 Repository</a>
+      <a class="resource" href="https://open-vsx.org/extension/{namespace}/{ext_name}">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="#4db2ff">
+          <path d="M2 2h5v1.5H3.5v9h9V9H14v5H2V2z"/>
+          <path d="M9.5 2H14v4.5h-1.5V4.56L7.28 9.78 6.22 8.72l5.22-5.22H9.5V2z"/>
+        </svg>
+        Repository
+      </a>
+      <a class="resource" href="#">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="#4db2ff">
+          <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11z"/>
+          <path d="M7 6h2v5H7zm0-2h2v1.5H7z"/>
+        </svg>
+        License
+      </a>
+      <a class="resource" href="#">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="#4db2ff">
+          <path d="M2 2h5v1.5H3.5v9h9V9H14v5H2V2z"/>
+        </svg>
+        Marketplace
+      </a>
     </div>
 
   </div>
 </div>
 
+<script>
+// Tab switching
+document.querySelectorAll('.nav-tab').forEach(tab => {{
+  tab.addEventListener('click', () => {{
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+  }});
+}});
+</script>
 </body>
 </html>"""
         self.setHtml(html)
 
 
-# ─── Extensions Panel (sidebar dock) ─────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Main Extensions Panel  (QDockWidget)
+# ══════════════════════════════════════════════════════════════════════════════
 
 class ExtensionsPanel(QDockWidget):
-    # Emitted when user clicks an extension; MainWindow connects this to
-    # open the detail tab in editor_manager.
-    open_detail_requested = pyqtSignal(object)   # payload: ext dict
+    open_detail_requested = pyqtSignal(object)   # ext dict
 
-    STYLE = """
-        QDockWidget { background: #1e1e1e; }
-        QWidget      { background: #1e1e1e; color: #cccccc; }
-        QLineEdit {
-            background: #3c3c3c; color: #cccccc; border: 1px solid #555;
-            border-radius: 3px; padding: 5px 8px; font-size: 12px;
-        }
-        QListWidget  { background: #252526; border: none; outline: none; }
-        QListWidget::item { border-bottom: 1px solid #2d2d2d; }
-        QListWidget::item:hover    { background: #2a2d2e; }
-        QListWidget::item:selected { background: #094771; border: none; }
-        QProgressBar { background: #3c3c3c; border: none; height: 2px; }
-        QProgressBar::chunk { background: #007acc; }
+    PANEL_STYLE = """
+    QDockWidget       { background: #252526; }
+    QWidget#panelRoot { background: #252526; }
+    QLineEdit {
+        background: #3c3c3c; color: #cccccc; border: 1px solid #3c3c3c;
+        border-radius: 2px; padding: 4px 8px; font-size: 12px;
+    }
+    QLineEdit:focus { border-color: #007acc; }
+    QListWidget {
+        background: #252526; border: none; outline: none;
+    }
+    QListWidget::item { border: none; padding: 0px; }
+    QListWidget::item:hover    { background: #2a2d2e; }
+    QListWidget::item:selected { background: #04395e; }
+    QProgressBar { background: #3c3c3c; border: none; max-height: 2px; }
+    QProgressBar::chunk { background: #007acc; }
+    QScrollBar:vertical {
+        background: #252526; width: 10px; border: none;
+    }
+    QScrollBar::handle:vertical {
+        background: #424242; border-radius: 5px; min-height: 20px;
+    }
+    QScrollBar::handle:vertical:hover { background: #555; }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
     """
 
     def __init__(self, parent=None):
@@ -410,143 +644,126 @@ class ExtensionsPanel(QDockWidget):
             QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         self._search_thread = None
-        self._ext_map: dict[int, dict] = {}
-        self.init_ui()
+        self._icon_threads: list = []
+        self._ext_map:  dict[int, dict]           = {}
+        self._cards:    dict[int, ExtensionCard]  = {}
+        self._init_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
-    def init_ui(self):
+    def _init_ui(self):
         root = QWidget()
-        root.setStyleSheet(self.STYLE)
-        root_l = QVBoxLayout(root)
-        root_l.setContentsMargins(0, 0, 0, 0)
-        root_l.setSpacing(0)
+        root.setObjectName("panelRoot")
+        root.setStyleSheet(self.PANEL_STYLE)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Search bar
-        top = QWidget()
-        top.setStyleSheet("background:#252526; border-bottom:1px solid #3d3d3d;")
-        top_l = QVBoxLayout(top)
-        top_l.setContentsMargins(8, 8, 8, 6)
-        top_l.setSpacing(4)
+        # Header
+        header = QWidget()
+        header.setStyleSheet("background:#252526; border-bottom:1px solid #1e1e1e;")
+        h_layout = QVBoxLayout(header)
+        h_layout.setContentsMargins(8, 8, 8, 6)
+        h_layout.setSpacing(4)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search Extensions in Marketplace")
         self.search_input.returnPressed.connect(self.do_search)
-        top_l.addWidget(self.search_input)
+        h_layout.addWidget(self.search_input)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setFixedHeight(2)
-        self.progress_bar.hide()
-        top_l.addWidget(self.progress_bar)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.setFixedHeight(2)
+        self.progress.hide()
+        h_layout.addWidget(self.progress)
 
-        root_l.addWidget(top)
+        layout.addWidget(header)
 
-        # Results list
+        # List
         self.list_widget = QListWidget()
         self.list_widget.setSpacing(0)
-        self.list_widget.itemClicked.connect(self._on_item_clicked)
-        root_l.addWidget(self.list_widget, 1)
+        self.list_widget.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.list_widget.itemClicked.connect(self._on_clicked)
+        layout.addWidget(self.list_widget, 1)
 
         self.setWidget(root)
 
         # Default search
         self.search_input.setText("python")
-        self.do_search()
+        QTimer.singleShot(200, self.do_search)
 
     # ── Search ────────────────────────────────────────────────────────────────
 
     def do_search(self):
-        query = self.search_input.text().strip()
-        if not query:
+        q = self.search_input.text().strip()
+        if not q:
             return
         self.list_widget.clear()
         self._ext_map.clear()
-        self.progress_bar.show()
+        self._cards.clear()
+        self.progress.show()
 
-        self._search_thread = ExtensionSearchThread(query)
-        self._search_thread.results_ready.connect(self.on_results)
-        self._search_thread.error_occurred.connect(self.on_error)
+        self._search_thread = ExtensionSearchThread(q)
+        self._search_thread.results_ready.connect(self._on_results)
+        self._search_thread.error_occurred.connect(self._on_error)
         self._search_thread.start()
 
     # ── Results ───────────────────────────────────────────────────────────────
 
-    def on_results(self, extensions: list):
-        self.progress_bar.hide()
+    def _on_results(self, extensions: list):
+        self.progress.hide()
         self.list_widget.clear()
         self._ext_map.clear()
+        self._cards.clear()
+        self._icon_threads.clear()
 
         for idx, ext in enumerate(extensions):
             self._ext_map[idx] = ext
 
-            name        = ext.get("displayName") or ext.get("name", "")
-            publisher   = ext.get("namespace", "")
-            description = ext.get("description", "")
-            version     = ext.get("version", "")
-            downloads   = int(ext.get("downloadCount", 0) or 0)
-
-            # Row widget
-            row_w = QWidget()
-            row_w.setStyleSheet("background:transparent;")
-            row_l = QVBoxLayout(row_w)
-            row_l.setContentsMargins(10, 8, 10, 8)
-            row_l.setSpacing(2)
-
-            # Name + install btn
-            hr = QHBoxLayout()
-            name_lbl = QLabel(f"<b>{name}</b>")
-            name_lbl.setStyleSheet("color:#e6edf3;font-size:12px;background:transparent;")
-            hr.addWidget(name_lbl, 1)
-
-            dl_url  = (ext.get("files") or {}).get("download", "")
-            ext_id  = f"{publisher}.{ext.get('name', '')}"
-            btn = QPushButton("Install")
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(22)
-            btn.setStyleSheet("""
-                QPushButton { background:#0e639c; color:white; border-radius:3px;
-                              padding:2px 10px; font-size:11px; }
-                QPushButton:hover { background:#1177bb; }
-            """)
-            btn.clicked.connect(
-                lambda _, eid=ext_id, url=dl_url: self.install_extension(eid, url)
+            card = ExtensionCard(ext, idx)
+            # Wire Install button
+            dl_url = (ext.get("files") or {}).get("download", "")
+            ext_id = f"{ext.get('namespace','')}.{ext.get('name','')}"
+            card.btn_install.clicked.connect(
+                lambda _, eid=ext_id, url=dl_url: self._install(eid, url)
             )
-            hr.addWidget(btn)
-            row_l.addLayout(hr)
-
-            # Description
-            desc_lbl = QLabel(description[:80] + ("…" if len(description) > 80 else ""))
-            desc_lbl.setStyleSheet("color:#8b949e;font-size:11px;background:transparent;")
-            desc_lbl.setWordWrap(True)
-            row_l.addWidget(desc_lbl)
-
-            # Publisher · version · downloads
-            pub_lbl = QLabel(f"{publisher}  ·  v{version}  ·  ⬇ {downloads:,}")
-            pub_lbl.setStyleSheet("color:#555;font-size:10px;background:transparent;")
-            row_l.addWidget(pub_lbl)
+            self._cards[idx] = card
 
             li = QListWidgetItem(self.list_widget)
-            li.setSizeHint(row_w.sizeHint())
+            li.setSizeHint(QSize(self.list_widget.width(), 72))
             self.list_widget.addItem(li)
-            self.list_widget.setItemWidget(li, row_w)
+            self.list_widget.setItemWidget(li, card)
+
+            # Async icon fetch
+            icon_url = (ext.get("files") or {}).get("icon", "")
+            if icon_url:
+                t = IconThread(idx, icon_url)
+                t.icon_ready.connect(self._on_icon)
+                t.start()
+                self._icon_threads.append(t)
+
+    def _on_icon(self, row: int, data: bytes):
+        card = self._cards.get(row)
+        if card:
+            card.set_icon(data)
 
     # ── Click → open detail tab ───────────────────────────────────────────────
 
-    def _on_item_clicked(self, item):
+    def _on_clicked(self, item: QListWidgetItem):
         row = self.list_widget.row(item)
         ext = self._ext_map.get(row)
         if ext:
             self.open_detail_requested.emit(ext)
 
-    # ── Error / Install ───────────────────────────────────────────────────────
+    # ── Install / Error ───────────────────────────────────────────────────────
 
-    def on_error(self, error: str):
-        self.progress_bar.hide()
-        QMessageBox.warning(self, "Search Error", f"Failed to fetch extensions:\n{error}")
-
-    def install_extension(self, ext_id: str, download_url: str):
+    def _install(self, ext_id: str, download_url: str):
         QMessageBox.information(
             self, "Install Extension",
-            f"Installing: {ext_id}\n\nThis will be handled by the Monaco Extension Host."
+            f"Installing: {ext_id}\nHandled by Monaco Extension Host."
         )
         print(f"[Extensions] Install: {ext_id} → {download_url}")
+
+    def _on_error(self, err: str):
+        self.progress.hide()
+        QMessageBox.warning(self, "Search Error", f"Failed to search:\n{err}")
