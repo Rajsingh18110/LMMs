@@ -36,7 +36,7 @@ def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]
         
     try:
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=30, cwd=target_cwd
+            command, shell=True, capture_output=True, text=True, timeout=120, cwd=target_cwd
         )
         return {
             "stdout": result.stdout,
@@ -45,7 +45,7 @@ def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]
             "output": result.stdout + result.stderr or "Command executed successfully with no output."
         }
     except subprocess.TimeoutExpired:
-        raise TimeoutError("Command timed out after 30 seconds.")
+        raise TimeoutError("Command timed out after 120 seconds.")
     except Exception as e:
         raise Exception(f"Error executing command: {str(e)}")
 
@@ -83,18 +83,18 @@ class TerminalTool:
 
         try:
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=30, cwd=cwd
+                command, shell=True, capture_output=True, text=True, timeout=120, cwd=cwd
             )
             output = result.stdout + result.stderr
             if not output:
-                output = "Command executed successfully with no output."
+                output = "Command executed successfully."
             if return_exit_code:
                 return (result.returncode, output)
             if result.returncode != 0:
                 output = f"[Command Failed with Exit Code {result.returncode}]\n" + output
             return output
         except subprocess.TimeoutExpired:
-            msg = "Command timed out after 30 seconds."
+            msg = "Command timed out after 120 seconds."
             return (-1, msg) if return_exit_code else msg
         except Exception as e:
             msg = f"Error executing command: {str(e)}"

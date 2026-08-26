@@ -1274,6 +1274,8 @@ lmms update
                         "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
                         "5. **CRITICAL ANTI-ADVICE RULE — READ THIS CAREFULLY**: NEVER write instructions for the user to run manually. If you know what command needs to run, YOU MUST RUN IT YOURSELF using terminal.run. Do NOT say 'Run docker-compose up' or 'You can install it with pip install'. Instead, output the tool_call and run it. The user hired you to DO the work, not to describe it. If you find yourself writing a numbered list of commands for the user, STOP — use terminal.run for each one instead.\n"
                         "6. **Error Recovery**: If a command fails with a missing module or dependency error, immediately run the install command (e.g., `pip install <module>` or `npm install`) and then retry the original command. Never stop after the first failure.\n"
+                        "7. **sudo & Docker awareness**: ALWAYS prefer `docker compose` (space, v2) over `docker-compose` (hyphen, v1 legacy). Before running `sudo apt install`, FIRST check if the tool exists with `which <tool>` or `<tool> --version`. If a tool is already installed under a different name or path, use that instead of installing. If sudo IS needed, run it directly — the terminal supports it.\n"
+                        "8. **Python projects**: Check for `requirements.txt` and run `pip install -r requirements.txt` before starting. Check for `.env.example` and copy it to `.env` if `.env` is missing.\n"
                     )
                     system_prompt += (
                         "## Anti-Hallucination & Web Search Rules\n"
@@ -1509,7 +1511,7 @@ lmms update
                                     live_view.update(Markdown(final_display), refresh=True)
                                 elif full_reply and not first_token:
                                     spin_status.stop()
-                                    console.print("[dim]No visible answer returned. The model only produced hidden/thinking text.[/dim]")
+                                    pass  # Model thinking only — tool call will execute next
                         finally:
                             if live_view:
                                 live_view.stop()
