@@ -92,7 +92,7 @@ class LlamaCppRuntime(RuntimeContract):
                 time.sleep(5)
             
             # Cap n_ctx dynamically based on available memory to prevent KV cache OOM
-            if mem_gb < 8.0:
+            if mem_gb < 6.0:
                 safe_n_ctx = 4096
             elif mem_gb < 16.0:
                 safe_n_ctx = 8192
