@@ -1170,7 +1170,10 @@ lmms update
                 elif "nano" in current_model.lower():
                     is_small_model = True
                 is_fast_mode = (current_mode == "/fast")
-                full_prompt = not (is_fast_mode or is_small_model)
+                # Bug A Fix: full_prompt should ONLY depend on model capability, not mode.
+                # /fast mode controls verbosity/think-tags, NOT whether agentic tools/autonomy
+                # instructions are included. A capable 8B model in /fast mode still needs them.
+                full_prompt = not is_small_model
 
                 if current_mode == "/fast" or not show_thoughts:
                     if should_force_tool_mode(cmd):
@@ -1297,8 +1300,15 @@ lmms update
                 avg_iter_cost = 1000 # Estimate tokens used per tool call/iteration
                 max_possible = max(1, (available_for_input - system_cost) // avg_iter_cost)
                 
-                if current_mode == "/fast": MAX_ITERATIONS = min(max_possible, 10)
-                else: MAX_ITERATIONS = min(max_possible, 30)
+                # Bug B Fix: enforce a minimum floor of 5 iterations so multi-step tasks
+                # (read README → check deps → install → run) can always complete, even if
+                # the context budget calculation produces a low number. Genuine context
+                # exhaustion is handled by the existing auto-truncation fallback.
+                MIN_ITERATIONS = 5
+                if current_mode == "/fast": MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
+                else: MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
+                
+                print(f"[DEBUG] Budget: n_ctx={n_ctx}, reserve={reserve}, avail={available_for_input}, sys_cost={system_cost}, max_possible={max_possible}, MAX_ITERATIONS={MAX_ITERATIONS}, full_prompt={full_prompt}")
                 
                 iter_count = 0
                 
