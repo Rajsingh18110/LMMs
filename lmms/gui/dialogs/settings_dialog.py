@@ -45,22 +45,26 @@ class SettingsDialog(QDialog):
             title.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 20px;")
             layout.addWidget(title)
             
-            form = QFormLayout()
-            if cat == "APIs":
-                self.inputs["openai_key"] = QLineEdit(state.get("openai_key", ""))
-                self.inputs["anthropic_key"] = QLineEdit(state.get("anthropic_key", ""))
-                form.addRow("OpenAI API Key:", self.inputs["openai_key"])
-                form.addRow("Anthropic API Key:", self.inputs["anthropic_key"])
-            elif cat == "Server":
-                self.inputs["host"] = QLineEdit(state.get("host", "127.0.0.1"))
-                self.inputs["port"] = QLineEdit(state.get("port", "11434"))
-                form.addRow("Host:", self.inputs["host"])
-                form.addRow("Port:", self.inputs["port"])
-            elif cat == "Workspace":
-                self.inputs["auto_save"] = QLineEdit(str(state.get("auto_save", "True")))
-                form.addRow("Auto Save:", self.inputs["auto_save"])
-            
-            layout.addLayout(form)
+            if cat == "Providers":
+                from lmms.gui.widgets.provider_settings import ProviderSettingsWidget
+                self.provider_widget = ProviderSettingsWidget(self)
+                layout.addWidget(self.provider_widget)
+            else:
+                form = QFormLayout()
+                if cat == "APIs":
+                    self.inputs["openai_key"] = QLineEdit(state.get("openai_key", ""))
+                    self.inputs["anthropic_key"] = QLineEdit(state.get("anthropic_key", ""))
+                    form.addRow("OpenAI API Key:", self.inputs["openai_key"])
+                    form.addRow("Anthropic API Key:", self.inputs["anthropic_key"])
+                elif cat == "Server":
+                    self.inputs["host"] = QLineEdit(state.get("host", "127.0.0.1"))
+                    self.inputs["port"] = QLineEdit(state.get("port", "11434"))
+                    form.addRow("Host:", self.inputs["host"])
+                    form.addRow("Port:", self.inputs["port"])
+                elif cat == "Workspace":
+                    self.inputs["auto_save"] = QLineEdit(str(state.get("auto_save", "True")))
+                    form.addRow("Auto Save:", self.inputs["auto_save"])
+                layout.addLayout(form)
             layout.addStretch()
             self.content_area.addWidget(page)
 
