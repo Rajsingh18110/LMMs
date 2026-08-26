@@ -1,5 +1,5 @@
 from typing import Optional
-from lmms.backend.contracts.runtime import RuntimeContract
+from lmms.backend.contracts.runtime import ModelRuntime
 from lmms.backend.contracts.memory import MemoryContract
 from lmms.backend.contracts.provider import ProviderContract
 from lmms.backend.contracts.workspace import WorkspaceContract
@@ -19,7 +19,7 @@ class BackendManager:
 
     def __init__(self):
         if not self._initialized:
-            self._runtime: Optional[RuntimeContract] = None
+            self._runtime: Optional[ModelRuntime] = None
             self._memory: Optional[MemoryContract] = None
             self._provider: Optional[ProviderContract] = None
             self._workspace: Optional[WorkspaceContract] = None
@@ -181,7 +181,7 @@ class BackendManager:
             self._runtime.load_model("qwen1_5-0_5b-chat-q4_k_m.gguf")
         return self._runtime
 
-    def register_runtime(self, runtime: RuntimeContract):
+    def register_runtime(self, runtime: ModelRuntime):
         self._runtime = runtime
 
     def register_memory(self, memory: MemoryContract):

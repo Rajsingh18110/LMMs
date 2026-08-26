@@ -1,4 +1,4 @@
-from .runtime import RuntimeContract
+from .runtime import ModelRuntime
 from .memory import MemoryContract
 from .provider import ProviderContract
 from .workspace import WorkspaceContract
