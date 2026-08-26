@@ -1684,7 +1684,28 @@ lmms update
                                 observation = "Tool execution denied by user."
                                 console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
                                 
-                            messages.append({"role": "user", "content": f"<observation>\n{observation}\n</observation>"})
+                            # Smart-truncate observations to prevent context overflow.
+                            # Install commands produce huge outputs but we only need the result.
+                            def smart_truncate_obs(obs: str, cmd_hint: str = "") -> str:
+                                MAX_OBS_CHARS = 2000
+                                if len(obs) <= MAX_OBS_CHARS:
+                                    return obs
+                                # For install/build commands: keep last 40 lines (show success/error)
+                                install_hints = ["pip install", "apt install", "npm install", "yarn", "apt-get", "cargo build", "make "]
+                                if any(h in cmd_hint for h in install_hints):
+                                    lines = obs.strip().splitlines()
+                                    tail = "\n".join(lines[-40:])
+                                    if len(tail) > MAX_OBS_CHARS:
+                                        tail = tail[-MAX_OBS_CHARS:]
+                                    return f"...[install output truncated, showing last 40 lines]...\n{tail}"
+                                # Default: head + tail
+                                head = obs[:800]
+                                tail = obs[-800:]
+                                return f"{head}\n...[truncated {len(obs)-1600} chars]...\n{tail}"
+
+                            obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
+                            truncated_obs = smart_truncate_obs(str(observation), obs_cmd_hint)
+                            messages.append({"role": "user", "content": f"<observation>\n{truncated_obs}\n</observation>"})
                             
                             # Audit log
                             try:
