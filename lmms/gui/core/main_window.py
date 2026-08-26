@@ -219,7 +219,28 @@ class MainWindow(QMainWindow):
             
             self.tree_view = QTreeView()
             self.tree_view.setObjectName("explorerTree")
-            self.tree_view.setModel(self.file_model)
+            
+            from lmms.gui.utils.diagnostic_manager import DiagnosticManager
+            from PyQt6.QtCore import QIdentityProxyModel
+            
+            class DiagnosticProxyModel(QIdentityProxyModel):
+                def data(self, proxy_index, role=Qt.ItemDataRole.DisplayRole):
+                    if role == Qt.ItemDataRole.ForegroundRole:
+                        source_index = self.mapToSource(proxy_index)
+                        if hasattr(self.sourceModel(), 'filePath'):
+                            file_path = self.sourceModel().filePath(source_index)
+                            if DiagnosticManager.get_instance().has_errors(file_path):
+                                return QColor("#ff7b72")
+                    return super().data(proxy_index, role)
+                    
+            self.diagnostic_model = DiagnosticProxyModel(self)
+            self.diagnostic_model.setSourceModel(self.file_model)
+            
+            DiagnosticManager.get_instance().diagnostics_updated.connect(
+                lambda: self.diagnostic_model.layoutChanged.emit()
+            )
+            
+            self.tree_view.setModel(self.diagnostic_model)
             self.tree_view.setHeaderHidden(True)
             self.tree_view.setIndentation(20)
             

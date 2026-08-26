@@ -120,6 +120,9 @@ class TerminalPanel(QWidget):
         self.terminals = []
         self.init_ui()
         
+        from lmms.gui.utils.diagnostic_manager import DiagnosticManager
+        DiagnosticManager.get_instance().diagnostics_updated.connect(self.update_problems_ui)
+        
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -148,11 +151,15 @@ class TerminalPanel(QWidget):
         """)
         
         # Problems Tab
-        self.problems_text = QTextEdit()
-        self.problems_text.setReadOnly(True)
-        self.problems_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
-        self.problems_text.setPlainText("No problems have been detected in the workspace.")
-        self.tabs.addTab(self.problems_text, "Problems")
+        from PyQt6.QtWidgets import QTreeWidget
+        self.problems_tree = QTreeWidget()
+        self.problems_tree.setHeaderHidden(True)
+        self.problems_tree.setStyleSheet("""
+            QTreeWidget { background-color: #0d1117; color: #c9d1d9; border: none; padding: 5px; font-size: 12px; }
+            QTreeWidget::item { padding: 4px; }
+            QTreeWidget::item:selected { background-color: #373e47; }
+        """)
+        self.tabs.addTab(self.problems_tree, "Problems")
         
         # Output Tab
         self.output_text = QTextEdit()
@@ -320,3 +327,36 @@ class TerminalPanel(QWidget):
                     
     def close_panel(self):
         self.setVisible(False)
+
+    def update_problems_ui(self, file_path=None):
+        from lmms.gui.utils.diagnostic_manager import DiagnosticManager
+        from PyQt6.QtWidgets import QTreeWidgetItem
+        import os
+        
+        self.problems_tree.clear()
+        diags = DiagnosticManager.get_instance().get_diagnostics()
+        
+        total_problems = sum(len(d) for d in diags.values())
+        if total_problems == 0:
+            item = QTreeWidgetItem(["No problems have been detected in the workspace."])
+            self.problems_tree.addTopLevelItem(item)
+            return
+            
+        for path, file_diags in diags.items():
+            if not file_diags:
+                continue
+                
+            filename = os.path.basename(path)
+            file_item = QTreeWidgetItem([f"{filename} - {len(file_diags)} problems"])
+            
+            for diag in file_diags:
+                msg = diag.get("message", "Unknown error")
+                line = diag.get("range", {}).get("start", {}).get("line", 0) + 1
+                severity = diag.get("severity", 1)
+                
+                icon = "❌" if severity == 1 else "⚠️"
+                diag_item = QTreeWidgetItem([f"{icon} [{line}] {msg}"])
+                file_item.addChild(diag_item)
+                
+            self.problems_tree.addTopLevelItem(file_item)
+            file_item.setExpanded(True)

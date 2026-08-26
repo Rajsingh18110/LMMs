@@ -66,6 +66,20 @@ class LSPManager(QObject):
                         
                 if content_length > 0:
                     body = self.process.stdout.read(content_length).decode('utf-8')
+                    
+                    # Intercept publishDiagnostics
+                    try:
+                        msg_json = json.loads(body)
+                        if msg_json.get("method") == "textDocument/publishDiagnostics":
+                            params = msg_json.get("params", {})
+                            uri = params.get("uri")
+                            diagnostics = params.get("diagnostics", [])
+                            if uri:
+                                from lmms.gui.utils.diagnostic_manager import DiagnosticManager
+                                DiagnosticManager.get_instance().update_diagnostics(uri, diagnostics)
+                    except Exception:
+                        pass
+                        
                     # Emit to Qt, which forwards to JS via QWebChannel
                     self.messageReceived.emit(body)
             except Exception as e:
