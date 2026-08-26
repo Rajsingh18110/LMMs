@@ -906,6 +906,12 @@ class ExtensionsPanel(QDockWidget):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search Extensions in Marketplace")
         self.search_input.returnPressed.connect(self._new_search)
+        # Live search — fire 450ms after user stops typing (VS Code behaviour)
+        self._live_timer = QTimer(self)
+        self._live_timer.setSingleShot(True)
+        self._live_timer.setInterval(450)
+        self._live_timer.timeout.connect(self._new_search)
+        self.search_input.textChanged.connect(self._on_text_changed)
         h_layout.addWidget(self.search_input)
 
         # Sort row
@@ -952,13 +958,23 @@ class ExtensionsPanel(QDockWidget):
 
         # Initial search
         self.search_input.setText("python")
-        QTimer.singleShot(150, self._new_search)
+        QTimer.singleShot(300, self._new_search)
 
     # ── Search control ────────────────────────────────────────────────────────
 
+    def _on_text_changed(self, text: str):
+        """Restart the live-search debounce timer on every keystroke."""
+        if len(text.strip()) >= 2:
+            self._live_timer.start()   # restarts if already running
+        elif text.strip() == "":
+            self._live_timer.stop()
+
     def _new_search(self):
         """Fresh search — reset offset, clear list."""
+        self._live_timer.stop()
         self._query  = self.search_input.text().strip() or "python"
+        if len(self._query) < 2:
+            return
         self._offset = 0
         self._ext_map.clear()
         self._cards.clear()
@@ -1013,7 +1029,8 @@ class ExtensionsPanel(QDockWidget):
             self._cards[row] = card
 
             li = QListWidgetItem(self.list_widget)
-            li.setSizeHint(QSize(self.list_widget.width() or 240, 72))
+            li.setSizeHint(QSize(self.list_widget.width() or 240, 80))
+
             self.list_widget.addItem(li)
             self.list_widget.setItemWidget(li, card)
 
