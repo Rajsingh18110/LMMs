@@ -344,7 +344,9 @@ class MainWindow(QMainWindow):
         self.extensions_dock.setObjectName("ExtensionsDock")
         self.docks["Extensions"] = self.extensions_dock
         self.extensions_dock.hide()
-        
+        # Wire: click on extension → open detail tab in main editor area
+        self.extensions_dock.open_detail_requested.connect(self._open_extension_detail)
+
         # Init Source Control Workspace
         if not self.is_empty_workspace and hasattr(self.source_control_dock, 'set_workspace'):
             cwd = ConfigManager().get("workspace_dir", os.getcwd())
@@ -638,6 +640,21 @@ class MainWindow(QMainWindow):
         identifier = model_info.get("modelId", model_info.get("id", ""))
         tab = ModelDetailsTab(model_info)
         self.editor_manager.open_custom_tab(tab, identifier, identifier)
+
+    def _open_extension_detail(self, ext: dict):
+        """Open a VS Code-style extension detail page in the main editor tab area."""
+        from lmms.gui.panels.extensions_panel import ExtensionDetailTab
+        name = ext.get("displayName") or ext.get("name", "Extension")
+        ns   = ext.get("namespace", "")
+        identifier = f"ext:{ns}.{ext.get('name', '')}"
+        # Reuse tab if already open
+        if hasattr(self.editor_manager, "custom_tabs") and identifier in self.editor_manager.custom_tabs:
+            self.editor_manager.tabs.setCurrentWidget(
+                self.editor_manager.custom_tabs[identifier]
+            )
+            return
+        tab = ExtensionDetailTab(ext)
+        self.editor_manager.open_custom_tab(tab, f"Extension: {name}", identifier)
 
     def on_file_double_clicked(self, index):
         if not hasattr(self, 'file_model') or self.file_model is None:

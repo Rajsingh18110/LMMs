@@ -1,16 +1,20 @@
+"""
+Extensions Panel — sidebar list + click opens a VS Code-style detail tab
+in the main editor area via editor_manager.open_custom_tab().
+"""
 import os
 import requests
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDockWidget, QLineEdit,
-    QPushButton, QListWidget, QListWidgetItem, QProgressBar, QStackedWidget,
-    QScrollArea, QFrame, QSizePolicy, QApplication, QSplitter
+    QPushButton, QListWidget, QListWidgetItem, QProgressBar, QApplication,
+    QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QSize
-from PyQt6.QtGui import QPixmap, QFont, QColor, QPalette
-import base64
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QUrl
 
 
-# ─── Thread: search Open VSX ─────────────────────────────────────────────────
+# ─── Background threads ───────────────────────────────────────────────────────
 
 class ExtensionSearchThread(QThread):
     results_ready = pyqtSignal(list)
@@ -22,18 +26,17 @@ class ExtensionSearchThread(QThread):
 
     def run(self):
         try:
-            url = f"https://open-vsx.org/api/-/search?query={self.query}&size=20&sortBy=relevance"
+            url = (f"https://open-vsx.org/api/-/search"
+                   f"?query={self.query}&size=20&sortBy=relevance")
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            data = resp.json()
-            self.results_ready.emit(data.get("extensions", []))
+            self.results_ready.emit(resp.json().get("extensions", []))
         except Exception as e:
             self.error_occurred.emit(str(e))
 
 
-# ─── Thread: fetch extension details ─────────────────────────────────────────
-
 class ExtensionDetailThread(QThread):
+    """Fetches full Open VSX detail JSON for one extension."""
     detail_ready = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
@@ -52,261 +55,8 @@ class ExtensionDetailThread(QThread):
             self.error_occurred.emit(str(e))
 
 
-# ─── Thread: fetch extension icon ────────────────────────────────────────────
-
-class IconThread(QThread):
-    icon_ready = pyqtSignal(bytes)
-
-    def __init__(self, url):
-        super().__init__()
-        self.url = url
-
-    def run(self):
-        try:
-            resp = requests.get(self.url, timeout=8)
-            if resp.status_code == 200:
-                self.icon_ready.emit(resp.content)
-        except Exception:
-            pass
-
-
-# ─── Extension Detail View ────────────────────────────────────────────────────
-
-class ExtensionDetailView(QScrollArea):
-    install_requested = pyqtSignal(str, str)  # ext_id, download_url
-
-    STYLE = """
-        QScrollArea { background: #1e1e1e; border: none; }
-        QWidget#detailBg { background: #1e1e1e; }
-        QLabel { color: #cccccc; background: transparent; }
-        QFrame#divider { color: #3d3d3d; }
-        QPushButton#installBtn {
-            background-color: #0e639c; color: white; border-radius: 3px;
-            padding: 5px 14px; font-weight: bold; font-size: 12px;
-        }
-        QPushButton#installBtn:hover { background-color: #1177bb; }
-        QPushButton#disableBtn {
-            background-color: #3c3c3c; color: #cccccc; border-radius: 3px;
-            padding: 5px 14px; font-size: 12px; border: 1px solid #555;
-        }
-        QPushButton#disableBtn:hover { background-color: #505050; }
-        QLabel#tagLabel {
-            background: #2d3139; color: #adb5c0; border-radius: 3px;
-            padding: 2px 6px; font-size: 10px;
-        }
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setStyleSheet(self.STYLE)
-
-        self._ext_data = None
-        self._icon_thread = None
-        self._detail_thread = None
-
-        bg = QWidget()
-        bg.setObjectName("detailBg")
-        self._layout = QVBoxLayout(bg)
-        self._layout.setContentsMargins(16, 16, 16, 16)
-        self._layout.setSpacing(0)
-        self.setWidget(bg)
-
-        self._show_placeholder()
-
-    def _clear(self):
-        while self._layout.count():
-            item = self._layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-    def _show_placeholder(self):
-        self._clear()
-        lbl = QLabel("Select an extension to view details")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: #555; font-size: 13px; margin-top: 60px;")
-        self._layout.addWidget(lbl)
-        self._layout.addStretch()
-
-    def load_extension(self, ext: dict):
-        """Load summary data immediately, then fetch full detail in background."""
-        self._ext_data = ext
-        self._build_summary(ext)
-
-        ns = ext.get("namespace", "")
-        name = ext.get("name", "")
-        if ns and name:
-            self._detail_thread = ExtensionDetailThread(ns, name)
-            self._detail_thread.detail_ready.connect(self._build_full)
-            self._detail_thread.error_occurred.connect(lambda e: None)
-            self._detail_thread.start()
-
-    def _build_summary(self, ext: dict):
-        self._clear()
-        v_layout = self._layout
-
-        # ── Header row ───────────────────────────────────────────────────────
-        header = QHBoxLayout()
-        header.setSpacing(14)
-
-        # Icon placeholder
-        self._icon_lbl = QLabel()
-        self._icon_lbl.setFixedSize(64, 64)
-        self._icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._icon_lbl.setStyleSheet(
-            "background:#2d2d2d; border-radius:6px; color:#555; font-size:24px;"
-        )
-        self._icon_lbl.setText("⬛")
-        header.addWidget(self._icon_lbl)
-
-        # Fetch icon
-        icon_url = ext.get("files", {}).get("icon", "")
-        if icon_url:
-            self._icon_thread = IconThread(icon_url)
-            self._icon_thread.icon_ready.connect(self._set_icon)
-            self._icon_thread.start()
-
-        # Title block
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-
-        name_lbl = QLabel(ext.get("displayName") or ext.get("name", ""))
-        name_lbl.setStyleSheet("font-size: 20px; font-weight: bold; color: #e6edf3;")
-        title_col.addWidget(name_lbl)
-
-        pub_lbl = QLabel(ext.get("namespace", ""))
-        pub_lbl.setStyleSheet("color: #8b949e; font-size: 12px;")
-        title_col.addWidget(pub_lbl)
-
-        # Stars + downloads row
-        stars = ext.get("averageRating", 0)
-        downloads = ext.get("downloadCount", 0)
-        star_str = "★" * round(stars) + "☆" * (5 - round(stars))
-        meta_lbl = QLabel(f"{star_str}  ({round(stars, 1)})  ·  ⬇ {downloads:,}")
-        meta_lbl.setStyleSheet("color: #f0b429; font-size: 11px;")
-        title_col.addWidget(meta_lbl)
-
-        desc_short = ext.get("description", "")
-        if desc_short:
-            dl = QLabel(desc_short)
-            dl.setStyleSheet("color: #aab0b8; font-size: 12px; margin-top: 4px;")
-            dl.setWordWrap(True)
-            title_col.addWidget(dl)
-
-        header.addLayout(title_col, 1)
-        v_layout.addLayout(header)
-        self._add_divider(12)
-
-        # ── Action buttons ────────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-
-        download_url = ext.get("files", {}).get("download", "")
-        ext_id = f"{ext.get('namespace', '')}.{ext.get('name', '')}"
-
-        self._install_btn = QPushButton("Install")
-        self._install_btn.setObjectName("installBtn")
-        self._install_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._install_btn.clicked.connect(
-            lambda: self.install_requested.emit(ext_id, download_url)
-        )
-        btn_row.addWidget(self._install_btn)
-
-        self._disable_btn = QPushButton("Disable")
-        self._disable_btn.setObjectName("disableBtn")
-        self._disable_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_row.addWidget(self._disable_btn)
-
-        btn_row.addStretch()
-        v_layout.addLayout(btn_row)
-        self._add_divider(12)
-
-        # ── Metadata sidebar ──────────────────────────────────────────────────
-        info_grid = QWidget()
-        grid = QVBoxLayout(info_grid)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(4)
-
-        version = ext.get("version", "—")
-        timestamp = ext.get("timestamp", "")
-        date_str = timestamp[:10] if timestamp else "—"
-
-        self._add_meta_row(grid, "Identifier", ext_id)
-        self._add_meta_row(grid, "Version", version)
-        self._add_meta_row(grid, "Last Updated", date_str)
-        v_layout.addWidget(info_grid)
-        self._add_divider(12)
-
-        # ── Description (placeholder until full detail loads) ─────────────────
-        self._desc_lbl = QLabel("Loading full description…")
-        self._desc_lbl.setWordWrap(True)
-        self._desc_lbl.setStyleSheet("color: #aab0b8; font-size: 12px; line-height: 160%;")
-        self._desc_lbl.setTextFormat(Qt.TextFormat.RichText)
-        v_layout.addWidget(self._desc_lbl)
-
-        v_layout.addStretch()
-
-    def _build_full(self, detail: dict):
-        """Supplement with full detail from the Open VSX API response."""
-        # Update description with README / long description
-        readme = detail.get("files", {}).get("readme", "")
-        if readme:
-            # Fetch README
-            t = _ReadmeThread(readme)
-            t.ready.connect(self._set_readme)
-            t.start()
-            self._readme_thread = t
-
-        # Update categories as tags
-        cats = detail.get("categories", []) or detail.get("tags", [])
-        if cats and hasattr(self, '_tag_container'):
-            return
-        if cats:
-            tag_row = QHBoxLayout()
-            tag_row.setSpacing(4)
-            for cat in cats[:6]:
-                t = QLabel(cat)
-                t.setObjectName("tagLabel")
-                tag_row.addWidget(t)
-            tag_row.addStretch()
-            # Insert before stretch (last item)
-            self._layout.insertLayout(self._layout.count() - 1, tag_row)
-
-    def _set_readme(self, html: str):
-        # Strip markdown slightly for display
-        self._desc_lbl.setText(html[:3000])  # cap length
-
-    def _set_icon(self, data: bytes):
-        px = QPixmap()
-        px.loadFromData(data)
-        if not px.isNull():
-            px = px.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
-            self._icon_lbl.setPixmap(px)
-            self._icon_lbl.setText("")
-
-    def _add_divider(self, margin=8):
-        f = QFrame()
-        f.setObjectName("divider")
-        f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet(f"color:#3d3d3d; margin-top:{margin}px; margin-bottom:{margin}px;")
-        self._layout.addWidget(f)
-
-    def _add_meta_row(self, parent_layout, key, value):
-        row = QHBoxLayout()
-        k = QLabel(key)
-        k.setStyleSheet("color:#8b949e; font-size:11px;")
-        k.setFixedWidth(100)
-        v = QLabel(value)
-        v.setStyleSheet("color:#cccccc; font-size:11px;")
-        v.setWordWrap(True)
-        row.addWidget(k)
-        row.addWidget(v, 1)
-        parent_layout.addLayout(row)
-
-
-class _ReadmeThread(QThread):
+class ReadmeThread(QThread):
+    """Downloads the README for an extension."""
     ready = pyqtSignal(str)
 
     def __init__(self, url):
@@ -316,39 +66,340 @@ class _ReadmeThread(QThread):
     def run(self):
         try:
             resp = requests.get(self.url, timeout=8)
-            if resp.status_code == 200:
-                text = resp.text
-                # Convert minimal Markdown to HTML for display
-                import re
-                text = re.sub(r'^# (.+)$', r'<b style="font-size:16px">\1</b><br>', text, flags=re.MULTILINE)
-                text = re.sub(r'^## (.+)$', r'<b style="font-size:14px">\1</b><br>', text, flags=re.MULTILINE)
-                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-                text = re.sub(r'`(.+?)`', r'<code style="background:#2d2d2d;padding:1px 4px">\1</code>', text)
-                text = text.replace('\n', '<br>')
-                self.ready.emit(text)
+            if resp.ok:
+                self.ready.emit(resp.text)
         except Exception:
-            self.ready.emit("Could not load README.")
+            self.ready.emit("")
 
 
-# ─── Main Extensions Panel ─────────────────────────────────────────────────────
+# ─── Extension Detail Tab (opens in main editor area) ────────────────────────
+
+class ExtensionDetailTab(QWebEngineView):
+    """
+    A QWebEngineView that renders a VS Code-style extension detail page.
+    It starts with the search-result summary, then enriches itself with
+    the full Open VSX detail JSON once fetched.
+    """
+
+    LOADING_HTML = """
+    <html><body style="background:#1e1e1e;color:#ccc;font-family:sans-serif;
+                        display:flex;align-items:center;justify-content:center;
+                        height:100vh;margin:0;">
+      <div style="text-align:center">
+        <div style="font-size:32px;margin-bottom:12px">⏳</div>
+        <p style="color:#888">Loading extension details…</p>
+      </div>
+    </body></html>
+    """
+
+    def __init__(self, ext: dict, parent=None):
+        super().__init__(parent)
+        self._ext = ext
+        self._detail = {}
+        self._readme_html = ""
+        self.setHtml(self.LOADING_HTML)
+        self.setProperty("is_custom", True)
+        ns = ext.get("namespace", "")
+        name = ext.get("name", "")
+        identifier = f"ext:{ns}.{name}"
+        self.setProperty("identifier", identifier)
+
+        # Fetch detail + README in background
+        self._detail_thread = ExtensionDetailThread(ns, name)
+        self._detail_thread.detail_ready.connect(self._on_detail)
+        self._detail_thread.error_occurred.connect(lambda _: self._render())
+        self._detail_thread.start()
+
+    # ── Data handlers ─────────────────────────────────────────────────────────
+
+    def _on_detail(self, detail: dict):
+        self._detail = detail
+        # Kick off README fetch if available
+        readme_url = detail.get("files", {}).get("readme", "")
+        if readme_url:
+            self._readme_thread = ReadmeThread(readme_url)
+            self._readme_thread.ready.connect(self._on_readme)
+            self._readme_thread.start()
+        else:
+            self._render()
+
+    def _on_readme(self, raw: str):
+        self._readme_html = self._md_to_html(raw)
+        self._render()
+
+    # ── Markdown → HTML (minimal) ─────────────────────────────────────────────
+
+    @staticmethod
+    def _md_to_html(md: str) -> str:
+        import re
+        # Headings
+        md = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', md, flags=re.M)
+        md = re.sub(r'^### (.+)$',  r'<h3>\1</h3>', md, flags=re.M)
+        md = re.sub(r'^## (.+)$',   r'<h2>\1</h2>', md, flags=re.M)
+        md = re.sub(r'^# (.+)$',    r'<h1>\1</h1>', md, flags=re.M)
+        # Bold / italic
+        md = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', md)
+        md = re.sub(r'\*(.+?)\*',     r'<em>\1</em>', md)
+        # Inline code
+        md = re.sub(r'`([^`]+)`', r'<code>\1</code>', md)
+        # Links  [text](url)
+        md = re.sub(r'\[([^\]]+)\]\(([^)]+)\)',
+                    r'<a href="\2" style="color:#4db2ff">\1</a>', md)
+        # Images  ![alt](url)
+        md = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)',
+                    r'<img src="\2" alt="\1" style="max-width:100%;border-radius:4px">', md)
+        # Paragraphs / newlines
+        md = re.sub(r'\n{2,}', '</p><p>', md)
+        md = md.replace('\n', '<br>')
+        return f"<p>{md}</p>"
+
+    # ── Render ─────────────────────────────────────────────────────────────────
+
+    def _render(self):
+        ext = {**self._ext, **self._detail}  # merge; detail wins on conflicts
+
+        name        = ext.get("displayName") or ext.get("name", "")
+        namespace   = ext.get("namespace", "")
+        description = ext.get("description", "")
+        version     = ext.get("version", "—")
+        stars       = float(ext.get("averageRating", 0) or 0)
+        downloads   = int(ext.get("downloadCount", 0) or 0)
+        timestamp   = (ext.get("timestamp", "") or "")[:10]
+        categories  = ext.get("categories", []) or []
+        tags        = ext.get("tags", []) or []
+        icon_url    = (ext.get("files", {}) or {}).get("icon", "")
+        ext_id      = f"{namespace}.{ext.get('name', '')}"
+        published   = ext.get("publishedDate", "")
+        size        = ext.get("packageSizes", {}).get("download", 0)
+        size_str    = f"{size/1024:.1f} KB" if size else "—"
+
+        star_full  = "★" * round(stars)
+        star_empty = "☆" * (5 - round(stars))
+
+        # Category/tag pills
+        all_tags  = list(dict.fromkeys(categories + tags))[:8]
+        pills_html = " ".join(
+            f'<span style="background:#2d3139;border-radius:3px;'
+            f'padding:2px 8px;font-size:11px;color:#aab0b8">{t}</span>'
+            for t in all_tags
+        )
+
+        # Icon or placeholder
+        icon_tag = (
+            f'<img src="{icon_url}" width="80" height="80" '
+            f'style="border-radius:8px;object-fit:contain" onerror="this.style.display=\'none\'">'
+            if icon_url else
+            '<div style="width:80px;height:80px;background:#2d2d2d;border-radius:8px;'
+            'display:flex;align-items:center;justify-content:center;font-size:36px">⬛</div>'
+        )
+
+        readme_section = (
+            f'<div class="readme">{self._readme_html}</div>'
+            if self._readme_html else
+            '<p style="color:#666">No README available for this extension.</p>'
+        )
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background: #1e1e1e; color: #cccccc;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    font-size: 13px; line-height: 1.6;
+    padding: 0; overflow-x: hidden;
+  }}
+
+  /* ── Top hero ── */
+  .hero {{
+    background: #252526;
+    padding: 24px 28px 18px;
+    border-bottom: 1px solid #3d3d3d;
+    display: flex; gap: 20px; align-items: flex-start;
+  }}
+  .hero .icon-wrap {{ flex-shrink: 0; }}
+  .hero .info {{ flex: 1; }}
+  .hero h1 {{ font-size: 22px; color: #e6edf3; margin-bottom: 2px; }}
+  .hero .pub {{ color: #4db2ff; font-size: 12px; margin-bottom: 6px; cursor: pointer; }}
+  .hero .meta {{
+    color: #f0b429; font-size: 12px; margin-bottom: 6px;
+  }}
+  .hero .desc {{ color: #9aa0a6; font-size: 12px; margin-bottom: 12px; }}
+  .hero .btns {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+
+  /* ── Buttons ── */
+  .btn-install {{
+    background: #0e639c; color: white; border: none; border-radius: 3px;
+    padding: 6px 16px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }}
+  .btn-install:hover {{ background: #1177bb; }}
+  .btn-disable {{
+    background: #3c3c3c; color: #ccc; border: 1px solid #555; border-radius: 3px;
+    padding: 6px 14px; font-size: 12px; cursor: pointer;
+  }}
+  .btn-disable:hover {{ background: #505050; }}
+  .btn-prerelease {{
+    background: #4d2600; color: #f0a500; border: 1px solid #704000; border-radius: 3px;
+    padding: 6px 14px; font-size: 12px; cursor: pointer;
+  }}
+
+  /* ── Nav tabs ── */
+  .nav {{
+    background: #252526; border-bottom: 1px solid #3d3d3d;
+    display: flex; padding: 0 28px;
+  }}
+  .nav a {{
+    color: #8b949e; text-decoration: none; font-size: 12px; font-weight: 500;
+    padding: 10px 14px; display: inline-block; border-bottom: 2px solid transparent;
+  }}
+  .nav a.active {{
+    color: #e6edf3; border-bottom: 2px solid #4db2ff;
+  }}
+  .nav a:hover {{ color: #ccc; }}
+
+  /* ── Two-column layout ── */
+  .body-wrap {{
+    display: flex; gap: 0;
+  }}
+  .main-col {{
+    flex: 1; padding: 24px 28px; min-width: 0; overflow-wrap: break-word;
+  }}
+  .side-col {{
+    width: 240px; flex-shrink: 0; padding: 24px 20px;
+    border-left: 1px solid #3d3d3d;
+  }}
+
+  /* ── README ── */
+  .readme h1, .readme h2, .readme h3, .readme h4 {{
+    color: #e6edf3; margin: 18px 0 8px;
+  }}
+  .readme h1 {{ font-size: 20px; border-bottom: 1px solid #3d3d3d; padding-bottom: 6px; }}
+  .readme h2 {{ font-size: 17px; }}
+  .readme h3 {{ font-size: 15px; }}
+  .readme p  {{ margin-bottom: 12px; color: #bcc4ce; }}
+  .readme code {{
+    background: #2d2d2d; border-radius: 3px; padding: 1px 5px;
+    font-family: 'Fira Code', monospace; font-size: 12px; color: #e6edf3;
+  }}
+  .readme a {{ color: #4db2ff; }}
+  .readme img {{ max-width: 100%; border-radius: 6px; margin: 8px 0; }}
+  .readme ul, .readme ol {{ padding-left: 20px; margin-bottom: 12px; color: #bcc4ce; }}
+
+  /* ── Sidebar sections ── */
+  .side-section {{ margin-bottom: 22px; }}
+  .side-section h3 {{
+    font-size: 11px; font-weight: 700; color: #8b949e;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }}
+  .meta-row {{ display: flex; margin-bottom: 5px; font-size: 11px; }}
+  .meta-row .key {{ color: #8b949e; width: 90px; flex-shrink: 0; }}
+  .meta-row .val {{ color: #cccccc; word-break: break-all; }}
+  .pills {{ display: flex; flex-wrap: wrap; gap: 4px; }}
+  .pill {{
+    background: #2d3139; border-radius: 3px; padding: 2px 8px;
+    font-size: 10px; color: #aab0b8;
+  }}
+  .resource-link {{
+    display: block; color: #4db2ff; font-size: 11px;
+    text-decoration: none; margin-bottom: 4px;
+  }}
+  .resource-link:hover {{ text-decoration: underline; }}
+</style>
+</head>
+<body>
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <div class="icon-wrap">{icon_tag}</div>
+  <div class="info">
+    <h1>{name}</h1>
+    <div class="pub">{namespace}</div>
+    <div class="meta">
+      <span style="color:#f0b429">{star_full}{star_empty}</span>
+      &nbsp;({round(stars,1)})&nbsp;&nbsp;
+      <span style="color:#8b949e">⬇ {downloads:,}</span>
+    </div>
+    <div class="desc">{description}</div>
+    <div class="btns">
+      <button class="btn-install">Install</button>
+      <button class="btn-disable">Disable</button>
+      <button class="btn-prerelease">Switch to Pre-Release Version</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Nav ── -->
+<div class="nav">
+  <a href="#" class="active">DETAILS</a>
+  <a href="#">FEATURES</a>
+  <a href="#">CHANGELOG</a>
+  <a href="#">DEPENDENCIES</a>
+</div>
+
+<!-- ── Body: main + sidebar ── -->
+<div class="body-wrap">
+
+  <!-- README -->
+  <div class="main-col">
+    {readme_section}
+  </div>
+
+  <!-- Sidebar -->
+  <div class="side-col">
+
+    <div class="side-section">
+      <h3>Installation</h3>
+      <div class="meta-row"><span class="key">Identifier</span><span class="val">{ext_id}</span></div>
+      <div class="meta-row"><span class="key">Version</span><span class="val">{version}</span></div>
+      <div class="meta-row"><span class="key">Last Updated</span><span class="val">{timestamp}</span></div>
+      <div class="meta-row"><span class="key">Size</span><span class="val">{size_str}</span></div>
+    </div>
+
+    <div class="side-section">
+      <h3>Marketplace</h3>
+      <div class="meta-row"><span class="key">Published</span><span class="val">{published[:10] if published else '—'}</span></div>
+      <div class="meta-row"><span class="key">Last Released</span><span class="val">{timestamp}</span></div>
+    </div>
+
+    {"<div class='side-section'><h3>Categories</h3><div class='pills'>" + pills_html + "</div></div>" if pills_html else ""}
+
+    <div class="side-section">
+      <h3>Resources</h3>
+      <a class="resource-link" href="https://open-vsx.org/extension/{namespace}/{ext.get('name','')}">🌐 Marketplace</a>
+      <a class="resource-link" href="#">📄 License</a>
+      <a class="resource-link" href="#">📦 Repository</a>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>"""
+        self.setHtml(html)
+
+
+# ─── Extensions Panel (sidebar dock) ─────────────────────────────────────────
 
 class ExtensionsPanel(QDockWidget):
+    # Emitted when user clicks an extension; MainWindow connects this to
+    # open the detail tab in editor_manager.
+    open_detail_requested = pyqtSignal(object)   # payload: ext dict
+
     STYLE = """
         QDockWidget { background: #1e1e1e; }
-        QWidget { background: #1e1e1e; color: #cccccc; }
+        QWidget      { background: #1e1e1e; color: #cccccc; }
         QLineEdit {
             background: #3c3c3c; color: #cccccc; border: 1px solid #555;
             border-radius: 3px; padding: 5px 8px; font-size: 12px;
         }
-        QListWidget { background: #252526; border: none; outline: none; }
+        QListWidget  { background: #252526; border: none; outline: none; }
         QListWidget::item { border-bottom: 1px solid #2d2d2d; }
-        QListWidget::item:hover { background: #2a2d2e; }
+        QListWidget::item:hover    { background: #2a2d2e; }
         QListWidget::item:selected { background: #094771; border: none; }
-        QProgressBar {
-            background: #3c3c3c; border: none; height: 2px;
-        }
+        QProgressBar { background: #3c3c3c; border: none; height: 2px; }
         QProgressBar::chunk { background: #007acc; }
-        QSplitter::handle { background: #3d3d3d; width: 1px; }
     """
 
     def __init__(self, parent=None):
@@ -359,21 +410,23 @@ class ExtensionsPanel(QDockWidget):
             QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         self._search_thread = None
-        self._ext_map = {}   # list index -> ext dict
+        self._ext_map: dict[int, dict] = {}
         self.init_ui()
+
+    # ── UI ────────────────────────────────────────────────────────────────────
 
     def init_ui(self):
         root = QWidget()
         root.setStyleSheet(self.STYLE)
-        root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        root_l = QVBoxLayout(root)
+        root_l.setContentsMargins(0, 0, 0, 0)
+        root_l.setSpacing(0)
 
-        # ── Top search bar ────────────────────────────────────────────────────
+        # Search bar
         top = QWidget()
-        top.setStyleSheet("background:#252526; border-bottom: 1px solid #3d3d3d;")
+        top.setStyleSheet("background:#252526; border-bottom:1px solid #3d3d3d;")
         top_l = QVBoxLayout(top)
-        top_l.setContentsMargins(8, 8, 8, 8)
+        top_l.setContentsMargins(8, 8, 8, 6)
         top_l.setSpacing(4)
 
         self.search_input = QLineEdit()
@@ -387,41 +440,21 @@ class ExtensionsPanel(QDockWidget):
         self.progress_bar.hide()
         top_l.addWidget(self.progress_bar)
 
-        root_layout.addWidget(top)
+        root_l.addWidget(top)
 
-        # ── Splitter: list (left) + detail (right) ───────────────────────────
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setHandleWidth(1)
-
-        # List
-        list_container = QWidget()
-        list_container.setStyleSheet("background:#252526;")
-        list_l = QVBoxLayout(list_container)
-        list_l.setContentsMargins(0, 0, 0, 0)
-
+        # Results list
         self.list_widget = QListWidget()
         self.list_widget.setSpacing(0)
-        self.list_widget.setUniformItemSizes(False)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
-        self.list_widget.currentRowChanged.connect(self._on_row_changed)
-        list_l.addWidget(self.list_widget)
+        root_l.addWidget(self.list_widget, 1)
 
-        # Detail
-        self.detail_view = ExtensionDetailView()
-        self.detail_view.install_requested.connect(self.install_extension)
-
-        self.splitter.addWidget(list_container)
-        self.splitter.addWidget(self.detail_view)
-        self.splitter.setSizes([280, 500])
-
-        root_layout.addWidget(self.splitter, 1)
         self.setWidget(root)
 
         # Default search
         self.search_input.setText("python")
         self.do_search()
 
-    # ─── Search ───────────────────────────────────────────────────────────────
+    # ── Search ────────────────────────────────────────────────────────────────
 
     def do_search(self):
         query = self.search_input.text().strip()
@@ -436,9 +469,9 @@ class ExtensionsPanel(QDockWidget):
         self._search_thread.error_occurred.connect(self.on_error)
         self._search_thread.start()
 
-    # ─── Results ──────────────────────────────────────────────────────────────
+    # ── Results ───────────────────────────────────────────────────────────────
 
-    def on_results(self, extensions):
+    def on_results(self, extensions: list):
         self.progress_bar.hide()
         self.list_widget.clear()
         self._ext_map.clear()
@@ -446,25 +479,27 @@ class ExtensionsPanel(QDockWidget):
         for idx, ext in enumerate(extensions):
             self._ext_map[idx] = ext
 
-            name = ext.get("displayName") or ext.get("name", "")
-            publisher = ext.get("namespace", "")
+            name        = ext.get("displayName") or ext.get("name", "")
+            publisher   = ext.get("namespace", "")
             description = ext.get("description", "")
-            version = ext.get("version", "")
-            downloads = ext.get("downloadCount", 0)
+            version     = ext.get("version", "")
+            downloads   = int(ext.get("downloadCount", 0) or 0)
 
-            # Item widget
-            item_w = QWidget()
-            item_w.setStyleSheet("background: transparent;")
-            item_l = QVBoxLayout(item_w)
-            item_l.setContentsMargins(10, 8, 10, 8)
-            item_l.setSpacing(2)
+            # Row widget
+            row_w = QWidget()
+            row_w.setStyleSheet("background:transparent;")
+            row_l = QVBoxLayout(row_w)
+            row_l.setContentsMargins(10, 8, 10, 8)
+            row_l.setSpacing(2)
 
-            # Header: name + Install button
-            row = QHBoxLayout()
+            # Name + install btn
+            hr = QHBoxLayout()
             name_lbl = QLabel(f"<b>{name}</b>")
-            name_lbl.setStyleSheet("color: #e6edf3; font-size: 12px; background: transparent;")
-            row.addWidget(name_lbl, 1)
+            name_lbl.setStyleSheet("color:#e6edf3;font-size:12px;background:transparent;")
+            hr.addWidget(name_lbl, 1)
 
+            dl_url  = (ext.get("files") or {}).get("download", "")
+            ext_id  = f"{publisher}.{ext.get('name', '')}"
             btn = QPushButton("Install")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFixedHeight(22)
@@ -473,59 +508,45 @@ class ExtensionsPanel(QDockWidget):
                               padding:2px 10px; font-size:11px; }
                 QPushButton:hover { background:#1177bb; }
             """)
-            dl_url = ext.get("files", {}).get("download", "")
-            ext_id = f"{publisher}.{ext.get('name', '')}"
             btn.clicked.connect(
                 lambda _, eid=ext_id, url=dl_url: self.install_extension(eid, url)
             )
-            row.addWidget(btn)
-            item_l.addLayout(row)
+            hr.addWidget(btn)
+            row_l.addLayout(hr)
 
             # Description
             desc_lbl = QLabel(description[:80] + ("…" if len(description) > 80 else ""))
-            desc_lbl.setStyleSheet("color:#8b949e; font-size:11px; background:transparent;")
+            desc_lbl.setStyleSheet("color:#8b949e;font-size:11px;background:transparent;")
             desc_lbl.setWordWrap(True)
-            item_l.addWidget(desc_lbl)
+            row_l.addWidget(desc_lbl)
 
-            # Publisher + version
+            # Publisher · version · downloads
             pub_lbl = QLabel(f"{publisher}  ·  v{version}  ·  ⬇ {downloads:,}")
-            pub_lbl.setStyleSheet("color:#555; font-size:10px; background:transparent;")
-            item_l.addWidget(pub_lbl)
+            pub_lbl.setStyleSheet("color:#555;font-size:10px;background:transparent;")
+            row_l.addWidget(pub_lbl)
 
-            list_item = QListWidgetItem(self.list_widget)
-            list_item.setSizeHint(item_w.sizeHint())
-            self.list_widget.addItem(list_item)
-            self.list_widget.setItemWidget(list_item, item_w)
+            li = QListWidgetItem(self.list_widget)
+            li.setSizeHint(row_w.sizeHint())
+            self.list_widget.addItem(li)
+            self.list_widget.setItemWidget(li, row_w)
 
-    # ─── Click handler ────────────────────────────────────────────────────────
+    # ── Click → open detail tab ───────────────────────────────────────────────
 
     def _on_item_clicked(self, item):
         row = self.list_widget.row(item)
-        self._load_detail(row)
-
-    def _on_row_changed(self, row):
-        if row >= 0:
-            self._load_detail(row)
-
-    def _load_detail(self, row):
         ext = self._ext_map.get(row)
         if ext:
-            self.detail_view.load_extension(ext)
+            self.open_detail_requested.emit(ext)
 
-    # ─── Error / Install ──────────────────────────────────────────────────────
+    # ── Error / Install ───────────────────────────────────────────────────────
 
-    def on_error(self, error):
+    def on_error(self, error: str):
         self.progress_bar.hide()
-        from PyQt6.QtWidgets import QMessageBox
         QMessageBox.warning(self, "Search Error", f"Failed to fetch extensions:\n{error}")
 
-    def install_extension(self, extension_id, download_url):
-        from PyQt6.QtWidgets import QMessageBox
-        if not download_url:
-            QMessageBox.information(self, "Install", f"No download URL for {extension_id}")
-            return
+    def install_extension(self, ext_id: str, download_url: str):
         QMessageBox.information(
             self, "Install Extension",
-            f"Installing: {extension_id}\n\nThis will be handled by the Monaco Extension Host."
+            f"Installing: {ext_id}\n\nThis will be handled by the Monaco Extension Host."
         )
-        print(f"[Extensions] Install requested: {extension_id} → {download_url}")
+        print(f"[Extensions] Install: {ext_id} → {download_url}")
