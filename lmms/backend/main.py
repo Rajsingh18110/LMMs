@@ -1549,8 +1549,9 @@ lmms update
                         console.print(Markdown(full_reply))
                         reply = full_reply
                         break
-                        
+
                     # Check for tool call
+                    force_tool_mode = should_force_tool_mode(cmd)
                     tool_call_match = re.search(r"<tool_call>\s*(.*?)\s*(</tool_call>|$)", full_reply, re.DOTALL)
                     
                     # If the model emitted a tool_call but we're not in force_tool_mode,
@@ -1558,11 +1559,11 @@ lmms update
                     # We only suppress/strip tool calls when the reply is PURELY a tool call
                     # with NO other text AND the user's message is clearly conversational.
                     is_pure_tool_only = tool_call_match and not full_reply.replace(tool_call_match.group(0), "").strip()
-                    is_casual_chat = not should_force_tool_mode(cmd) and len(cmd.split()) <= 8
+                    is_casual_chat = not force_tool_mode and len(cmd.split()) <= 8
                     
                     if tool_call_match and is_pure_tool_only and is_casual_chat:
                         # Casual chat like "hello" that triggered a spurious tool call — strip it
-                        full_reply = re.sub(r"<tool_call>.*?(<\/tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
+                        full_reply = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
                         if not full_reply:
                             full_reply = "I'm ready to help, but this looks like a normal chat request rather than a tool-driven task."
                             console.print(Markdown(full_reply))
@@ -1578,7 +1579,7 @@ lmms update
                         except Exception:
                             pass
 
-                    if tool_call_match and force_tool_mode:
+                    if tool_call_match:
                         try:
                             raw_tc = tool_call_match.group(1).strip()
                             json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
