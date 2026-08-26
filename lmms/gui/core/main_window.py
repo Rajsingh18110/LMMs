@@ -295,7 +295,9 @@ class MainWindow(QMainWindow):
                 self.btn_refresh.hide()
             else:
                 self.open_folder_btn.hide()
-                self.tree_view.setRootIndex(self.file_model.index(cwd))
+                source_idx = self.file_model.index(cwd)
+                proxy_idx = self.diagnostic_model.mapFromSource(source_idx)
+                self.tree_view.setRootIndex(proxy_idx)
         else:
             placeholder = QLabel("File Explorer unavailable\n(QFileSystemModel missing)")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -659,7 +661,9 @@ class MainWindow(QMainWindow):
         self.btn_new_file.show()
         self.btn_new_folder.show()
         self.btn_refresh.show()
-        self.tree_view.setRootIndex(self.file_model.index(folder))
+        source_idx = self.file_model.index(folder)
+        proxy_idx = self.diagnostic_model.mapFromSource(source_idx)
+        self.tree_view.setRootIndex(proxy_idx)
         
         # Change actual working directory so terminal and new files default to it
         os.chdir(folder)
