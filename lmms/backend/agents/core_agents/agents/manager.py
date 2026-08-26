@@ -59,7 +59,7 @@ class AgentManager:
             return best_agent
         return None
 
-    async def execute_task(self, context: ExecutionContext) -> AsyncGenerator[str, None]:
+    async def execute_task(self, context: ExecutionContext) -> AsyncGenerator[Any, None]:
         """
         Main entrypoint for task execution.
         Routes to the correct agent, retrieves plan, and executes it.

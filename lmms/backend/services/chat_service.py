@@ -102,14 +102,32 @@ class ChatService(QThread):
                         if self._is_cancelled:
                             break
 
-                        buf += raw_chunk
-                        events, buf, in_think, in_syslog, has_emitted = self._parse_buffer(
-                            buf, in_think, in_syslog, has_emitted
-                        )
-                        for evt in events:
-                            if evt.type in ("reasoning_delta", "assistant_delta"):
+                        if hasattr(raw_chunk, 'type') and (hasattr(raw_chunk, 'content') or hasattr(raw_chunk, 'reasoning')):
+                            # Direct GenerationEvent routing
+                            t = raw_chunk.type
+                            if t == "thinking_delta": t = "reasoning_delta"
+                            if t == "content_delta": t = "assistant_delta"
+                            
+                            c = raw_chunk.content if t == "assistant_delta" else raw_chunk.reasoning
+                            
+                            if t in ("reasoning_delta", "assistant_delta"):
+                                evt = ChatEvent(
+                                    type=t,
+                                    message_id=self.active_message_id,
+                                    content=c or ""
+                                )
                                 visible_deltas += 1
-                            self.event_received.emit(evt)
+                                self.event_received.emit(evt)
+                        else:
+                            # String legacy buffer logic
+                            buf += str(raw_chunk)
+                            events, buf, in_think, in_syslog, has_emitted = self._parse_buffer(
+                                buf, in_think, in_syslog, has_emitted
+                            )
+                            for evt in events:
+                                if evt.type in ("reasoning_delta", "assistant_delta"):
+                                    visible_deltas += 1
+                                self.event_received.emit(evt)
 
                     # Flush remaining buffer
                     if buf.strip():

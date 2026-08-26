@@ -22,57 +22,51 @@ class PlainChatAgent(BaseAgent):
             "steps": ["Stream LLM response"]
         }
 
-    async def execute(self, context: ExecutionContext) -> AsyncGenerator[str, None]:
-        # Determine the active model
+    async def execute(self, context: ExecutionContext) -> AsyncGenerator[Any, None]:
         active_model = context.selected_model
+        
+        # In a real environment we have access to BackendManager, but here we can instantiate ProviderManager
+        # since it is a lightweight manager that relies on the RegistryService singleton.
+        from lmms.backend.providers.manager import ProviderManager
+        from lmms.backend.contracts.generation import GenerationRequest, Message
+        from lmms.backend.contracts.generation import GenerationEvent
+        
+        # If no model provided, fallback or fail
         if not active_model or active_model == "LMMs Engine":
-            active_model = "default"
-            try:
-                resp = requests.get("http://localhost:11435/v1/models/ps", timeout=2)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    loaded = data.get("loaded_models", [])
-                    if loaded:
-                        active_model = loaded[0]
-            except Exception:
-                pass
+            yield "\n[Error]: No active model selected. Please select a model from the dropdown.\n"
+            return
+            
+        provider_mgr = ProviderManager()
+        
+        if "::" in active_model:
+            provider_id, model_id = active_model.split("::", 1)
+        else:
+            # Fallback if old format
+            provider_id = "local_native"
+            model_id = active_model
+            
+        provider = provider_mgr.get_provider(provider_id)
+        if not provider:
+            yield f"\n[Error]: Provider '{provider_id}' not found or not enabled.\n"
+            return
+            
+        runtime = provider.get_runtime(model_id)
+        if not runtime:
+            yield f"\n[Error]: Could not initialize runtime for model '{model_id}' on provider '{provider_id}'.\n"
+            return
 
-        # Build prompt using task description
         user_prompt = context.task.description if context.task else ""
-        messages = [{"role": "user", "content": user_prompt}]
-        if context.memory:
-            # We can also append recent memory if needed, but for simplicity, we pass user_prompt
-            pass
-
-        payload = {
-            "model_name": active_model,
-            "messages": messages,
-            "stream": True
-        }
-
+        req = GenerationRequest(
+            model_id=model_id,
+            messages=[Message(role="user", content=user_prompt)],
+            modality="text",
+            execution_mode="FAST"
+        )
+        
         try:
-            response = requests.post("http://localhost:11435/v1/chat/completions", json=payload, stream=True, timeout=(10, 300))
-            response.raise_for_status()
-
-            for line in response.iter_lines():
-                if line:
-                    decoded = line.decode('utf-8')
-                    if decoded.startswith("data: "):
-                        data_str = decoded[6:]
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data_str)
-                            if "error" in chunk:
-                                yield f"\n[Error]: {chunk['error']}\n"
-                                break
-                            
-                            content = chunk.get("content", "")
-                            if content:
-                                yield content
-                        except json.JSONDecodeError:
-                            pass
-                            
-            yield "\n"
+            async for evt in runtime.stream(req):
+                # We yield the GenerationEvent object directly to the ChatService
+                yield evt
         except Exception as e:
-            yield f"\n[Error connecting to engine]: {e}\n"
+            yield f"\n[Error during generation]: {e}\n"
+
