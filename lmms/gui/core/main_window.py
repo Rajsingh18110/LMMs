@@ -468,6 +468,14 @@ class MainWindow(QMainWindow):
                 self.nav_buttons["Explorer"].setChecked(True)
 
     def toggle_right_panel(self):
+        if self.chat_dock.isVisible():
+            self.chat_dock.hide()
+            if "Chats" in self.nav_buttons:
+                self.nav_buttons["Chats"].setChecked(False)
+        else:
+            self.chat_dock.show()
+            self.chat_dock.raise_()
+            if "Chats" in self.nav_buttons:
                 self.nav_buttons["Chats"].setChecked(True)
 
     def on_editor_tab_changed(self, index):
