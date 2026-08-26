@@ -138,16 +138,16 @@ class ChatPage(QWidget):
         toolbar.setContentsMargins(0, 2, 0, 0)
         toolbar.setSpacing(6)
 
-        self.attach_btn = QPushButton("📎")
+        self.attach_btn = QPushButton("＋")
         self.attach_btn.setToolTip("Attach file")
         self.attach_btn.setFixedSize(26, 26)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.setStyleSheet("""
             QPushButton {
                 background: transparent; border: none;
-                color: #6b7280; font-size: 14px; border-radius: 4px;
+                color: #8b949e; font-size: 18px; font-weight: bold; border-radius: 4px;
             }
-            QPushButton:hover { background: #1f2937; color: #9ca3af; }
+            QPushButton:hover { background: #1f2937; color: #c9d1d9; }
         """)
         self.attach_btn.clicked.connect(self.attach_files)
 
@@ -168,32 +168,27 @@ class ChatPage(QWidget):
         """)
         self.refresh_models()
 
-        self.approvals_combo = QComboBox()
-        self.approvals_combo.addItems(["Low", "Medium", "Full"])
-        self.approvals_combo.setFixedHeight(24)
-        self.approvals_combo.setStyleSheet("""
-            QComboBox {
-                background: #1f2937; border: 1px solid #374151;
-                border-radius: 4px; color: #6b7280;
-                font-size: 11px; padding: 2px 8px;
+        self.mic_btn = QPushButton("🎙️")
+        self.mic_btn.setToolTip("Voice Input (Coming Soon)")
+        self.mic_btn.setFixedSize(26, 26)
+        self.mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.mic_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent; border: none;
+                color: #8b949e; font-size: 14px; border-radius: 4px;
             }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView {
-                background: #111827; color: #e5e7eb;
-                selection-background-color: #2563eb;
-                border: 1px solid #374151;
-            }
+            QPushButton:hover { background: #1f2937; color: #c9d1d9; }
         """)
 
-        self.send_btn = QPushButton("↑")
-        self.send_btn.setFixedSize(28, 28)
+        self.send_btn = QPushButton("➔")
+        self.send_btn.setFixedSize(30, 30)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._set_send_ready()
 
         toolbar.addWidget(self.attach_btn)
         toolbar.addWidget(self.model_combo)
-        toolbar.addWidget(self.approvals_combo)
         toolbar.addStretch()
+        toolbar.addWidget(self.mic_btn)
         toolbar.addWidget(self.send_btn)
         input_layout.addLayout(toolbar)
 
@@ -210,12 +205,12 @@ class ChatPage(QWidget):
         except TypeError:
             pass
         self.send_btn.clicked.connect(self.send_message)
-        self.send_btn.setText("↑")
-        self.send_btn.setFixedSize(28, 28)
+        self.send_btn.setText("➔")
+        self.send_btn.setFixedSize(30, 30)
         self.send_btn.setStyleSheet("""
             QPushButton {
                 background: #2563eb; color: #fff;
-                border-radius: 14px; border: none;
+                border-radius: 15px; border: none;
                 font-size: 16px; font-weight: bold;
             }
             QPushButton:hover { background: #3b82f6; }
@@ -234,11 +229,11 @@ class ChatPage(QWidget):
             pass
         self.send_btn.clicked.connect(self.stop_generation)
         self.send_btn.setText("■")
-        self.send_btn.setFixedSize(28, 28)
+        self.send_btn.setFixedSize(30, 30)
         self.send_btn.setStyleSheet("""
             QPushButton {
                 background: #374151; color: #f87171;
-                border-radius: 14px; border: none;
+                border-radius: 15px; border: none;
                 font-size: 14px; font-weight: bold;
             }
             QPushButton:hover { background: #4b5563; }

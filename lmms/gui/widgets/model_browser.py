@@ -1004,7 +1004,7 @@ class ModelDetailsTab(QWidget):
         copy_btn.setFixedSize(24, 24)
         copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         copy_btn.setStyleSheet("QPushButton { border: none; background: transparent; color: #8b949e; font-size: 14px; } QPushButton:hover { color: #ffffff; }")
-        copy_btn.clicked.connect(lambda: QGuiApplication.clipboard().setText(self.repo_id))
+        copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(self.repo_id))
         header_layout.addWidget(copy_btn)
         
         main_layout.addLayout(header_layout)
