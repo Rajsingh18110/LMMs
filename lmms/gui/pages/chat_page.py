@@ -256,39 +256,44 @@ class ChatPage(QWidget):
     # Model management
     # ─────────────────────────────────────────────────────────────────────────
     def refresh_models(self):
-        self.model_combo.addItem("Loading…")
-
-        def worker():
-            try:
-                import requests
-                resp = requests.get("http://localhost:11435/v1/models/list", timeout=2)
-                if resp.status_code == 200:
-                    models = [m["name"] for m in resp.json().get("models", [])]
-                    self.models_fetched.emit(models)
-                else:
-                    self.models_fetched.emit([])
-            except Exception:
-                self.models_fetched.emit([])
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    @pyqtSlot(list)
-    def on_models_fetched(self, models: list):
+        from lmms.backend.core.registry.model_registry import ModelRegistry
+        models = ModelRegistry.list()
+        
+        # We only want to show Text or Vision models (no Audio/ImageGeneration models for normal chat usually, but fine to show all enabled for now)
+        models = [m for m in models if m.get("enabled", True)]
+        
+        # Sort by display name
+        models.sort(key=lambda x: x.get("display_name", ""))
+        
         self.model_combo.clear()
-        if models:
-            self.model_combo.addItems(models)
-            saved_model = ConfigManager().get("chat_selected_model", "")
-            if saved_model and saved_model in models:
-                self.model_combo.setCurrentText(saved_model)
-        else:
+        
+        if not models:
             self.model_combo.addItem("No Models")
+        else:
+            saved_model_id = ConfigManager().get("chat_selected_model", "")
+            idx = 0
+            for i, m in enumerate(models):
+                d_name = m.get("display_name", "")
+                p_id = m.get("provider_id", "")
+                full_name = f"{d_name} ({p_id})"
+                self.model_combo.addItem(full_name, userData=m["id"])
+                
+                if m["id"] == saved_model_id:
+                    idx = i
+                    
+            self.model_combo.setCurrentIndex(idx)
             
         # Connect change event to save preference
-        try: self.model_combo.currentTextChanged.disconnect()
+        try: self.model_combo.currentIndexChanged.disconnect()
         except: pass
-        self.model_combo.currentTextChanged.connect(
-            lambda text: ConfigManager().set("chat_selected_model", text) if text and text != "Loading…" and text != "No Models" else None
-        )
+        
+        def on_index_changed(index):
+            if index >= 0:
+                data = self.model_combo.itemData(index)
+                if data:
+                    ConfigManager().set("chat_selected_model", data)
+                    
+        self.model_combo.currentIndexChanged.connect(on_index_changed)
 
     # ─────────────────────────────────────────────────────────────────────────
     # File attachment
@@ -385,15 +390,15 @@ class ChatPage(QWidget):
         self.message_list.add_message(user_msg)
 
         # Determine active model name
-        active_model = self.model_combo.currentText().strip()
-        if active_model in ("Loading…", "No Models", ""):
+        active_model = self.model_combo.currentData()
+        if not active_model:
             active_model = "LMMs Engine"
 
         # Create assistant placeholder
         asst_msg = ChatMessage(
             role="assistant",
             status="generating",
-            model_name=active_model
+            model_name=self.model_combo.currentText().strip() or active_model
         )
         self.messages.append(asst_msg)
         self.message_list.add_message(asst_msg)
@@ -581,8 +586,12 @@ class ChatPage(QWidget):
         self.message_list.remove_message(asst_msg_id)
         self.messages = [m for m in self.messages if m.id != asst_msg_id]
         # Create fresh assistant message
-        active_model = self.model_combo.currentText().strip() or "LMMs Engine"
-        new_asst = ChatMessage(role="assistant", status="generating", model_name=active_model)
+        # Create fresh assistant message
+        active_model_id = self.model_combo.currentData()
+        if not active_model_id: active_model_id = "LMMs Engine"
+        display_model = self.model_combo.currentText().strip() or active_model_id
+        
+        new_asst = ChatMessage(role="assistant", status="generating", model_name=display_model)
         self.messages.append(new_asst)
         self.message_list.add_message(new_asst)
         self.active_message_id = new_asst.id
@@ -593,7 +602,7 @@ class ChatPage(QWidget):
         self.set_send_btn_stop()
         # Re-send original prompt (strip HTML from display_msg)
         plain_prompt = _re.sub(r'<[^>]+>', '', user_msg.content).strip()
-        self.chat_service.start_chat(plain_prompt, message_id=new_asst.id)
+        self.chat_service.start_chat(plain_prompt, message_id=new_asst.id, model_name=active_model_id)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Misc

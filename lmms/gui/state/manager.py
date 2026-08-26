@@ -28,13 +28,15 @@ class GUIStateManager(QObject):
         
     def _on_model_imported(self, data):
         # Refresh model list
-        models_dict = self.backend.registry.load_models()
-        self.models.update_models(list(models_dict.values()))
+        from lmms.backend.core.registry.model_registry import ModelRegistry
+        models_list = ModelRegistry.list()
+        self.models.update_models(models_list)
         
     def _on_model_downloaded(self, data):
         # Refresh model list
-        models_dict = self.backend.registry.load_models()
-        self.models.update_models(list(models_dict.values()))
+        from lmms.backend.core.registry.model_registry import ModelRegistry
+        models_list = ModelRegistry.list()
+        self.models.update_models(models_list)
         
     def _on_model_connected(self, data):
         if "model_id" in data:
