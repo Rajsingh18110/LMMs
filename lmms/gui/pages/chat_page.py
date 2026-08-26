@@ -34,8 +34,6 @@ from lmms.backend.config.config import ConfigManager
 
 
 class ChatPage(QWidget):
-    models_fetched = pyqtSignal(list)
-
     def __init__(self):
         super().__init__()
         workspace_dir = ConfigManager().get("workspace_dir", os.path.expanduser("~/.lmms/workspaces/default"))
@@ -50,8 +48,6 @@ class ChatPage(QWidget):
         self.chat_service.error_occurred.connect(self.on_error_occurred)
         self.chat_service.cancelled.connect(self.on_cancelled)
         self.chat_service.no_response.connect(self.on_no_response)
-
-        self.models_fetched.connect(self.on_models_fetched)
 
         # Message state
         self.messages: list[ChatMessage] = []

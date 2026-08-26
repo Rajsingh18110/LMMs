@@ -552,7 +552,7 @@ class ModelBrowser(QDockWidget):
         super().__init__("Models", parent)
         self.setObjectName("ModelDock")
         self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetClosable)
-        ModelRegistry.scan_local_providers()
+        
         self.api_client = HFApiClient(self)
         self.api_client.models_ready.connect(self._populate_list)
         self.api_client.error.connect(self.on_fetch_error)
@@ -851,7 +851,7 @@ class ModelBrowser(QDockWidget):
 
     def _delete_local_model(self, mid):
         from lmms.backend.core.registry.model_registry import ModelRegistry
-        info = ModelRegistry.get_model(mid)
+        info = ModelRegistry.get(mid)
         if info:
             path = info.get("path")
             source = info.get("source")
@@ -862,7 +862,7 @@ class ModelBrowser(QDockWidget):
                     import lmms.gui.core.ui
                     lmms.gui.core.ui.show_error(f"Could not delete file:\n{e}")
                     return
-            ModelRegistry.remove_model(mid)
+            ModelRegistry.delete(mid)
             self.load_downloaded_models()
             self.load_models() # Refresh Discover tab too
 
@@ -871,11 +871,11 @@ class ModelBrowser(QDockWidget):
         self.model_list.clear()
         
         from lmms.backend.core.registry.model_registry import ModelRegistry
-        registry = ModelRegistry.load_registry()
+        registry = ModelRegistry.list()
         
         for m in models:
             mid = m.get("id", "Unknown")
-            is_local = mid in registry
+            is_local = any(m.get("internal_id") == mid for m in registry)
             if is_local:
                 m["downloads"] = "Local"
                 
@@ -923,7 +923,7 @@ class ModelDetailsTab(QWidget):
         super().__init__(parent)
         self.model_info = model_info
         self.repo_id = model_info.get("modelId", model_info.get("id", ""))
-        self.local_status = ModelRegistry.get_model(self.repo_id)
+        self.local_status = ModelRegistry.get(self.repo_id)
         self.downloader = None
         self.api_client = HFApiClient(self)
         self.api_client.files_ready.connect(self.on_files_loaded)
@@ -1428,7 +1428,7 @@ class ModelDetailsTab(QWidget):
     def on_download_complete(self, path, btn):
         btn.setText("✓ Downloaded")
         btn.setStyleSheet("background-color: #21262d; color: #3fb950; border: 1px solid #30363d; padding: 4px 12px; border-radius: 4px;")
-        ModelRegistry.add_local_model(self.repo_id, path, "GGUF" if path.endswith(".gguf") else "Safetensors")
-        self.local_status = ModelRegistry.get_model(self.repo_id)
+        ModelRegistry.register(model_id=self.repo_id, provider_id="ollama" if path.endswith(".gguf") else "huggingface", display_name=self.repo_id.split("/")[-1], modality="text", capabilities={"thinking": False, "vision": False, "tools": False}, path=path, format="GGUF" if path.endswith(".gguf") else "Safetensors")
+        self.local_status = ModelRegistry.get(self.repo_id)
         self.update_action_visibility()
 
