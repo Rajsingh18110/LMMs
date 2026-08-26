@@ -1,11 +1,17 @@
 from typing import Protocol, Dict, List, Any
+from lmms.backend.contracts.runtime import ModelRuntime
 
 class ProviderContract(Protocol):
-    """Protocol for external model sources (Ollama API, LM Studio API, HuggingFace)."""
+    """Protocol for external and local model providers."""
     
-    def scan_models(self) -> List[Dict[str, Any]]:
-        """Returns a list of Model Manifests."""
+    def test_connection(self) -> Dict[str, Any]:
+        """Test the connection and return status/latency."""
         ...
         
-    def fetch_model(self, model_id: str) -> bool:
+    def scan_models(self) -> List[Dict[str, Any]]:
+        """Returns a list of Model metadata dicts."""
+        ...
+        
+    def get_runtime(self) -> ModelRuntime:
+        """Returns the execution runtime for this provider."""
         ...

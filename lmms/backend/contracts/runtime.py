@@ -1,23 +1,22 @@
-from typing import Protocol, Any, Dict
+from typing import Protocol, Any, Dict, AsyncGenerator
+from lmms.backend.contracts.generation import GenerationRequest, GenerationEvent
 
-class RuntimeContract(Protocol):
-    """Protocol for LMMs engines (Ollama, llama.cpp, AirLLM, vLLM)."""
+class ModelRuntime(Protocol):
+    """Protocol for all model inference executions (Local and External)."""
     
-    def load_model(self, model_id: str, manifest: Dict[str, Any]) -> bool:
+    async def generate(self, request: GenerationRequest) -> GenerationEvent:
+        """Single generation resulting in a final event."""
         ...
         
-    def unload_model(self, model_id: str) -> bool:
+    async def stream(self, request: GenerationRequest) -> AsyncGenerator[GenerationEvent, None]:
+        """Streaming generation yielding intermediate events."""
         ...
         
-    def generate(self, prompt: str, **kwargs) -> str:
+    async def estimate_tokens(self, request: GenerationRequest) -> int:
+        """Estimate token count for a request prior to execution."""
         ...
         
-    def stream(self, prompt: str, **kwargs) -> Any:
+    def cancel(self) -> None:
+        """Cancel an ongoing generation request."""
         ...
-        
-    def embeddings(self, text: str) -> list[float]:
-        ...
-        
-    def health(self) -> Dict[str, Any]:
-        """Returns runtime status, VRAM usage, etc."""
-        ...
+
