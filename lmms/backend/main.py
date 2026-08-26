@@ -265,22 +265,23 @@ def run_cli():
                     with open(config_path, "r") as f:
                         cfg = json.load(f)
                         saved_model = cfg.get("chat_selected_model") or cfg.get("default_model")
-                        if saved_model:
-                            current_model = saved_model
-                except: pass
+                except:
+                    saved_model = None
 
-            r = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
-            stats = r.json()
-            detected_model = extract_active_model_from_stats(stats)
-            if detected_model and current_model == "None":
-                current_model = detected_model
-            else:
-                if current_model == "None":
-                    r_list = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=2)
-                    models_list = r_list.json().get("models", [])
-                    if models_list:
-                        # Ensure default_model is loaded instead of randomly picking one
-                        current_model = models_list[0]["name"]
+                r = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
+                stats = r.json()
+                detected_model = extract_active_model_from_stats(stats)
+                
+                if saved_model:
+                    current_model = saved_model
+                    if detected_model != saved_model:
+                        try:
+                            # Auto-load quietly
+                            requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": saved_model}, timeout=60)
+                        except:
+                            pass
+                elif detected_model:
+                    current_model = detected_model
         except Exception:
             pass
 
@@ -412,13 +413,42 @@ def run_cli():
         console.print("[bold cyan]LMMS v1.0[/bold cyan] [dim]· powered by markanm[/dim]")
         console.print("[dim]Type 'exit' to quit. Type '/cl' for the full command list.[/dim]\n")
 
+    _token_cache = {}
+    
+    def count_tokens_batch(texts: list[str], model_name: str) -> list[int]:
+        uncached_indices = []
+        uncached_texts = []
+        results = [0] * len(texts)
+        
+        for i, text in enumerate(texts):
+            h = hash(text)
+            if (model_name, h) in _token_cache:
+                results[i] = _token_cache[(model_name, h)]
+            else:
+                uncached_indices.append(i)
+                uncached_texts.append(text)
+                
+        if uncached_texts:
+            try:
+                r = requests.post(f"{ENGINE_URL}/v1/tokenize", json={"model_name": model_name, "texts": uncached_texts}, timeout=2)
+                if r.status_code == 200:
+                    counts = r.json().get("token_counts", [len(t) // 3 for t in uncached_texts])
+                    for idx, c in zip(uncached_indices, counts):
+                        results[idx] = c
+                        _token_cache[(model_name, hash(texts[idx]))] = c
+                    return results
+            except: pass
+            
+            # Fallback
+            for idx, text in zip(uncached_indices, uncached_texts):
+                c = len(text) // 3
+                results[idx] = c
+                _token_cache[(model_name, hash(text))] = c
+                
+        return results
+
     def count_tokens(text: str, model_name: str) -> int:
-        try:
-            r = requests.post(f"{ENGINE_URL}/v1/tokenize", json={"model_name": model_name, "text": text}, timeout=2)
-            if r.status_code == 200:
-                return r.json().get("token_count", len(text) // 3)
-        except: pass
-        return len(text) // 3
+        return count_tokens_batch([text], model_name)[0]
 
     _context_budget_cache = {}
 
@@ -500,23 +530,8 @@ def run_cli():
     )
     # ----------------------------------------
     
-    if current_model != "None":
-        already_loaded = False
-        try:
-            resp = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
-            if resp.status_code == 200:
-                active_models = resp.json().get("models", [])
-                if any(m.get("id") == current_model for m in active_models):
-                    already_loaded = True
-        except Exception:
-            pass
-            
-        if not already_loaded:
-            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Loading model...[/dim]", spinner="lmms_wave"):
-                try:
-                    requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": current_model}, timeout=120)
-                except Exception:
-                    pass
+    # Auto-loading on startup was removed.
+    # The user now manually selects a model using /ml or it loads lazily on first chat.
 
     while True:
         try:
@@ -1127,22 +1142,9 @@ lmms update
                     continue
                     
                 if current_model == "None":
-                    # Auto-select: first try ps (loaded models), then list (available files)
-                    try:
-                        r_ps = requests.get(f"{ENGINE_URL}/v1/models/ps", timeout=2)
-                        ps_data = r_ps.json()
-                        detected_model = extract_active_model_from_stats(ps_data)
-                        if detected_model:
-                            current_model = detected_model
-                        else:
-                            r_list = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=2)
-                            models_list = r_list.json().get("models", [])
-                            if models_list:
-                                current_model = models_list[0]["name"]
-                    except Exception:
-                        pass
-                    if current_model != "None":
-                        console.print(f"[dim]Auto-selected model: {current_model}[/dim]")
+                    console.print("[yellow]No model is currently selected! Use '/ml -l' to list models and '/ml -s <model_name>' to select one.[/yellow]")
+                    continue
+                    
                     
                 system_prompt = f"You are {current_model}, an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\n"
                 
@@ -1181,6 +1183,7 @@ lmms update
                         system_prompt += (
                             "\\n## DIRECT CHAT MODE\\n"
                             "This is a normal conversational request. Answer naturally in plain text without forcing tool usage.\\n"
+                            "Do not output internal thoughts, <think> tags, or 'Let me check...' phrases. Output your final answer directly.\\n"
                             "Only use <tool_call> when the user explicitly asks for browsing, searching, file reading, or command execution.\\n\\n"
                         )
 
@@ -1285,8 +1288,12 @@ lmms update
                 auto_extract_persona(cmd, current_model)
                 
                 
+                import time
+                _budget_start = time.time()
                 n_ctx, reserve, available_for_input = get_context_budget(current_model)
                 system_cost = count_tokens(system_prompt, current_model)
+                _budget_end = time.time()
+                print(f"[DEBUG] Context budget & sys prompt tokenization took: {_budget_end - _budget_start:.3f}s")
                 avg_iter_cost = 1000 # Estimate tokens used per tool call/iteration
                 max_possible = max(1, (available_for_input - system_cost) // avg_iter_cost)
                 
@@ -1364,44 +1371,19 @@ lmms update
                             if iter_count == MAX_ITERATIONS - 1:
                                 messages.append({"role": "user", "content": "System Note: You are about to reach the maximum number of tool iterations (8/8). If you have not solved the problem, please output a final summary of what you tried and the current errors without calling more tools."})
 
-                            first_line = None
-                            import threading
-                            import time
+                            resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
+                                "model_name": current_model,
+                                "messages": clean_messages,
+                                "stream": True,
+                                "temperature": req_temp,
+                                "top_p": req_top_p,
+                                "repetition_penalty": 1.15,
+                                "mode": current_mode.strip("/"),
+                                "think": show_thoughts
+                            }, stream=True, timeout=(10, 3600))
+                            resp.raise_for_status()
                             
-                            running_status = True
-                            status_start_time = time.time()
-                            
-                            with console.status(f"[bold blue]{current_model}:[/bold blue] [dim]Evaluating & Generating... (0s)[/dim]", spinner="lmms_wave") as status:
-                                def update_status():
-                                    while running_status:
-                                        elapsed = int(time.time() - status_start_time)
-                                        status.update(f"[bold blue]{current_model}:[/bold blue] [dim]Evaluating & Generating... ({elapsed}s)[/dim]")
-                                        time.sleep(1)
-                                        
-                                t_status = threading.Thread(target=update_status, daemon=True)
-                                t_status.start()
-                                
-                                try:
-                                    resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
-                                        "model_name": current_model,
-                                        "messages": clean_messages,
-                                        "stream": True,
-                                        "temperature": req_temp,
-                                        "top_p": req_top_p,
-                                        "repetition_penalty": 1.15,
-                                        "mode": current_mode.strip("/"),
-                                        "think": True
-                                    }, stream=True, timeout=(10, 3600))
-                                    resp.raise_for_status()
-                                    
-                                    chunks_iterator = resp.iter_lines()
-                                    for line in chunks_iterator:
-                                        if line:
-                                            first_line = line
-                                            break
-                                finally:
-                                    running_status = False
-                                    t_status.join(timeout=1.0)
+                            chunks_iterator = resp.iter_lines()
                         except requests.exceptions.ReadTimeout:
                             console.print(f"\n[bold red]❌ Engine Error: Model took too long to load or server died unexpectedly.[/bold red]")
                             break
@@ -1429,31 +1411,33 @@ lmms update
                             
                     full_reply = ""
                     try:
+                        first_token = False
                         live_view = None
                         try:
-                            # Spinner has already exited
-                            if first_line:
-                                console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
-                                live_view = Live(console=console, refresh_per_second=15, auto_refresh=True)
-                                live_view.start()
-                                
-                                import time
-                                last_refresh = time.time()
-                                final_display = ""
-                                leak_check_done = False
-                                
-                                def process_line(line_bytes):
-                                    nonlocal full_reply, last_refresh, final_display, leak_check_done
+                            import time
+                            last_refresh = time.time()
+                            final_display = ""
+                            leak_check_done = False
+
+                            with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave") as spin_status:
+                                for line_bytes in chunks_iterator:
+                                    if not line_bytes:
+                                        continue
+                                        
                                     line_str = line_bytes.decode("utf-8")
                                     if line_str.startswith("data: "):
                                         data_str = line_str[6:]
-                                        if data_str == "[DONE]": return False
+                                        if data_str == "[DONE]": 
+                                            break
                                         try:
                                             chunk = json.loads(data_str)
                                             if "error" in chunk:
                                                 full_reply += f"\n\n❌ **Engine Error:** {chunk['error']}"
-                                                live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False), refresh=True)
-                                                return False
+                                                if live_view:
+                                                    live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False), refresh=True)
+                                                else:
+                                                    console.print(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False))
+                                                break
                                                 
                                             full_reply += chunk.get("content", "")
                                             
@@ -1467,33 +1451,25 @@ lmms update
                                                     leak_check_done = True
                                                     
                                             display_reply = visible_cli_reply(full_reply)
-                                            
                                             final_display = display_reply
+                                            
+                                            if display_reply and not first_token:
+                                                first_token = True
+                                                spin_status.stop()
+                                                console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                                                live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
+                                                live_view.start()
                                                 
-                                            if not display_reply:
-                                                if "<think>" in full_reply and "</think>" not in full_reply:
-                                                    display_reply = "*Thinking...*"
-                                                else:
-                                                    pass
-                                                    
-                                            if display_reply:
+                                            if live_view and display_reply:
                                                 now = time.time()
                                                 if now - last_refresh > 0.05:
                                                     live_view.update(Markdown(display_reply), refresh=True)
                                                     last_refresh = now
                                                 else:
                                                     live_view.update(Markdown(display_reply), refresh=False)
-                                        except: pass
-                                    return True
+                                        except Exception: 
+                                            pass
                                 
-                                # Process the first line
-                                if process_line(first_line):
-                                    # Process the rest
-                                    for line in chunks_iterator:
-                                        if line:
-                                            if not process_line(line):
-                                                break
-                                                
                                 # Apply leak cleanup to fully completed full_reply if not done
                                 if not leak_check_done:
                                     cleaned_reply = re.sub(r'^(?:The user says|According to identity rules|I\'ll output|We need to answer|Provide concise|You are a|Use internal knowledge)[\s\S]*?(?:No tool needed\.|Answer:|\n\n|Hello!)', '', full_reply, flags=re.IGNORECASE).strip()
@@ -1503,9 +1479,10 @@ lmms update
                                 final_display = visible_cli_reply(full_reply)
                                     
                                 # Force a final render
-                                if final_display:
+                                if final_display and live_view:
                                     live_view.update(Markdown(final_display), refresh=True)
-                                elif full_reply:
+                                elif full_reply and not first_token:
+                                    spin_status.stop()
                                     console.print("[dim]No visible answer returned. The model only produced hidden/thinking text.[/dim]")
                         finally:
                             if live_view:
@@ -1528,7 +1505,13 @@ lmms update
                         break
                                         
                     if not full_reply:
-                        if iter_count < MAX_ITERATIONS and sum(count_tokens(m.get("content", ""), current_model) if isinstance(m.get("content"), str) else 0 for m in messages) > available_for_input * 0.8:
+                        _tok_start = time.time()
+                        msg_texts = [m.get("content", "") for m in messages if isinstance(m.get("content"), str)]
+                        total_msg_cost = sum(count_tokens_batch(msg_texts, current_model))
+                        _tok_end = time.time()
+                        print(f"[DEBUG] History token calculation took: {_tok_end - _tok_start:.3f}s")
+                        
+                        if iter_count < MAX_ITERATIONS and total_msg_cost > available_for_input * 0.8:
                             console.print(f"\n[bold yellow]⚠️ Silent generation failure (likely context overflow). Auto-truncating...[/bold yellow]")
                             for idx, m in enumerate(messages):
                                 if isinstance(m["content"], str) and "<observation>" in m["content"]:

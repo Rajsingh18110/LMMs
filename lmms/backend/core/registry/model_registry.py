@@ -16,7 +16,20 @@ class ModelRegistry:
             return {}
         try:
             with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                registry = json.load(f)
+            
+            cleaned = {}
+            changed = False
+            for k, v in registry.items():
+                if "path" in v and os.path.exists(v["path"]):
+                    cleaned[k] = v
+                else:
+                    changed = True
+            
+            if changed:
+                ModelRegistry.save_registry(cleaned)
+                
+            return cleaned
         except Exception:
             return {}
 

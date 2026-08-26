@@ -115,22 +115,11 @@ class LlamaCppRuntime(RuntimeContract):
                     "flash_attn": True,
                     "verbose": False
                 }
-                # Initial guess for chat_format based on filename.
-                # This llama-cpp-python build exposes the Qwen handler as "qwen".
-                detected_format = self._detect_chat_format(full_path)
-                if detected_format:
-                    kwargs["chat_format"] = detected_format
-                elif "chatml" in os.path.basename(full_path).lower():
-                    kwargs["chat_format"] = "chatml"
-                elif "llama" in os.path.basename(full_path).lower():
-                    kwargs["chat_format"] = "llama-2"
-                    kwargs["chat_format"] = "chatml"
+                # Let llama-cpp-python handle chat format natively from GGUF metadata
                 
                 print(f"[TIMING LOG] Attempt {attempt}: Loading Llama with n_ctx={current_ctx}, n_gpu_layers=-1...")
                 start_time = time.time()
                 model_instance = Llama(**kwargs)
-                if "chat_format" in kwargs:
-                    model_instance.chat_format = kwargs["chat_format"]
                 end_time = time.time()
                 print(f"[TIMING LOG] Attempt {attempt} SUCCEEDED in {end_time - start_time:.2f}s")
                 break
@@ -171,14 +160,6 @@ class LlamaCppRuntime(RuntimeContract):
             
         if not has_chat_template:
             self._model_fallback_stops[key] = ["<|im_end|>", "</s>", "<|endoftext|>"]
-            # Apply Burst/format fallback when metadata lacks a template. Qwen GGUFs
-            # need the registered qwen chat format in this llama-cpp-python build.
-            if "chat_format" not in kwargs:
-                fallback_format = self._detect_chat_format(full_path) or "chatml"
-                print(f"[Fallback] No chat_template found in metadata for {key}. Reloading with fallback '{fallback_format}' format to prevent infinite repetition.")
-                del model_instance
-                kwargs["chat_format"] = fallback_format
-                model_instance = Llama(**kwargs)
         else:
             self._model_fallback_stops[key] = None
 

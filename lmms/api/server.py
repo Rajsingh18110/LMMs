@@ -113,7 +113,7 @@ class DoctorRequest(BaseModel):
 
 class TokenizeRequest(BaseModel):
     model_name: str
-    text: str
+    texts: List[str]
 
 @app.post("/v1/models/load")
 async def load_model(req: LoadRequest):
@@ -525,8 +525,15 @@ async def get_model_context(model_name: str):
 @app.post("/v1/tokenize")
 async def tokenize_text(req: TokenizeRequest):
     try:
-        tokens = engine_manager.runtime.tokenize(req.text)
-        return {"status": "success", "token_count": len(tokens)}
+        def batch_tokenize():
+            counts = []
+            for t in req.texts:
+                tokens = engine_manager.runtime.tokenize(t)
+                counts.append(len(tokens))
+            return counts
+            
+        counts = await asyncio.to_thread(batch_tokenize)
+        return {"status": "success", "token_counts": counts}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 

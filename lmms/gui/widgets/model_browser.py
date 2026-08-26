@@ -713,10 +713,23 @@ class ModelBrowser(QDockWidget):
         connected_models = backend.connection.get_connected_models()
 
         models = []
+        seen_paths = set()
+        
         for mid, info in models_dict.items():
-            state = "Imported"
-            if info.get("source") == "lmms":
-                state = "Downloaded"
+            path = info.get("path")
+            if path in seen_paths:
+                continue
+            
+            source = info.get("source", "")
+            
+            # User ONLY wants to see models downloaded via LMMs in this list,
+            # hide HuggingFace cache models as it confuses them.
+            if source not in ["lmms", "Local"]:
+                continue
+                
+            seen_paths.add(path)
+            
+            state = "Downloaded"
             
             if mid in connected_models:
                 state = connected_models[mid].get("state", "Connected")
