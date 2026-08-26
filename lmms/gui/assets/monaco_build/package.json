@@ -7,8 +7,20 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@codingame/monaco-vscode-api": "~8.0.4",
+    "@codingame/monaco-vscode-base-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-environment-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-extensions-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-files-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-host-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-languages-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-layout-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-localization-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-model-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-quickaccess-service-override": "~8.0.4",
     "monaco-editor": "^0.47.0",
     "monaco-languageclient": "^8.1.1",
+    "vscode": "npm:@codingame/monaco-vscode-api@~8.0.4",
     "vscode-ws-jsonrpc": "^3.3.1"
   },
   "devDependencies": {

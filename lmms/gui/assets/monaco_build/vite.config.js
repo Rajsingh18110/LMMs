@@ -5,6 +5,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'es2022'
   },
   optimizeDeps: {
     include: ['monaco-editor', 'monaco-languageclient', 'vscode-ws-jsonrpc']

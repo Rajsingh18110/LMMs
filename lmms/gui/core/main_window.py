@@ -27,6 +27,8 @@ from lmms.gui.widgets.model_browser import ModelBrowser, ModelDetailsTab
 from lmms.gui.panels.terminal_panel import TerminalPanel
 from lmms.backend.services.workspace_service import WorkspaceService
 from lmms.gui.widgets.menu import LMMsMenuBar
+from lmms.gui.panels.source_control_panel import SourceControlPanel
+from lmms.gui.panels.extensions_panel import ExtensionsPanel
 
 # State Management & Notifications
 from lmms.backend.logic.manager import BackendManager
@@ -331,6 +333,24 @@ class MainWindow(QMainWindow):
         self.model_dock.model_selected.connect(self.on_model_selected)
         self.model_dock.hide() # Hidden by default
         
+        # 5. Source Control Dock
+        self.source_control_dock = SourceControlPanel(self.inner_window)
+        self.source_control_dock.setObjectName("SourceControlDock")
+        self.docks["Source Control"] = self.source_control_dock
+        self.source_control_dock.hide()
+
+        # 6. Extensions Dock
+        self.extensions_dock = ExtensionsPanel(self.inner_window)
+        self.extensions_dock.setObjectName("ExtensionsDock")
+        self.docks["Extensions"] = self.extensions_dock
+        self.extensions_dock.hide()
+        
+        # Init Source Control Workspace
+        if not self.is_empty_workspace and hasattr(self.source_control_dock, 'set_workspace'):
+            cwd = ConfigManager().get("workspace_dir", os.getcwd())
+            if os.path.exists(cwd):
+                self.source_control_dock.set_workspace(cwd)
+        
         # Set Dock Dimensions
         for dock in self.docks.values():
             dock.setMinimumWidth(170)
@@ -342,13 +362,15 @@ class MainWindow(QMainWindow):
         # Add Docks - Initial Default Layout
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.explorer_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.search_dock)
+        self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.source_control_dock)
+        self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.extensions_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
         
         # Set default width for left docks to 250px
         self.inner_window.resizeDocks(
-            [self.explorer_dock, self.search_dock, self.model_dock],
-            [250, 250, 250],
+            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock],
+            [250, 250, 250, 250, 250],
             Qt.Orientation.Horizontal
         )
         
@@ -366,6 +388,8 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.svg")),
             ("🔍", "Search", os.path.join(assets_dir, "icon_search.svg")),
+            ("🌿", "Source Control", os.path.join(assets_dir, "icon_source_control.svg")),
+            ("🧩", "Extensions", os.path.join(assets_dir, "icon_extensions.svg")),
             ("📦", "Models", os.path.join(assets_dir, "icon_models.svg")),
             ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]
@@ -526,7 +550,7 @@ class MainWindow(QMainWindow):
     def toggle_dock(self, name, button):
         dock = self.docks[name]
         
-        left_docks = ["Explorer", "Search", "Models"]
+        left_docks = ["Explorer", "Search", "Source Control", "Extensions", "Models"]
         if name in left_docks:
             # Hide other left docks to simulate sidebar tabs
             if not dock.isVisible():
@@ -688,6 +712,10 @@ class MainWindow(QMainWindow):
         
         # Change actual working directory so terminal and new files default to it
         os.chdir(folder)
+        
+        # Notify panels
+        if hasattr(self, 'source_control_dock') and hasattr(self.source_control_dock, 'set_workspace'):
+            self.source_control_dock.set_workspace(folder)
         
         # Notify chat page
         if hasattr(self, 'chat_page') and hasattr(self.chat_page, 'update_workspace'):

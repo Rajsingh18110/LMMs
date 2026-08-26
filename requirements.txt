@@ -60,3 +60,6 @@ sqlite-vec
 # Utilities
 # =========================================
 crawl4ai
+GitPython
+PyGithub
+keyring

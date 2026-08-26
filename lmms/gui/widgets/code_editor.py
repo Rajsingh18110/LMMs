@@ -11,6 +11,7 @@ class PythonBridge(QObject):
     setContent = pyqtSignal(str, str) # content, language
     sendLspMessage = pyqtSignal(str) # Send to JS
     lspMessageFromJs = pyqtSignal(str) # Receive from JS
+    updateGitDecorations = pyqtSignal(str) # Send to JS
 
     @pyqtSlot(str)
     def onContentChanged(self, content):
@@ -74,6 +75,26 @@ class CodeEditor(QWebEngineView):
     def _on_content_changed(self, content):
         self._current_content = content
         self.textChanged.emit()
+        self._update_git_decorations()
+        
+    def _update_git_decorations(self):
+        file_path = self.property("file_path")
+        if not file_path:
+            return
+            
+        try:
+            # Avoid circular import by doing it inline or passing via signal
+            from lmms.gui.utils.git_manager import GitManager
+            import json
+            import os
+            # Assume workspace is git repo root for now, or find the nearest .git
+            cwd = os.getcwd() 
+            manager = GitManager(cwd)
+            decs = manager.compute_decorations(file_path, self._current_content)
+            if decs is not None:
+                self.bridge.updateGitDecorations.emit(json.dumps(decs))
+        except Exception as e:
+            print("Failed to compute git decorations:", e)
         
     def load_file(self, file_path, content, disable_highlighting=False):
         self.setProperty("file_path", file_path)
