@@ -1310,7 +1310,7 @@ lmms update
                 n_ctx, reserve, available_for_input = get_context_budget(current_model)
                 system_cost = count_tokens(system_prompt, current_model)
                 _budget_end = time.time()
-                print(f"[DEBUG] Context budget & sys prompt tokenization took: {_budget_end - _budget_start:.3f}s")
+                # Context budget calculated silently
                 avg_iter_cost = 1000 # Estimate tokens used per tool call/iteration
                 max_possible = max(1, (available_for_input - system_cost) // avg_iter_cost)
                 
@@ -1322,7 +1322,7 @@ lmms update
                 if current_mode == "/fast": MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
                 else: MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
                 
-                print(f"[DEBUG] Budget: n_ctx={n_ctx}, reserve={reserve}, avail={available_for_input}, sys_cost={system_cost}, max_possible={max_possible}, MAX_ITERATIONS={MAX_ITERATIONS}, full_prompt={full_prompt}")
+                # Budget debug (silent)
                 
                 iter_count = 0
                 
@@ -1533,7 +1533,7 @@ lmms update
                         msg_texts = [m.get("content", "") for m in messages if isinstance(m.get("content"), str)]
                         total_msg_cost = sum(count_tokens_batch(msg_texts, current_model))
                         _tok_end = time.time()
-                        print(f"[DEBUG] History token calculation took: {_tok_end - _tok_start:.3f}s")
+
                         
                         if iter_count < MAX_ITERATIONS and total_msg_cost > available_for_input * 0.8:
                             console.print(f"\n[bold yellow]⚠️ Silent generation failure (likely context overflow). Auto-truncating...[/bold yellow]")
@@ -1541,7 +1541,7 @@ lmms update
                                 if isinstance(m["content"], str) and "<observation>" in m["content"]:
                                     messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
                             iter_count -= 1
-                            console.print(f"[DEBUG] hitting context overflow continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
+
                             continue
 
                         full_reply = "No response from AI."
@@ -1698,7 +1698,7 @@ lmms update
                                 os.chmod(log_file, 0o600)
                             except Exception as e:
                                 pass
-                            console.print(f"[DEBUG] hitting tool observation continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
+
                             continue  # Loop again
                         except Exception as e:
                             with open("/tmp/ai_json_crash.txt", "a") as f:
@@ -1706,7 +1706,7 @@ lmms update
                             console.print("  [dim]↻ Self-correcting JSON format...[/dim]")
                             messages.append({"role": "assistant", "content": full_reply})
                             messages.append({"role": "user", "content": f"<observation>\nError parsing tool JSON: {e}. Ensure you use valid JSON, double quotes for keys, and escape internal quotes.\n</observation>"})
-                            console.print(f"[DEBUG] hitting JSON self-correction continue. iter_count={iter_count}, repr(full_reply)={repr(full_reply)}")
+
                             continue
                             
                     # If no tool call, break out
