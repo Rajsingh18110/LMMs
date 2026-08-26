@@ -30,12 +30,12 @@ class ExtensionSearchThread(QThread):
     results_ready  = pyqtSignal(list, int)   # extensions, totalSize
     error_occurred = pyqtSignal(str)
 
+    # Valid Open VSX sortBy values: relevance | timestamp | rating | downloadCount
     SORT_MAP = {
         "Relevance":  "relevance",
         "Downloads":  "downloadCount",
-        "Rating":     "averageRating",
+        "Rating":     "rating",
         "Updated":    "timestamp",
-        "Name":       "publishedDate",
     }
 
     def __init__(self, query, offset=0, sort_by="relevance"):
@@ -46,9 +46,10 @@ class ExtensionSearchThread(QThread):
 
     def run(self):
         try:
+            q_enc = requests.utils.quote(self.query)
             url = (
                 f"https://open-vsx.org/api/-/search"
-                f"?query={requests.utils.quote(self.query)}"
+                f"?query={q_enc}"
                 f"&size={PAGE_SIZE}"
                 f"&offset={self.offset}"
                 f"&sortBy={self.sort_by}"
@@ -56,11 +57,47 @@ class ExtensionSearchThread(QThread):
             )
             r = requests.get(url, timeout=12)
             r.raise_for_status()
-            data  = r.json()
-            total = int(data.get("totalSize", 0))
-            self.results_ready.emit(data.get("extensions", []), total)
+            data       = r.json()
+            extensions = data.get("extensions", [])
+            total      = int(data.get("totalSize", 0))
+
+            # --- Exact-match boost (first page only) -------------------------
+            # If the top result isn't an obvious match, try fetching the exact
+            # extension by namespace/name (e.g. query = "ms-python.python" or
+            # just "codex" → try open-vsx.org/api/-/search?query=codex exactly)
+            if self.offset == 0 and extensions:
+                exact = self._try_exact_lookup(self.query)
+                if exact:
+                    # Remove duplicate from list, then prepend exact match
+                    ns_name = f"{exact.get('namespace','')}.{exact.get('name','')}"
+                    extensions = [e for e in extensions
+                                  if f"{e.get('namespace','')}.{e.get('name','')}" != ns_name]
+                    extensions.insert(0, exact)
+            # -----------------------------------------------------------------
+
+            self.results_ready.emit(extensions, total)
         except Exception as e:
             self.error_occurred.emit(str(e))
+
+    @staticmethod
+    def _try_exact_lookup(query: str) -> dict | None:
+        """If query looks like 'namespace.name', fetch it directly."""
+        if '.' not in query:
+            return None
+        parts = query.strip().split('.', 1)
+        if len(parts) != 2:
+            return None
+        ns, name = parts[0], parts[1]
+        try:
+            r = requests.get(
+                f"https://open-vsx.org/api/{ns}/{name}",
+                timeout=6
+            )
+            if r.ok:
+                return r.json()
+        except Exception:
+            pass
+        return None
 
 
 class IconThread(QThread):
@@ -881,6 +918,7 @@ class ExtensionsPanel(QDockWidget):
         sort_row.addWidget(sort_lbl)
 
         self.sort_combo = QComboBox()
+        # Only add sort options the Open VSX API actually supports
         self.sort_combo.addItems(["Relevance", "Downloads", "Rating", "Updated"])
         self.sort_combo.currentTextChanged.connect(self._on_sort_changed)
         self.sort_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -936,7 +974,7 @@ class ExtensionsPanel(QDockWidget):
         sort_map = {
             "Relevance": "relevance",
             "Downloads": "downloadCount",
-            "Rating":    "averageRating",
+            "Rating":    "rating",       # Open VSX uses 'rating' not 'averageRating'
             "Updated":   "timestamp",
         }
         self._sort_by = sort_map.get(label, "relevance")
