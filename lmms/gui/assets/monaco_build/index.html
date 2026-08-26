@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monaco Editor Wrapper</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #0d1117;
+      }
+      #editor {
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="editor"></div>
+    <!-- QWebChannel for PyQt6 bridge -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -93,11 +93,19 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                 resp.raise_for_status()
                 llm_text = resp.json().get("message", {}).get("content", "")
                 
-                if llm_text.startswith("```json"): llm_text = llm_text[7:]
-                if llm_text.startswith("```"): llm_text = llm_text[3:]
-                if llm_text.endswith("```"): llm_text = llm_text[:-3]
-                    
-                response_json = json.loads(llm_text.strip())
+                import re
+                json_str = llm_text
+                match = re.search(r'```(?:json)?\s*(.*?)\s*```', llm_text, re.DOTALL | re.IGNORECASE)
+                if match:
+                    json_str = match.group(1).strip()
+                else:
+                    json_str = re.sub(r'<think>.*?</think>', '', llm_text, flags=re.DOTALL).strip()
+                    start = json_str.find('{')
+                    end = json_str.rfind('}')
+                    if start != -1 and end != -1:
+                        json_str = json_str[start:end+1]
+                
+                response_json = json.loads(json_str)
                 action = response_json.get("action")
                 
                 yield f"Thoughts: {response_json.get('thoughts', '')}\n"

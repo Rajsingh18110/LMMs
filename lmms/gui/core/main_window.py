@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QStackedWidget, QPushButton, QLabel, QSplitter,
-    QTreeView, QTabWidget, QTextEdit, QDockWidget, QMenu, QStatusBar, QFrame
+    QTreeView, QTabWidget, QTextEdit, QDockWidget, QMenu, QStatusBar, QFrame, QLineEdit
 )
 from PyQt6.QtCore import Qt, QSize, QPoint, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QFont, QCursor, QColor, QPixmap, QPainter
@@ -23,6 +23,7 @@ from lmms.backend.core.commands import CommandRegistry, CommandContext
 from lmms.gui.utils.icon_provider import CustomIconProvider
 from lmms.gui.panels.search_panel import SearchPanel
 from lmms.gui.widgets.model_browser import ModelBrowser, ModelDetailsTab
+from lmms.gui.panels.terminal_panel import TerminalPanel
 from lmms.backend.services.workspace_service import WorkspaceService
 from lmms.gui.widgets.menu import LMMsMenuBar
 
@@ -30,6 +31,27 @@ from lmms.gui.widgets.menu import LMMsMenuBar
 from lmms.backend.logic.manager import BackendManager
 from lmms.gui.state.manager import GUIStateManager
 from lmms.gui.notifications.manager import NotificationManager
+
+class InlineInput(QLineEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("""
+            QLineEdit {
+                background-color: #252526;
+                color: #cccccc;
+                border: 1px solid #007fd4;
+                padding: 2px 4px;
+                font-size: 13px;
+                selection-background-color: #062f4a;
+            }
+        """)
+        self.hide()
+        self.is_folder = False
+        self.target_path = ""
+
+    def focusOutEvent(self, event):
+        self.hide()
+        super().focusOutEvent(event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -144,24 +166,30 @@ class MainWindow(QMainWindow):
             self.project_label = QLabel(project_name.upper())
             self.project_label.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; letter-spacing: 1px;")
             
-            self.btn_new_file = QPushButton("📄")
+            assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+            
+            self.btn_new_file = QPushButton()
+            self.btn_new_file.setIcon(QIcon(os.path.join(assets_dir, "icon_new_file.svg").replace("\\", "/")))
             self.btn_new_file.setToolTip("New File")
             self.btn_new_file.clicked.connect(self.create_new_file)
             
-            self.btn_new_folder = QPushButton("📁")
+            self.btn_new_folder = QPushButton()
+            self.btn_new_folder.setIcon(QIcon(os.path.join(assets_dir, "icon_new_folder.svg").replace("\\", "/")))
             self.btn_new_folder.setToolTip("New Folder")
             self.btn_new_folder.clicked.connect(self.create_new_folder)
             
-            self.btn_refresh = QPushButton("↻")
+            self.btn_refresh = QPushButton()
+            self.btn_refresh.setIcon(QIcon(os.path.join(assets_dir, "icon_refresh.svg").replace("\\", "/")))
             self.btn_refresh.setToolTip("Refresh Explorer")
             self.btn_refresh.clicked.connect(lambda: self.file_model.setRootPath(self.file_model.rootPath()))
             
             for btn in [self.btn_new_file, self.btn_new_folder, self.btn_refresh]:
-                btn.setFixedSize(22, 22)
+                btn.setFixedSize(24, 24)
+                btn.setIconSize(QSize(16, 16))
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setStyleSheet("""
-                    QPushButton { background: transparent; border: none; color: #8b949e; border-radius: 4px; font-size: 12px; padding: 0px; }
-                    QPushButton:hover { background: #30363d; color: #c9d1d9; }
+                    QPushButton { background: transparent; border: none; border-radius: 4px; padding: 0px; }
+                    QPushButton:hover { background: #30363d; }
                 """)
                 
             toolbar_layout.addWidget(self.project_label)
@@ -187,6 +215,39 @@ class MainWindow(QMainWindow):
             self.tree_view.setObjectName("explorerTree")
             self.tree_view.setModel(self.file_model)
             self.tree_view.setHeaderHidden(True)
+            self.tree_view.setIndentation(20)
+            
+            assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+            closed_icon = os.path.join(assets_dir, "branch_closed.svg").replace("\\", "/")
+            open_icon = os.path.join(assets_dir, "branch_open.svg").replace("\\", "/")
+            
+            self.tree_view.setStyleSheet(f"""
+                QTreeView {{
+                    background-color: transparent;
+                    color: #cccccc;
+                    border: none;
+                    outline: none;
+                }}
+                QTreeView::item {{
+                    padding: 4px 0px;
+                }}
+                QTreeView::item:selected {{
+                    background-color: #37373d;
+                    color: #ffffff;
+                }}
+                QTreeView::item:hover:!selected {{
+                    background-color: #2a2d2e;
+                }}
+                QTreeView::branch:has-children:!has-siblings:closed,
+                QTreeView::branch:closed:has-children:has-siblings {{
+                    image: url("{closed_icon}");
+                }}
+                QTreeView::branch:open:has-children:!has-siblings,
+                QTreeView::branch:open:has-children:has-siblings {{
+                    image: url("{open_icon}");
+                }}
+            """)
+            
             for i in range(1, 4):
                 self.tree_view.hideColumn(i)
             self.tree_view.setExpandsOnDoubleClick(False)
@@ -196,6 +257,9 @@ class MainWindow(QMainWindow):
             self.tree_view.customContextMenuRequested.connect(self.show_explorer_context_menu)
             
             explorer_layout.addWidget(self.tree_view)
+            
+            self.inline_input = InlineInput(self.tree_view)
+            self.inline_input.returnPressed.connect(self.commit_inline_input)
             
             if self.is_empty_workspace:
                 self.tree_view.hide()
@@ -258,6 +322,20 @@ class MainWindow(QMainWindow):
             [250, 250, 250],
             Qt.Orientation.Horizontal
         )
+        
+        # 5. Terminal/Panel Dock
+        self.terminal_dock = QDockWidget("Panel", self.inner_window)
+        self.terminal_dock.setObjectName("TerminalDock")
+        self.terminal_panel = TerminalPanel()
+        self.terminal_dock.setWidget(self.terminal_panel)
+        self.terminal_dock.setTitleBarWidget(QWidget()) # Hide native dock title bar for cleaner look
+        self.docks["Panel"] = self.terminal_dock
+        
+        # Add Terminal to bottom
+        self.inner_window.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.terminal_dock)
+        
+        # Set default height for bottom dock
+        self.inner_window.resizeDocks([self.terminal_dock], [250], Qt.Orientation.Vertical)
 
         # Sidebar Buttons
         self.nav_buttons = {}
@@ -307,7 +385,6 @@ class MainWindow(QMainWindow):
                     btn.setIcon(QIcon(custom_icon_path))
                 
                 # VS Code activity bar icons are typically 24x24
-                from PyQt6.QtCore import QSize
                 btn.setIconSize(QSize(24, 24))
                 
             btn.setToolTip(name)
@@ -579,29 +656,55 @@ class MainWindow(QMainWindow):
             return self.file_model.rootPath()
         return os.getcwd()
 
-    def create_new_file(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+    def _show_inline_input(self, is_folder):
         path = self.get_selected_explorer_path()
         if os.path.isfile(path): path = os.path.dirname(path)
-        name, ok = QInputDialog.getText(self, "New File", "Enter file name:")
-        if ok and name:
-            try:
-                file_path = os.path.join(path, name)
-                open(file_path, 'w').close()
-                self.editor_manager.open_file(file_path)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error creating file: {e}")
+        
+        idx = self.tree_view.currentIndex()
+        if not idx.isValid():
+            idx = self.file_model.index(self.file_model.rootPath())
+        
+        # Position inline input over the tree view
+        rect = self.tree_view.visualRect(idx)
+        x = rect.x() + 20
+        y = rect.bottom()
+        
+        # If y is outside the tree view, clamp it
+        if y > self.tree_view.height() - 24:
+            y = self.tree_view.height() - 24
+        
+        self.inline_input.setGeometry(x, y, self.tree_view.width() - x - 10, 24)
+        self.inline_input.target_path = path
+        self.inline_input.is_folder = is_folder
+        self.inline_input.setText("")
+        self.inline_input.setPlaceholderText("New Folder" if is_folder else "New File")
+        self.inline_input.show()
+        self.inline_input.setFocus()
+
+    def commit_inline_input(self):
+        name = self.inline_input.text().strip()
+        path = self.inline_input.target_path
+        is_folder = self.inline_input.is_folder
+        self.inline_input.hide()
+        
+        if not name: return
+        
+        target_file = os.path.join(path, name)
+        try:
+            if is_folder:
+                os.makedirs(target_file, exist_ok=True)
+            else:
+                open(target_file, 'a').close()
+                self.editor_manager.open_file(target_file)
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error", f"Could not create item: {e}")
+
+    def create_new_file(self):
+        self._show_inline_input(is_folder=False)
                 
     def create_new_folder(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
-        path = self.get_selected_explorer_path()
-        if os.path.isfile(path): path = os.path.dirname(path)
-        name, ok = QInputDialog.getText(self, "New Folder", "Enter folder name:")
-        if ok and name:
-            try:
-                os.makedirs(os.path.join(path, name), exist_ok=True)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error creating folder: {e}")
+        self._show_inline_input(is_folder=True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

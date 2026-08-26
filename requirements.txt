@@ -22,6 +22,8 @@ airllm
 # LMMs GUI (PyQt6) Dependencies
 # =========================================
 PyQt6
+PyQt6-WebEngine
+python-lsp-server
 PyQt6-Qt6
 PyQt6-sip
 qasync

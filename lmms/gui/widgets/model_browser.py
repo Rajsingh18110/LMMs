@@ -39,18 +39,18 @@ from lmms.backend.services.model_registry import ModelRegistry
 def get_provider_details(model_id: str):
     low = model_id.lower()
     verified = False
-    if "meta" in low or "llama" in low: return "Meta", "#0668E1", "M", True
-    if "google" in low or "gemma" in low: return "Google", "#EA4335", "G", True
-    if "qwen" in low or "alibaba" in low: return "Alibaba", "#7C3AED", "Q", True
-    if "mistral" in low or "mixtral" in low: return "Mistral", "#F97316", "M", True
-    if "microsoft" in low or "phi" in low: return "Microsoft", "#00A4EF", "M", True
+    if "meta" in low or "llama" in low: return "meta-llama", "#0668E1", "M", True
+    if "google" in low or "gemma" in low: return "google", "#EA4335", "G", True
+    if "qwen" in low or "alibaba" in low: return "Qwen", "#7C3AED", "Q", True
+    if "mistral" in low or "mixtral" in low: return "mistralai", "#F97316", "M", True
+    if "microsoft" in low or "phi" in low: return "microsoft", "#00A4EF", "M", True
     if "ollama" in low: return "Ollama", "#222222", "O", True
     
     author = model_id.split('/')[0] if '/' in model_id else model_id
     initial = author[0].upper() if author else "M"
     colors = ["#D97706", "#059669", "#2563EB", "#7C3AED", "#DB2777", "#DC2626"]
     color = colors[hash(author) % len(colors)]
-    return author.capitalize(), color, initial, False
+    return author, color, initial, False
 
 def parse_model_tags(repo_id: str, tags: list):
     params_str = ""
@@ -330,6 +330,7 @@ class LogoLoader(QObject):
         urls = [
             f"https://huggingface.co/{org}/resolve/main/logo.png",
             f"https://huggingface.co/api/organizations/{org}/avatar",
+            f"https://huggingface.co/api/users/{org}/avatar",
         ]
         self._try_url(org, urls, 0)
 
@@ -351,8 +352,33 @@ class LogoLoader(QObject):
         ok = (reply.error() == QNetworkReply.NetworkError.NoError)
         if ok:
             data = bytes(reply.readAll())
+            
+            # Check if Hugging Face returned JSON containing the avatarUrl
+            if data.startswith(b"{"):
+                try:
+                    import json
+                    json_data = json.loads(data.decode('utf-8'))
+                    if "avatarUrl" in json_data:
+                        urls.insert(idx + 1, json_data["avatarUrl"])
+                        self._try_url(org, urls, idx + 1)
+                        reply.deleteLater()
+                        return
+                except:
+                    pass
+                    
             pixmap = QPixmap()
-            ok = pixmap.loadFromData(data) and not pixmap.isNull()
+            ok = pixmap.loadFromData(data)
+            if not ok and len(data) > 0:
+                try:
+                    import io
+                    from PIL import Image
+                    img = Image.open(io.BytesIO(data))
+                    out = io.BytesIO()
+                    img.save(out, format="PNG")
+                    ok = pixmap.loadFromData(out.getvalue())
+                except:
+                    pass
+            ok = ok and not pixmap.isNull()
         if ok:
             pixmap = self._round_pixmap(pixmap, self.LOGO_SIZE)
             self._cache[org] = pixmap
@@ -422,7 +448,7 @@ class ModelItemDelegate(QStyledItemDelegate):
 
         m      = index.data(Qt.ItemDataRole.UserRole)
         logo   = index.data(Qt.ItemDataRole.UserRole + 1)
-        org    = index.data(Qt.ItemDataRole.UserRole + 2) or ""
+        avatar_key = index.data(Qt.ItemDataRole.UserRole + 2) or ""
 
         mid    = m.get("modelId", m.get("id", "Unknown"))
         name   = mid.split("/")[-1] if "/" in mid else mid
@@ -450,9 +476,15 @@ class ModelItemDelegate(QStyledItemDelegate):
             painter.drawPixmap(x, cy - 16, 32, 32, logo)
         else:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setBrush(QBrush(QColor("#333")))
+            
+            _, color_hex, initial, _ = get_provider_details(mid)
+            painter.setBrush(QBrush(QColor(color_hex)))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(x, cy - 16, 32, 32)
+            
+            painter.setPen(QColor("#ffffff"))
+            painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            painter.drawText(QRect(x, cy - 16, 32, 32), Qt.AlignmentFlag.AlignCenter, initial)
 
         tx = x + 40
 
@@ -476,7 +508,18 @@ class ModelItemDelegate(QStyledItemDelegate):
         painter.setFont(QFont("Arial", 10))
         painter.setPen(QColor("#8b949e"))
         
-        painter.drawText(QRect(right_x, y + 8, 60, 18), Qt.AlignmentFlag.AlignRight, f"↓ {dl_str}" if dl != "Local" else dl_str)
+        if dl == "Local":
+            painter.drawText(QRect(right_x - 70, y + 8, 60, 18), Qt.AlignmentFlag.AlignRight, dl_str)
+            
+            btn_rect = QRect(rect.right() - 65, rect.y() + (rect.height() - 24) // 2, 56, 24)
+            painter.setBrush(QBrush(QColor("#21262d")))
+            painter.setPen(QPen(QColor("#30363d"), 1))
+            painter.drawRoundedRect(btn_rect, 4, 4)
+            painter.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+            painter.setPen(QColor("#8b949e"))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter, "Delete")
+        else:
+            painter.drawText(QRect(right_x, y + 8, 60, 18), Qt.AlignmentFlag.AlignRight, f"↓ {dl_str}")
         if updated:
             painter.drawText(QRect(right_x - 20, y + rect.height() - 22, 80, 18), Qt.AlignmentFlag.AlignRight, updated)
         
@@ -502,6 +545,24 @@ class ModelBrowser(QDockWidget):
         
         self.init_title_bar()
         self.init_ui()
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            for lst in [self.model_list, self.downloads_list]:
+                if obj == lst.viewport():
+                    pos = event.pos()
+                    item = lst.itemAt(pos)
+                    if item:
+                        m = item.data(Qt.ItemDataRole.UserRole)
+                        dl = m.get("downloads", 0)
+                        if dl == "Local":
+                            rect = lst.visualItemRect(item)
+                            btn_rect = QRect(rect.right() - 65, rect.y() + (rect.height() - 24) // 2, 56, 24)
+                            if btn_rect.contains(pos):
+                                mid = m.get("id")
+                                self.prompt_delete_model(mid)
+                                return True
+        return super().eventFilter(obj, event)
 
     def init_title_bar(self):
         title_widget = QWidget()
@@ -631,16 +692,18 @@ class ModelBrowser(QDockWidget):
         self.model_list = QListWidget()
         self.model_list.setSpacing(1)
         self.model_list.setItemDelegate(ModelItemDelegate(self.model_list))
-        self.model_list.currentItemChanged.connect(self._on_model_selected)
+        self.model_list.itemClicked.connect(self._on_item_clicked)
         self.model_list.setStyleSheet("QListWidget { background-color: transparent; border: none; }")
+        self.model_list.viewport().installEventFilter(self)
 
         discover_layout.addWidget(self.model_list)
         
         self.downloads_list = QListWidget()
         self.downloads_list.setSpacing(1)
         self.downloads_list.setItemDelegate(ModelItemDelegate(self.downloads_list))
-        self.downloads_list.currentItemChanged.connect(self._on_model_selected)
+        self.downloads_list.itemClicked.connect(self._on_item_clicked)
         self.downloads_list.setStyleSheet("QListWidget { background-color: transparent; border: none; }")
+        self.downloads_list.viewport().installEventFilter(self)
         downloads_layout.addWidget(self.downloads_list)
 
         self.setWidget(container)
@@ -749,20 +812,61 @@ class ModelBrowser(QDockWidget):
             item.setData(Qt.ItemDataRole.UserRole + 2, m.get("id", "Unknown").split("/")[0])
             item.setSizeHint(QSize(0, 54))
             self.downloads_list.addItem(item)
+            
             org = m.get("id", "Unknown").split("/")[0]
             self._logo_loader.load(org)
+
+    def prompt_delete_model(self, mid):
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Confirm Deletion",
+            f"Are you sure you want to delete {mid}?\nThis will permanently delete the model file.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._delete_local_model(mid)
+
+    def _delete_local_model(self, mid):
+        from lmms.backend.core.registry.model_registry import ModelRegistry
+        info = ModelRegistry.get_model(mid)
+        if info:
+            path = info.get("path")
+            source = info.get("source")
+            if path and os.path.exists(path) and source in ["Local", "lmms"]:
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    import lmms.gui.core.ui
+                    lmms.gui.core.ui.show_error(f"Could not delete file:\n{e}")
+                    return
+            ModelRegistry.remove_model(mid)
+            self.load_downloaded_models()
+            self.load_models() # Refresh Discover tab too
 
     def _populate_list(self, models: list):
         self.status_label.hide()
         self.model_list.clear()
+        
+        from lmms.backend.core.registry.model_registry import ModelRegistry
+        registry = ModelRegistry.load_registry()
+        
         for m in models:
+            mid = m.get("id", "Unknown")
+            is_local = mid in registry
+            if is_local:
+                m["downloads"] = "Local"
+                
+            brand, _, _, is_verified = get_provider_details(mid)
+            avatar_key = brand if is_verified else mid.split("/")[0]
+
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
-            item.setData(Qt.ItemDataRole.UserRole + 2, m.get("id", "Unknown").split("/")[0])
+            item.setData(Qt.ItemDataRole.UserRole + 2, avatar_key)
             item.setSizeHint(QSize(0, 54))
             self.model_list.addItem(item)
-            org = m.get("id", "Unknown").split("/")[0]
-            self._logo_loader.load(org)
+            
+            self._logo_loader.load(avatar_key)
 
         if not models:
             self.status_label.setText("No models found.")
@@ -777,9 +881,10 @@ class ModelBrowser(QDockWidget):
                     item.setData(Qt.ItemDataRole.UserRole + 1, pixmap)
             lst.viewport().update()
 
-    def _on_model_selected(self, current, previous):
-        if current:
-            m = current.data(Qt.ItemDataRole.UserRole)
+    def _on_item_clicked(self, item):
+        if not item: return
+        m = item.data(Qt.ItemDataRole.UserRole)
+        if m:
             self.model_selected.emit(m)
 
     def on_fetch_error(self, err_msg):
@@ -875,178 +980,168 @@ class ModelDetailsTab(QWidget):
     def init_ui(self):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("QScrollArea { border: none; background-color: #0d1117; }")
+        self.scroll.setStyleSheet("QScrollArea { border: none; background-color: #1e1e1e; }")
         
         self.container = QWidget()
         main_layout = QVBoxLayout(self.container)
-        main_layout.setContentsMargins(30, 30, 30, 30)
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_layout.setSpacing(25)
 
-        top_layout = QHBoxLayout()
-        org = self.repo_id.split('/')[0]
+        # Header: Title & Copy Icon
+        header_layout = QHBoxLayout()
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         
-        self.header_logo = QLabel()
-        self.header_logo.setFixedSize(48, 48)
-        self.header_logo.setStyleSheet("background-color: #333; color: white; border-radius: 24px; font-size: 20px; font-weight: bold;")
-        self.header_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.header_logo.setText(org[:2].upper())
-        top_layout.addWidget(self.header_logo)
-
-        self._local_loader = LogoLoader(self)
-        self._local_loader.logo_ready.connect(lambda o, p: self.header_logo.setPixmap(p.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)) if o == org else None)
-        self._local_loader.load(org)
-
-        title_vbox = QVBoxLayout()
-        title_vbox.setSpacing(2)
+        title_icon = QLabel("🤖")
+        title_icon.setStyleSheet("font-size: 20px; color: #8b949e;")
+        header_layout.addWidget(title_icon)
         
-        title_row = QHBoxLayout()
-        self.title_lbl = QLabel(self.model_info.get("title", self.repo_id.split('/')[-1]))
-        self.title_lbl.setStyleSheet("color: #ffffff; font-size: 24px; font-weight: bold;")
-        title_row.addWidget(self.title_lbl)
+        self.title_lbl = QLabel(self.repo_id)
+        self.title_lbl.setStyleSheet("color: #e6edf3; font-size: 22px; font-weight: bold; font-family: 'Segoe UI', sans-serif;")
+        self.title_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        header_layout.addWidget(self.title_lbl)
         
-        title_vbox.addLayout(title_row)
+        copy_btn = QPushButton("❐")
+        copy_btn.setFixedSize(24, 24)
+        copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy_btn.setStyleSheet("QPushButton { border: none; background: transparent; color: #8b949e; font-size: 14px; } QPushButton:hover { color: #ffffff; }")
+        copy_btn.clicked.connect(lambda: QGuiApplication.clipboard().setText(self.repo_id))
+        header_layout.addWidget(copy_btn)
         
-        repo_lbl = QLabel(f"🏢 {self.repo_id}  ❐")
-        repo_lbl.setStyleSheet("color: #8b949e; font-size: 14px;")
-        repo_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-        title_vbox.addWidget(repo_lbl)
+        main_layout.addLayout(header_layout)
+
+        # Subheader: Stats & Staff Pick
+        stats_layout = QHBoxLayout()
+        stats_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        stats_layout.setSpacing(20)
         
-        top_layout.addLayout(title_vbox)
-        top_layout.addStretch()
+        self.stats_lbl = QLabel(f"↓ {self._fmt(self.model_info.get('downloads', 0))}   ☆ {self.model_info.get('likes', 0)}   Last updated: {format_relative_time(self.model_info.get('lastModified', ''))}")
+        self.stats_lbl.setStyleSheet("color: #8b949e; font-size: 13px; font-weight: 500;")
+        stats_layout.addWidget(self.stats_lbl)
+        stats_layout.addStretch()
+        
+        staff_pick = QPushButton("👾 Staff Pick ↗")
+        staff_pick.setFixedSize(110, 26)
+        staff_pick.setStyleSheet("QPushButton { background-color: #3b3542; color: #d0a8ff; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #483d53; }")
+        stats_layout.addWidget(staff_pick)
+        main_layout.addLayout(stats_layout)
 
-        self.btn_more = QPushButton("•••")
-        self.btn_more.setFixedSize(32, 32)
-        self.btn_more.setStyleSheet("QPushButton { background-color: transparent; color: #8b949e; border: 1px solid #30363d; border-radius: 16px; font-weight: bold; font-size: 16px; } QPushButton:hover { background-color: #21262d; color: white; }")
-        top_layout.addWidget(self.btn_more, alignment=Qt.AlignmentFlag.AlignTop)
+        # Description Box
+        desc_box = QFrame()
+        desc_box.setStyleSheet("QFrame { background-color: #26243d; border-radius: 8px; border: 1px solid #332d4b; }")
+        desc_layout = QVBoxLayout(desc_box)
+        desc_layout.setContentsMargins(15, 15, 15, 15)
+        
+        desc_text = self.model_info.get("title", self.repo_id.split('/')[-1])
+        # Use description if available, otherwise fallback to title
+        desc_lbl = QLabel(desc_text)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("color: #e0e0e0; font-size: 14px; line-height: 1.4;")
+        desc_layout.addWidget(desc_lbl)
+        main_layout.addWidget(desc_box)
 
-        main_layout.addLayout(top_layout)
-
-        self.caps_layout = QHBoxLayout()
-        self.caps_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        main_layout.addLayout(self.caps_layout)
-
+        # Specs and Tags
+        specs_layout = QHBoxLayout()
+        specs_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        specs_layout.setSpacing(10)
+        
         tags = self.model_info.get("tags", [])
         params, arch, ctx, fmt, caps = parse_model_tags(self.repo_id, tags)
         if not params or params == "?B":
-            params_match = re.search(r'(\d+(?:\.\d+)?B)', self.title_lbl.text())
+            params_match = re.search(r'(\d+(?:\.\d+)?B)', desc_text)
             if params_match: params = params_match.group(1)
-        if not ctx: ctx = "Unknown"
 
-        arch_cap = arch if arch else "llm"
-        self.caps_layout.addWidget(self._make_badge(arch_cap))
-        self.caps_layout.addWidget(self._make_badge("llm"))
-        self.caps_layout.addWidget(self._make_badge(fmt))
+        def make_spec_badge(key, val):
+            frm = QFrame()
+            frm.setStyleSheet("QFrame { background: transparent; }")
+            lyt = QHBoxLayout(frm)
+            lyt.setContentsMargins(0,0,0,0)
+            lyt.setSpacing(4)
+            kl = QLabel(key)
+            kl.setStyleSheet("color: #8b949e; font-size: 12px;")
+            vl = QLabel(val)
+            vl.setObjectName(key)
+            vl.setStyleSheet("color: #c9d1d9; font-size: 12px; font-weight: bold; background-color: #2b2d31; padding: 2px 6px; border-radius: 4px; border: 1px solid #30363d;")
+            lyt.addWidget(kl)
+            lyt.addWidget(vl)
+            return frm
 
-        # --- TABS ---
-        self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; border-top: 1px solid #30363d; background: transparent; }
-            QTabBar::tab { background: transparent; color: #8b949e; padding: 10px 20px; font-size: 14px; font-weight: 500; border: none; border-bottom: 2px solid transparent; }
-            QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #f78166; }
-            QTabBar::tab:hover { color: #c9d1d9; }
-        """)
+        specs_layout.addWidget(make_spec_badge("Params", params))
+        specs_layout.addWidget(make_spec_badge("Arch", arch if arch else "Unknown"))
+        specs_layout.addWidget(make_spec_badge("Domain", "llm"))
+        specs_layout.addWidget(make_spec_badge("Format", fmt))
+        main_layout.addLayout(specs_layout)
+
+        # Capabilities
+        caps_layout = QHBoxLayout()
+        caps_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        caps_layout.setSpacing(10)
+        caps_layout.setContentsMargins(0, 10, 0, 15)
         
-        self.tab_model_card = QWidget()
-        self.tab_files = QWidget()
-        self.tabs.addTab(self.tab_model_card, "Model card")
-        self.tabs.addTab(self.tab_files, "Files and versions")
-        main_layout.addWidget(self.tabs)
-
-        # Build Model Card Tab
-        mc_layout = QVBoxLayout(self.tab_model_card)
-        mc_layout.setContentsMargins(0, 20, 0, 0)
+        caps_lbl = QLabel("Capabilities:")
+        caps_lbl.setStyleSheet("color: #8b949e; font-size: 12px;")
+        caps_layout.addWidget(caps_lbl)
         
-        specs_hdr = QLabel("SPECIFICATIONS" + " ─"*60)
-        specs_hdr.setStyleSheet("color: #8b949e; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
-        mc_layout.addWidget(specs_hdr)
+        for cap in caps:
+            caps_layout.addWidget(self._make_badge(cap))
+            
+        main_layout.addLayout(caps_layout)
 
-        specs_card = QFrame()
-        specs_card.setStyleSheet("QFrame { background-color: #212121; border-radius: 12px; }")
-        specs_layout = QGridLayout(specs_card)
-        specs_layout.setContentsMargins(20, 20, 20, 20)
-        specs_layout.setSpacing(20)
-
-        license_tag = next((t for t in tags if t.startswith("license:")), "license:unknown").split(":")[1]
-        arch_val = arch if arch else "Transformer"
-
-        specs_data = [
-            ("ARCHITECTURE", arch_val, 0, 0),
-            ("PARAMETERS", params, 0, 1),
-            ("QUANTIZATION", fmt, 1, 0),
-            ("CONTEXT LENGTH", ctx, 1, 1),
-            ("FILE SIZE", "0.0 GB", 2, 0), 
-            ("LICENSE", license_tag.capitalize(), 2, 1)
-        ]
-
-        for lbl_text, val_text, r, c in specs_data:
-            cell = QWidget()
-            cell_lyt = QVBoxLayout(cell)
-            cell_lyt.setContentsMargins(0, 0, 0, 0)
-            cell_lyt.setSpacing(4)
-            k = QLabel(lbl_text)
-            k.setStyleSheet("font-size:11px; color:#8b949e; letter-spacing:0.5px;")
-            v = QLabel(val_text)
-            v.setObjectName(lbl_text.replace(" ", "_"))
-            v.setStyleSheet("font-size:14px; color:#ffffff; font-weight:bold;")
-            cell_lyt.addWidget(k)
-            cell_lyt.addWidget(v)
-            specs_layout.addWidget(cell, r, c)
-
-        mc_layout.addWidget(specs_card)
-        self.specs_card = specs_card 
+        # Download Options Box
+        self.download_box = QFrame()
+        self.download_box.setStyleSheet("QFrame { background-color: #1e1e1e; border: 1px solid #30363d; border-radius: 8px; }")
+        dl_layout = QVBoxLayout(self.download_box)
+        dl_layout.setContentsMargins(15, 15, 15, 15)
         
-        about_hdr = QLabel("ABOUT" + " ─"*60)
-        about_hdr.setStyleSheet("color: #8b949e; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
-        mc_layout.addWidget(about_hdr)
+        dl_header = QLabel("📦 Download Options")
+        dl_header.setStyleSheet("color: #c9d1d9; font-size: 13px; font-weight: bold;")
+        dl_layout.addWidget(dl_header)
+        
+        dl_layout.addSpacing(10)
+        
+        # Files container
+        self.file_card_container = QVBoxLayout()
+        self.file_card_container.setSpacing(8)
+        dl_layout.addLayout(self.file_card_container)
+        
+        main_layout.addWidget(self.download_box)
 
-        readme_card = QFrame()
-        readme_card.setStyleSheet("QFrame { background-color: #212121; border-radius: 12px; }")
-        rc_lyt = QVBoxLayout(readme_card)
-        rc_lyt.setContentsMargins(15,15,15,15)
+        # README Box
+        self.readme_box = QFrame()
+        self.readme_box.setStyleSheet("QFrame { background-color: #212121; border-radius: 8px; border: 1px solid #30363d; margin-top: 15px; }")
+        rc_lyt = QVBoxLayout(self.readme_box)
+        rc_lyt.setContentsMargins(20, 20, 20, 20)
+        
+        rm_hdr = QLabel("📄 README")
+        rm_hdr.setStyleSheet("color: #c9d1d9; font-size: 13px; font-weight: bold; margin-bottom: 10px;")
+        rc_lyt.addWidget(rm_hdr)
+        
         self.readme_view = QTextBrowser()
         self.readme_view.setOpenExternalLinks(False)
         self.readme_view.setOpenLinks(False)
         self.readme_view.anchorClicked.connect(self._handle_anchor)
-        self.readme_view.setMinimumHeight(400)
+        self.readme_view.setMinimumHeight(500)
         self.readme_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.readme_view.setStyleSheet("QTextBrowser { background-color: transparent; border: none; }")
         rc_lyt.addWidget(self.readme_view)
         
-        mc_layout.addWidget(readme_card)
-        mc_layout.addStretch()
-
-        # Build Files Tab
-        files_layout = QVBoxLayout(self.tab_files)
-        files_layout.setContentsMargins(0, 20, 0, 0)
-        self.file_card_container = QVBoxLayout()
-        files_layout.addLayout(self.file_card_container)
-        files_layout.addStretch()
-
+        main_layout.addWidget(self.readme_box)
+        
         main_layout.addStretch()
         self.scroll.setWidget(self.container)
         
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.addWidget(self.scroll)
+        
+        self.specs_card = self.container  # For _on_config_loaded fallback
 
     def _on_config_loaded(self, model_id, config_data):
         if model_id != self.repo_id or not config_data: return
         
-        ctx = config_data.get("max_position_embeddings", "")
-        if not ctx: ctx = config_data.get("seq_length", "")
-        
-        if ctx:
-            ctx_val = str(ctx)
-            if isinstance(ctx, int) and ctx >= 1024:
-                ctx_val = f"{ctx // 1024}K"
-            for c in self.specs_card.findChildren(QLabel):
-                if c.objectName() == "CONTEXT_LENGTH":
-                    c.setText(ctx_val)
-                    
         archs = config_data.get("architectures", [])
         if archs:
             for c in self.specs_card.findChildren(QLabel):
-                if c.objectName() == "ARCHITECTURE":
+                if c.objectName() == "Arch":
                     c.setText(archs[0])
 
     def update_action_visibility(self):
@@ -1074,11 +1169,6 @@ class ModelDetailsTab(QWidget):
     def _on_info_loaded(self, model_id, info):
         if model_id != self.repo_id or not info: return
         card_data = info.get("cardData", {})
-        license_tag = card_data.get("license", None)
-        if license_tag:
-            for c in self.specs_card.findChildren(QLabel):
-                if c.objectName() == "LICENSE":
-                    c.setText(license_tag.capitalize())
         
         base_model = card_data.get("base_model", model_id)
         if isinstance(base_model, list) and len(base_model) > 0:

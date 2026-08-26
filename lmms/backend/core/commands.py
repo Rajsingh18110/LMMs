@@ -10,8 +10,8 @@ class CommandContext:
 
     @property
     def active_editor(self):
-        if self.main_window:
-            return self.main_window.editor_tab
+        if self.main_window and hasattr(self.main_window, 'editor_manager'):
+            return self.main_window.editor_manager.tabs.currentWidget()
         return None
         
     @property
@@ -48,7 +48,7 @@ class CommandRegistry:
         Executes a registered command safely, catching any exceptions.
         """
         if command_id not in cls._commands:
-            lmms.ui.show_error(f"Unknown command: {command_id}")
+            lmms.gui.core.ui.show_error(f"Unknown command: {command_id}")
             return
 
         try:
@@ -58,7 +58,7 @@ class CommandRegistry:
             func(cls._context, *args, **kwargs)
         except Exception as e:
             error_msg = f"Error executing command '{command_id}':\n{str(e)}\n\n{traceback.format_exc()}"
-            lmms.ui.show_error(error_msg)
+            lmms.gui.core.ui.show_error(error_msg)
 
 # Setup initial placeholder commands that will be hooked up later
 @CommandRegistry.register("file.new_chat")
@@ -114,7 +114,7 @@ def ai_explain_code(context: CommandContext):
             context.main_window.chat_page.input_field.setPlainText(f"Explain this code:\n\n{text}")
     else:
         import lmms.gui.core.ui
-        lmms.ui.show_error("Please select some code in the editor first.")
+        lmms.gui.core.ui.show_error("Please select some code in the editor first.")
         
 def _feature_pending(name, context):
     from PyQt6.QtWidgets import QMessageBox
@@ -194,13 +194,10 @@ def file_open_file(context: CommandContext):
         file_path, _ = QFileDialog.getOpenFileName(context.main_window, "Open File")
         if file_path:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                context.active_editor.setPlainText(content)
-                context.main_window.right_panel.setCurrentWidget(context.main_window.editor_tab)
+                context.main_window.editor_manager.open_file(file_path)
             except Exception as e:
                 import lmms.gui.core.ui
-                lmms.ui.show_error(f"Could not open file: {e}")
+                lmms.gui.core.ui.show_error(f"Could not open file: {e}")
 
 @CommandRegistry.register("file.save_chat")
 def file_save_chat(context: CommandContext):

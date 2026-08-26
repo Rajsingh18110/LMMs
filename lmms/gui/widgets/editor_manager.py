@@ -2,11 +2,11 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QLabel, QHBoxLayout, QPushButton
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QFileInfo
 from PyQt6.QtGui import QIcon
+from lmms.gui.utils.icon_provider import CustomIconProvider
 
 from lmms.gui.widgets.code_editor import CodeEditor
-from lmms.gui.panels.terminal_panel import TerminalPanel
 from lmms.gui.widgets.ai_tabs import CanvasTab, MarkdownTab, ReviewTab
 
 class EditorManager(QWidget):
@@ -16,7 +16,6 @@ class EditorManager(QWidget):
         super().__init__()
         self.open_files = {} # path -> CodeEditor
         self.terminal_tab_index = -1
-        self.terminal_panel = None
         self.init_ui()
         
     def init_ui(self):
@@ -54,6 +53,50 @@ class EditorManager(QWidget):
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
+        self.tabs.setUsesScrollButtons(True)
+        
+        # Enable elision for long file names
+        try:
+            self.tabs.setElideMode(Qt.TextElideMode.ElideRight)
+        except AttributeError:
+            pass # QTabWidget has setElideMode in Qt6, just in case
+            
+        import os
+        assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+        close_icon = os.path.join(assets_dir, "icon_close_tab.svg").replace("\\", "/")
+        close_icon_hover = os.path.join(assets_dir, "icon_close_tab_hover.svg").replace("\\", "/")
+        
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background-color: #161b22;
+                color: #8b949e;
+                padding: 6px 12px;
+                border: none;
+                border-right: 1px solid #30363d;
+                min-width: 80px;
+                max-width: 160px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: #0e1116;
+                color: #ffffff;
+                border-top: 2px solid #1f6feb;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: #21262d;
+            }}
+            QTabBar::close-button {{
+                image: url("{close_icon}");
+                subcontrol-position: right;
+                padding: 2px;
+            }}
+            QTabBar::close-button:hover {{
+                image: url("{close_icon_hover}");
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+            }}
+        """)
+        
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
@@ -148,7 +191,10 @@ class EditorManager(QWidget):
         self.open_files[file_path] = editor
         file_name = os.path.basename(file_path)
         
-        idx = self.tabs.addTab(editor, file_name)
+        provider = CustomIconProvider()
+        icon = provider.icon(QFileInfo(file_path))
+        
+        idx = self.tabs.addTab(editor, icon, file_name)
         self.tabs.setCurrentIndex(idx)
         self.update_breadcrumbs(file_path)
 
@@ -171,17 +217,8 @@ class EditorManager(QWidget):
         self.breadcrumb_label.setText(f"Custom Tab > {title}")
         
     def open_terminal_tab(self):
-        if self.terminal_panel is None:
-            self.terminal_panel = TerminalPanel()
-            self.terminal_panel.setProperty("is_terminal", True)
-            self.terminal_tab_index = self.tabs.addTab(self.terminal_panel, "Terminal")
-        
-        # Check if it was closed and needs to be re-added
-        if self.tabs.indexOf(self.terminal_panel) == -1:
-            self.terminal_tab_index = self.tabs.addTab(self.terminal_panel, "Terminal")
-            
-        self.tabs.setCurrentWidget(self.terminal_panel)
-        self.breadcrumb_label.setText("Terminal")
+        # Deprecated: Terminal is now a bottom dock panel in main_window.py
+        pass
         
     def open_ai_canvas(self, identifier="ai_canvas", title="Canvas"):
         canvas = CanvasTab()
@@ -214,9 +251,6 @@ class EditorManager(QWidget):
         
     def close_tab(self, index: int):
         widget = self.tabs.widget(index)
-        if widget == self.terminal_panel:
-            self.tabs.removeTab(index)
-            # We don't delete the terminal panel, we just hide it from tabs
         if widget:
             file_path = widget.property("file_path")
             is_custom = widget.property("is_custom")
@@ -247,12 +281,9 @@ class EditorManager(QWidget):
             
         if index >= 0:
             widget = self.tabs.widget(index)
-            if widget == self.terminal_panel:
-                self.breadcrumb_label.setText("Terminal")
-            else:
-                file_path = widget.property("file_path")
-                if file_path:
-                    self.update_breadcrumbs(file_path)
+            file_path = widget.property("file_path")
+            if file_path:
+                self.update_breadcrumbs(file_path)
             
     def update_breadcrumbs(self, file_path: str):
         parts = file_path.split(os.sep)
@@ -275,7 +306,7 @@ class EditorManager(QWidget):
         idx = self.tabs.currentIndex()
         if idx >= 0:
             widget = self.tabs.widget(idx)
-            if widget == self.terminal_panel:
+            if widget.property("is_custom"):
                 return
                 
             editor = widget

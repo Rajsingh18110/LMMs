@@ -228,6 +228,202 @@ def start_api():
 
 
 
+
+import uuid
+import re
+
+class ObservationProcessor:
+    @staticmethod
+    def extract_state(raw_output: str, command_hint: str) -> dict:
+        state = {}
+        # Ports
+        ports = re.findall(r'(?:port|listening on|http://[^:]+:)(\d{2,5})', raw_output, re.IGNORECASE)
+        if ports: state['Runtime Ports'] = f"Active on {', '.join(list(set(ports)))}"
+        
+        # Errors
+        error_lines = []
+        for line in raw_output.splitlines():
+            if re.search(r'(error|exception|traceback|failed|fatal|permission denied|command not found)', line, re.IGNORECASE):
+                error_lines.append(line.strip())
+        if error_lines: state['Last Error'] = error_lines[-1] # keep the last most relevant error
+        
+        # Files created/modified from pip
+        if "pip install" in command_hint:
+            state['Dependencies'] = "pip install completed/attempted"
+            
+        return state
+
+    @staticmethod
+    def process(raw_output: str, command_hint: str, exit_code: int = 0) -> tuple:
+        """Returns (compact_output, obs_id)"""
+        obs_id = f"obs_{str(uuid.uuid4())[:8]}"
+        
+        MAX_RAW = 200
+        if len(raw_output) <= MAX_RAW and exit_code == 0:
+            compact = f"[Level 0: Raw] [ID: {obs_id}]\n{raw_output}"
+            return compact, obs_id
+
+        lines = raw_output.splitlines()
+        
+        error_keywords = ['error', 'exception', 'traceback', 'failed', 'fatal', 'warning', 'permission denied']
+        important_lines = []
+        repetitive_counts = {}
+        
+        compressed_lines = []
+        last_pattern = None
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped: continue
+            
+            is_important = any(kw in stripped.lower() for kw in error_keywords)
+            if is_important:
+                important_lines.append(stripped)
+                compressed_lines.append(stripped)
+                last_pattern = None
+                continue
+                
+            req_match = re.match(r'^(Requirement already satisfied:)(.*)', stripped)
+            if req_match:
+                pat = req_match.group(1)
+                repetitive_counts[pat] = repetitive_counts.get(pat, 0) + 1
+                if last_pattern != pat:
+                    compressed_lines.append(f"...[{pat} <count_placeholder>]...")
+                last_pattern = pat
+                continue
+                
+            compressed_lines.append(stripped)
+            last_pattern = None
+
+        final_lines = []
+        for line in compressed_lines:
+            if '<count_placeholder>' in line:
+                pat = line.split('<')[0].replace('...', '').strip()
+                count = repetitive_counts.get(pat, 0)
+                final_lines.append(f"[compressed] {count} x {pat}")
+            else:
+                final_lines.append(line)
+                
+        output_str = "\n".join(final_lines)
+        
+        if len(output_str) > 2000:
+            head = "\n".join(final_lines[:20])
+            tail = "\n".join(final_lines[-20:])
+            # Deduplicate important lines to prevent infinite tracebacks from eating context
+            # but keep order
+            seen_errs = set()
+            dedup_errs = []
+            for e in important_lines:
+                if e not in seen_errs:
+                    seen_errs.add(e)
+                    dedup_errs.append(e)
+            
+            # Bound the tracebacks to ~30 lines
+            if len(dedup_errs) > 30:
+                errs = "\n".join(dedup_errs[:15] + ["...[Internal traceback omitted]..."] + dedup_errs[-15:])
+            else:
+                errs = "\n".join(dedup_errs)
+                
+            output_str = f"[Level 3: Emergency] [ID: {obs_id}]\n{head}\n\n...[Truncated]...\n\n[Preserved Errors/Warnings]\n{errs}\n\n[End]\n{tail}"
+        else:
+            output_str = f"[Level 1/2: Compressed] [ID: {obs_id}]\n{output_str}"
+
+        final_obs = {
+            "command": command_hint,
+            "exit_code": exit_code,
+            "stdout": output_str
+        }
+        import json
+        return json.dumps(final_obs, indent=2), obs_id
+
+
+class ContextManager:
+    def __init__(self, context_limit=4096, reserve=700, safety=200):
+        self.context_limit = context_limit
+        self.reserve = reserve
+        self.safety = safety
+        self.usable_context = context_limit - reserve - safety
+        self.working_memory = {}
+
+    def update_working_memory(self, state: dict):
+        for key, val in state.items():
+            self.working_memory[key] = val
+
+    def get_working_memory_str(self) -> str:
+        if not self.working_memory: return ""
+        res = "## Working Memory (Current State)\n"
+        for k, v in self.working_memory.items():
+            res += f"- {k}: {v}\n"
+        return res
+        
+    def check_and_prune(self, current_tokens: int, messages: list, count_tokens_fn, current_model: str) -> list:
+        # Dynamic check
+        if current_tokens <= self.usable_context:
+            return messages
+            
+        print(f"\n[dim]Context limit nearing (Tokens: {current_tokens}/{self.usable_context}), pruning old observations...[/dim]")
+        
+        while current_tokens > self.usable_context:
+            obs_idx = -1
+            for i, m in enumerate(messages):
+                if m["role"] == "user" and "<observation>" in str(m.get("content", "")):
+                    obs_idx = i
+                    break
+                    
+            if obs_idx != -1:
+                content = messages[obs_idx]["content"]
+                state = ObservationProcessor.extract_state(content, "")
+                self.update_working_memory(state)
+                
+                if obs_idx > 0 and messages[obs_idx-1]["role"] == "assistant":
+                    messages.pop(obs_idx)
+                    messages.pop(obs_idx-1)
+                else:
+                    messages.pop(obs_idx)
+                
+                # Recompute
+                current_tokens = sum(count_tokens_fn(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in messages)
+            else:
+                break
+                
+        return messages
+
+
+class CapabilityManager:
+    def __init__(self):
+        self.active_capabilities = {"core", "terminal", "files"}
+        self.available_capabilities = {"web"}
+        
+    def activate(self, cap: str):
+        if cap in self.available_capabilities:
+            self.active_capabilities.add(cap)
+            return True
+        return False
+            
+    def get_system_prompt_additions(self) -> str:
+        prompt = ""
+        if "web" in self.active_capabilities:
+            prompt += (
+                "## Browsing Private Sites & Authentication\n"
+                "If the user asks you to fetch data from a private or authenticated website, DO NOT immediately ask for credentials.\n"
+                "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
+                "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively.\n\n"
+            )
+        return prompt
+        
+    def filter_tools(self, tools_list: str) -> str:
+        filtered = []
+        for line in tools_list.splitlines():
+            if not line.strip(): continue
+            if "browser." in line or "web_search" in line:
+                if "web" in self.active_capabilities:
+                    filtered.append(line)
+            else:
+                filtered.append(line)
+        return "\n".join(filtered)
+
+
+
 def run_cli():
     import nest_asyncio
     nest_asyncio.apply()
@@ -544,8 +740,8 @@ def run_cli():
     )
     # ----------------------------------------
     
-    # Auto-loading on startup was removed.
-    # The user now manually selects a model using /ml or it loads lazily on first chat.
+    context_manager = ContextManager()
+    cap_manager = CapabilityManager()
 
     while True:
         try:
@@ -1162,6 +1358,9 @@ lmms update
                     
                 system_prompt = f"You are {current_model}, an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\n"
                 
+                system_prompt += context_manager.get_working_memory_str()
+                system_prompt += cap_manager.get_system_prompt_additions()
+                
                 system_prompt += (
                     "## Identity & Persona\n"
                     f"1. Name: You are {current_model}, an independent AI model.\n"
@@ -1226,33 +1425,31 @@ lmms update
                         "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n\\n"
                     )
     
-                    system_prompt += (
-                        "## Tool Calling (ReAct Loop)\\n"
-                        "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\\n"
-                        "Example:\\n"
-                        "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\\n"
-                        "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\\n\\n"
-                        "AVAILABLE TOOLS:\\n"
-                        "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\\n"
-                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\"}}\\n"
-                        "3. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
-                        "4. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"url\": \"...\", \"fields\": {\"selector\": \"value\"}}}\\n"
-                        "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\\n"
-                        "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\\n"
-                        "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\\n"
-                        "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\\n"
-                        "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\\n"
-                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": true|false}} (Set headless to false to show browser and bypass bot-detection for SSO login. User will select profile interactively.)\\n"
-                        "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\\n"
+                    base_tools = (
+                        "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\n"
+                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\"}}\n"
+                        "3. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\n"
+                        "4. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"url\": \"...\", \"fields\": {\"selector\": \"value\"}}}\n"
+                        "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\n"
+                        "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\n"
+                        "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\n"
+                        "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\n"
+                        "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\n"
+                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": True}} (Set headless to False to show browser and bypass bot-detection for SSO login.)\n"
+                        "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
+                        "12. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
+                        "13. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
                     )
+                    filtered_tools = cap_manager.filter_tools(base_tools)
                     
                     system_prompt += (
-                        "\n## Browsing Private Sites & Authentication\n"
-                        "If the user asks you to fetch data from a private or authenticated website (e.g., snapcourse.in), DO NOT immediately ask for credentials.\n"
-                        "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
-                        "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively. Once the tool finishes, the session will be saved, and you can proceed to fetch the data.\n"
-                        "CRITICAL: DO NOT hallucinate or guess exact URLs for inner pages (e.g., /course/day6). Start at the homepage/dashboard and use `browser.scrape` to read the navigation menus, then use `browser.open_url` or `browser.click_element` to follow real links step-by-step to find the requested content.\n"
-                        "ANTI-REFUSAL DIRECTIVE: You MUST NEVER refuse to open or scrape a URL. If the user asks you to open a site (e.g., 'readxhub.in' or any other URL), you MUST instantly output the `browser.open_url` tool call. Do not apologize, do not say 'I cannot assist', just output the JSON tool call block.\n\n"
+                        "## Tool Calling (ReAct Loop)\n"
+                        "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\n"
+                        "Example:\n"
+                        "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\n"
+                        "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\n\n"
+                        "AVAILABLE TOOLS:\n"
+                        f"{filtered_tools}\n"
                     )
                     system_prompt += (
                         "## Few-Shot Example (How to use tools)\n"
@@ -1380,6 +1577,10 @@ lmms update
                                         tail_len = int(max_single_obs_chars * 0.2)
                                         content = content[:head_len] + "\n...[Observation truncated to save memory]...\n" + content[-tail_len:]
                                 clean_messages.append({"role": m["role"], "content": content})
+
+                            # Prune context if exceeded
+                            tok_count = sum(count_tokens(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in clean_messages)
+                            clean_messages = context_manager.check_and_prune(tok_count, clean_messages, count_tokens, current_model)
 
                             # Apply AI Mode settings
                             req_temp = 0.5
@@ -1672,6 +1873,21 @@ lmms update
                                     
                                     rag_tool = RAGTool(workspace_id=ws_id)
                                     observation = rag_tool.search(t_kwargs.get("query", ""), max_tokens=max_tool_tokens)
+                                elif t_name == "load_capability":
+                                    cap = t_kwargs.get("capability", "")
+                                    if cap_manager.activate(cap):
+                                        observation = f"Capability '{cap}' activated successfully. The system prompt will now include related tools/rules."
+                                    else:
+                                        observation = f"Failed. Unknown capability '{cap}'."
+                                elif t_name == "retrieve_archive":
+                                    obs_id = t_kwargs.get("obs_id", "")
+                                    log_dir = os.path.join(CONFIG_DIR, "logs", "observations")
+                                    obs_file = os.path.join(log_dir, f"{obs_id}.txt")
+                                    if os.path.exists(obs_file):
+                                        with open(obs_file, "r") as f:
+                                            observation = f.read()
+                                    else:
+                                        observation = f"Observation {obs_id} not found."
                                 else:
                                     observation = f"Tool {t_name} not found."
                                     
@@ -1684,27 +1900,21 @@ lmms update
                                 observation = "Tool execution denied by user."
                                 console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
                                 
-                            # Smart-truncate observations to prevent context overflow.
-                            # Install commands produce huge outputs but we only need the result.
-                            def smart_truncate_obs(obs: str, cmd_hint: str = "") -> str:
-                                MAX_OBS_CHARS = 2000
-                                if len(obs) <= MAX_OBS_CHARS:
-                                    return obs
-                                # For install/build commands: keep last 40 lines (show success/error)
-                                install_hints = ["pip install", "apt install", "npm install", "yarn", "apt-get", "cargo build", "make "]
-                                if any(h in cmd_hint for h in install_hints):
-                                    lines = obs.strip().splitlines()
-                                    tail = "\n".join(lines[-40:])
-                                    if len(tail) > MAX_OBS_CHARS:
-                                        tail = tail[-MAX_OBS_CHARS:]
-                                    return f"...[install output truncated, showing last 40 lines]...\n{tail}"
-                                # Default: head + tail
-                                head = obs[:800]
-                                tail = obs[-800:]
-                                return f"{head}\n...[truncated {len(obs)-1600} chars]...\n{tail}"
-
                             obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
-                            truncated_obs = smart_truncate_obs(str(observation), obs_cmd_hint)
+                            exit_code = 0
+                            
+                            # Get the raw output, process it, and get the obs_id
+                            truncated_obs, obs_id = ObservationProcessor.process(str(observation), obs_cmd_hint, exit_code)
+                            
+                            # Log raw observation to disk
+                            try:
+                                obs_dir = os.path.join(CONFIG_DIR, "logs", "observations")
+                                os.makedirs(obs_dir, exist_ok=True)
+                                with open(os.path.join(obs_dir, f"{obs_id}.txt"), "w") as f:
+                                    f.write(str(observation))
+                            except:
+                                pass
+                                
                             messages.append({"role": "user", "content": f"<observation>\n{truncated_obs}\n</observation>"})
                             
                             # Audit log

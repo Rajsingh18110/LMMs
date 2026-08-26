@@ -90,14 +90,19 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks or ext
             content = data.get("message", {}).get("content", "")
             
             # Clean up potential markdown formatting from LLM response
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
+            import re
+            json_str = content
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL | re.IGNORECASE)
+            if match:
+                json_str = match.group(1).strip()
+            else:
+                json_str = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                start = json_str.find('{')
+                end = json_str.rfind('}')
+                if start != -1 and end != -1:
+                    json_str = json_str[start:end+1]
                 
-            plan_json = json.loads(content.strip())
+            plan_json = json.loads(json_str)
             
             graph = ExecutionGraph(intent=plan_json.get("intent", "auto-generated"))
             for step_idx, step_data in enumerate(plan_json.get("steps", [])):

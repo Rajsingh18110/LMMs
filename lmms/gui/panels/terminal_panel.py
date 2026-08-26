@@ -140,9 +140,12 @@ class TerminalPanel(QWidget):
             }
         """)
         
-        # Terminal Tab
-        self.terminal_text = TerminalEdit()
-        self.tabs.addTab(self.terminal_text, "Terminal")
+        # Problems Tab
+        self.problems_text = QTextEdit()
+        self.problems_text.setReadOnly(True)
+        self.problems_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.problems_text.setPlainText("No problems have been detected in the workspace.")
+        self.tabs.addTab(self.problems_text, "Problems")
         
         # Output Tab
         self.output_text = QTextEdit()
@@ -150,11 +153,43 @@ class TerminalPanel(QWidget):
         self.output_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
         self.tabs.addTab(self.output_text, "Output")
         
-        # Problems Tab
-        self.problems_text = QTextEdit()
-        self.problems_text.setReadOnly(True)
-        self.problems_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
-        self.problems_text.setPlainText("No problems have been detected in the workspace.")
-        self.tabs.addTab(self.problems_text, "Problems")
+        # Debug Console Tab
+        self.debug_text = QTextEdit()
+        self.debug_text.setReadOnly(True)
+        self.debug_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.tabs.addTab(self.debug_text, "Debug Console")
+        
+        # Terminal Tab
+        self.terminal_text = TerminalEdit()
+        self.tabs.addTab(self.terminal_text, "Terminal")
+        
+        # Ports Tab
+        self.ports_text = QTextEdit()
+        self.ports_text.setReadOnly(True)
+        self.ports_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.ports_text.setPlainText("No forwarded ports.")
+        self.tabs.addTab(self.ports_text, "Ports")
+        
+        # Set Terminal as default selected tab
+        self.tabs.setCurrentIndex(3)
+        
+        # Add "Send all problems to AI" button to the corner of the tab widget
+        from PyQt6.QtWidgets import QPushButton
+        self.btn_send_ai = QPushButton("✨ Send all problems to AI")
+        self.btn_send_ai.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_send_ai.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #58a6ff;
+                border: none;
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                color: #79c0ff;
+                text-decoration: underline;
+            }
+        """)
+        self.tabs.setCornerWidget(self.btn_send_ai)
         
         layout.addWidget(self.tabs)
