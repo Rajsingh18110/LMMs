@@ -6,7 +6,15 @@ class LMMsMenuBar(QMenuBar):
     def __init__(self, main_window):
         super().__init__(main_window)
         self.main_window = main_window
-        self.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border-bottom: 1px solid #30363d;")
+        self.setStyleSheet("""
+            QMenuBar { background-color: #0d1117; color: #c9d1d9; border-bottom: 1px solid #30363d; }
+            QMenuBar::item { background: transparent; padding: 4px 10px; margin: 2px; }
+            QMenuBar::item:selected { background: #30363d; border-radius: 4px; }
+            QMenu { background-color: #161b22; color: #c9d1d9; border: 1px solid #30363d; padding: 5px 0px; border-radius: 6px; }
+            QMenu::item { padding: 6px 30px 6px 20px; margin: 0px 4px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #1f6feb; color: white; }
+            QMenu::separator { height: 1px; background: #30363d; margin: 4px 0px; }
+        """)
         self.init_menus()
 
     def init_menus(self):

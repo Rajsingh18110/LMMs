@@ -28,6 +28,9 @@ class DiagnosticManager(QObject):
         else:
             file_path = unquote(uri)
             
+        if "__pyrefly_virtual__" in file_path:
+            return
+            
         file_path = os.path.abspath(file_path)
         
         self._diagnostics[file_path] = diagnostics
