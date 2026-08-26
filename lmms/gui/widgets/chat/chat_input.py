@@ -7,6 +7,9 @@ class ChatInputEdit(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.send_callback = None
+        self.setAcceptDrops(True)
+        self._default_style = ""
+        self._drag_style = "border: 2px dashed #58a6ff; background: #1f2937;"
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
@@ -15,6 +18,39 @@ class ChatInputEdit(QTextEdit):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self._default_style = self.styleSheet()
+            self.setStyleSheet(self._default_style + self._drag_style)
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet(self._default_style)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self.setStyleSheet(self._default_style)
+        paths = []
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    paths.append(url.toLocalFile())
+            
+            if paths:
+                self.files_pasted.emit(paths)
+                event.acceptProposedAction()
+                return
+        
+        super().dropEvent(event)
 
     def insertFromMimeData(self, source):
         paths = []

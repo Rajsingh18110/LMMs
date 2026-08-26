@@ -138,16 +138,16 @@ class ChatPage(QWidget):
         toolbar.setContentsMargins(0, 2, 0, 0)
         toolbar.setSpacing(6)
 
-        self.attach_btn = QPushButton("＋")
+        self.attach_btn = QPushButton("+")
         self.attach_btn.setToolTip("Attach file")
         self.attach_btn.setFixedSize(26, 26)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.setStyleSheet("""
             QPushButton {
                 background: transparent; border: none;
-                color: #8b949e; font-size: 18px; font-weight: bold; border-radius: 4px;
+                color: #c9d1d9; font-size: 20px; font-weight: normal; border-radius: 4px;
             }
-            QPushButton:hover { background: #1f2937; color: #c9d1d9; }
+            QPushButton:hover { background: #1f2937; color: #ffffff; }
         """)
         self.attach_btn.clicked.connect(self.attach_files)
 

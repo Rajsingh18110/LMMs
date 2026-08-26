@@ -635,6 +635,9 @@ class MainWindow(QMainWindow):
                     result = subprocess.run(['zenity', '--file-selection', '--directory', '--title=Open Folder'], capture_output=True, text=True)
                     if result.returncode == 0 and result.stdout.strip():
                         folder = result.stdout.strip()
+                    elif result.returncode != 1:
+                        # Return code 1 is Cancel. If it's something else, zenity probably failed.
+                        use_zenity = False
                 except Exception:
                     use_zenity = False # Fallback if zenity fails to run
                 
@@ -644,6 +647,13 @@ class MainWindow(QMainWindow):
             
         if folder:
             self.open_workspace(folder)
+
+    def _on_directory_loaded(self, path: str):
+        if path == ConfigManager().get("workspace_dir"):
+            source_idx = self.file_model.index(path)
+            proxy_idx = self.diagnostic_model.mapFromSource(source_idx)
+            if proxy_idx.isValid():
+                self.tree_view.setRootIndex(proxy_idx)
             
     def open_workspace(self, folder: str):
         if not os.path.exists(folder):
@@ -651,6 +661,14 @@ class MainWindow(QMainWindow):
         
         ConfigManager().set("workspace_dir", folder)
         self.is_empty_workspace = False
+
+        # Connect directoryLoaded to correctly set root index after async load
+        try:
+            self.file_model.directoryLoaded.disconnect(self._on_directory_loaded)
+        except TypeError:
+            pass # Not connected
+        self.file_model.directoryLoaded.connect(self._on_directory_loaded)
+        
         self.file_model.setRootPath(folder)
         project_name = os.path.basename(folder)
         if not project_name: project_name = folder
@@ -661,9 +679,12 @@ class MainWindow(QMainWindow):
         self.btn_new_file.show()
         self.btn_new_folder.show()
         self.btn_refresh.show()
+        
+        # Try to set immediately, though it may be invalid until directoryLoaded
         source_idx = self.file_model.index(folder)
         proxy_idx = self.diagnostic_model.mapFromSource(source_idx)
-        self.tree_view.setRootIndex(proxy_idx)
+        if proxy_idx.isValid():
+            self.tree_view.setRootIndex(proxy_idx)
         
         # Change actual working directory so terminal and new files default to it
         os.chdir(folder)
