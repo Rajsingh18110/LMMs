@@ -50,7 +50,7 @@ class PlainChatAgent(BaseAgent):
             yield f"\n[Error]: Provider '{provider_id}' not found or not enabled.\n"
             return
             
-        runtime = provider.get_runtime(model_id)
+        runtime = provider.get_runtime()
         if not runtime:
             yield f"\n[Error]: Could not initialize runtime for model '{model_id}' on provider '{provider_id}'.\n"
             return
