@@ -1272,6 +1272,8 @@ lmms update
                         "2. **Architectural Understanding**: Before writing code, map out the workspace. Use AST parsing (`python -c \"import ast...\"`) or grep to understand variable flows and architecture.\n"
                         "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First, write a test using `files.write`, run it with `terminal.run` to see it fail, fix the code, and run it again until it passes.\n"
                         "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
+                        "5. **CRITICAL ANTI-ADVICE RULE — READ THIS CAREFULLY**: NEVER write instructions for the user to run manually. If you know what command needs to run, YOU MUST RUN IT YOURSELF using terminal.run. Do NOT say 'Run docker-compose up' or 'You can install it with pip install'. Instead, output the tool_call and run it. The user hired you to DO the work, not to describe it. If you find yourself writing a numbered list of commands for the user, STOP — use terminal.run for each one instead.\n"
+                        "6. **Error Recovery**: If a command fails with a missing module or dependency error, immediately run the install command (e.g., `pip install <module>` or `npm install`) and then retry the original command. Never stop after the first failure.\n"
                     )
                     system_prompt += (
                         "## Anti-Hallucination & Web Search Rules\n"
@@ -1709,7 +1711,28 @@ lmms update
 
                             continue
                             
-                    # If no tool call, break out
+                    # If no tool call: check if the task was agentic and the model gave
+                    # advice text instead of acting. If so, push back and continue.
+                    if force_tool_mode and iter_count < MAX_ITERATIONS:
+                        # Check if model gave advice (contains action verbs) but no tool call
+                        advice_indicators = [
+                            "docker-compose", "npm install", "pip install", "npm start",
+                            "python app.py", "you can run", "you should run", "run the",
+                            "to start", "would you like me", "here's how", "follow these",
+                            "step 1", "step 2", "1.", "2."
+                        ]
+                        gave_advice = any(ind in full_reply.lower() for ind in advice_indicators)
+                        if gave_advice:
+                            messages.append({"role": "assistant", "content": full_reply})
+                            messages.append({"role": "user", "content": (
+                                "<observation>\n"
+                                "SYSTEM: You gave text advice instead of running the commands yourself. "
+                                "This is NOT acceptable. You MUST use terminal.run to execute every command. "
+                                "DO NOT write instructions for the user. RUN the commands now using tool_call.\n"
+                                "</observation>"
+                            )})
+                            continue
+
                     reply = full_reply
                     break
                     
