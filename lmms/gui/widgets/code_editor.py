@@ -1,5 +1,7 @@
+# Made by markanm
 import os
 from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot, pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 
@@ -51,6 +53,7 @@ class CodeEditor(QWebEngineView):
         
         # Background color to match LMMs theme while loading
         self.setStyleSheet("background-color: #0d1117; border: none;")
+        self.page().setBackgroundColor(QColor("#0d1117"))
         
         # Load the index.html from dist
         dist_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "monaco_build", "dist", "index.html")

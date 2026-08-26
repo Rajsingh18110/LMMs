@@ -737,19 +737,8 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def toggle_bottom_panel(self):
-        if not hasattr(self, 'central_splitter'):
+        if not hasattr(self, 'terminal_panel'):
             return
-            
-        sizes = self.central_splitter.sizes()
-        if not sizes:
-            return
-            
-        if sizes[1] > 0: # Panel is visible, hide it
-            self._old_splitter_sizes = sizes
-            self.central_splitter.setSizes([sum(sizes), 0])
-        else: # Panel is hidden, show it
-            if hasattr(self, '_old_splitter_sizes') and self._old_splitter_sizes[1] > 0:
-                self.central_splitter.setSizes(self._old_splitter_sizes)
-            else:
-                total = sum(sizes)
-                self.central_splitter.setSizes([int(total * 0.7), int(total * 0.3)])
+        
+        is_visible = self.terminal_panel.isVisible()
+        self.terminal_panel.setVisible(not is_visible)

@@ -319,10 +319,4 @@ class TerminalPanel(QWidget):
                     splitter.setSizes([int(total * 0.7), int(total * 0.3)])
                     
     def close_panel(self):
-        if self.main_window and hasattr(self.main_window, 'central_splitter'):
-            splitter = self.main_window.central_splitter
-            sizes = splitter.sizes()
-            if not sizes:
-                return
-            self._old_sizes = sizes
-            splitter.setSizes([sum(sizes), 0])
+        self.setVisible(False)
