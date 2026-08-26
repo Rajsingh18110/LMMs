@@ -28,8 +28,12 @@ class ProviderManager:
             if ptype == "openai_compatible":
                 from lmms.backend.providers.adapters.openai_compatible import OpenAICompatibleProvider
                 self._adapters[p_id] = OpenAICompatibleProvider(p_id, real_config)
-            
-            # TODO: Add Local (LlamaCpp/Ollama) adapters here as they are ported to the new contract.
+            elif ptype == "ollama":
+                from lmms.backend.providers.adapters.ollama_adapter import OllamaProvider
+                self._adapters[p_id] = OllamaProvider(p_id, real_config)
+            elif ptype == "llama_cpp":
+                from lmms.backend.providers.adapters.llama_cpp_adapter import LocalNativeProvider
+                self._adapters[p_id] = LocalNativeProvider(p_id, real_config)
 
     def get_provider(self, provider_id: str) -> Optional[ProviderContract]:
         return self._adapters.get(provider_id)
