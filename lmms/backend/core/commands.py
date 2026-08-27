@@ -170,13 +170,9 @@ def exit_app(context: CommandContext):
 @CommandRegistry.register("file.open_folder")
 def file_open_folder(context: CommandContext):
     if context.main_window:
-        from PyQt6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(context.main_window, "Open Workspace Folder")
-        if folder:
-            if hasattr(context.main_window, 'file_model') and context.main_window.file_model:
-                context.main_window.file_model.setRootPath(folder)
-                index = context.main_window.file_model.index(folder)
-                context.main_window.tree_view.setRootIndex(index)
+        # Defer to the main window's comprehensive open folder logic
+        # which handles zenity integration, proxy models, config updating, etc.
+        context.main_window.prompt_open_folder()
 
 @CommandRegistry.register("file.open_workspace")
 def file_open_workspace(context: CommandContext):
