@@ -329,60 +329,134 @@ class ChatPage(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     # Model management
     # ─────────────────────────────────────────────────────────────────────────
+    def _is_offline_model(self, m: dict, providers: dict) -> bool:
+        """Determine if a model is local/offline regardless of registry format."""
+        # New-format: check provider_id in ProviderRegistry
+        p_id = m.get("provider_id")
+        if p_id:
+            provider = providers.get(p_id, {})
+            p_type = provider.get("type", "openai_compatible")
+            return p_type in ["ollama", "llama_cpp", "local_native"]
+
+        # Old-format fields that indicate local
+        source = m.get("source", "")
+        provider_name = m.get("provider", "")
+        fmt = m.get("format", "")
+        path = m.get("path", "")
+
+        if source in ["Local", "Imported (HF Cache)"]:
+            return True
+        if provider_name in ["LMMs", "Ollama", "llama_cpp"]:
+            return True
+        if fmt in ["GGUF", "gguf"]:
+            return True
+        if path and os.path.isabs(path):
+            return True
+
+        # provider_id "local_native" in the id key itself
+        model_id = m.get("id", "") or m.get("internal_id", "")
+        if model_id.startswith("local_native::"):
+            return True
+
+        return False
+
     def refresh_models(self, *_):
         from lmms.backend.core.registry.model_registry import ModelRegistry
         from lmms.backend.core.registry.provider_registry import ProviderRegistry
-        models = ModelRegistry.list()
-        
-        # We only want to show Text or Vision models
-        models = [m for m in models if m.get("enabled", True)]
-        
-        # Sort by display name
-        models.sort(key=lambda x: x.get("display_name", ""))
-        
-        self.model_combo.clear()
-        
-        filter_text = self.model_filter_combo.currentText()
+        all_models = ModelRegistry.list()
+
+        # Only enabled models
+        all_models = [m for m in all_models if m.get("enabled", True)]
+
         providers = {p["id"]: p for p in ProviderRegistry.list_safe()}
-        
-        if not models:
-            self.model_combo.addItem("No Models")
+        filter_text = self.model_filter_combo.currentText()
+
+        # ── Deduplication ──────────────────────────────────────────────────────
+        # For offline models, deduplicate by file path (prefer short tag names).
+        # For online models, deduplicate by model_id.
+        seen_paths: dict = {}   # path -> model entry
+        seen_ids: set = set()   # for online models
+        deduplicated = []
+
+        for m in all_models:
+            is_offline = self._is_offline_model(m, providers)
+            path = m.get("path", "")
+            mid = m.get("model_id") or m.get("id", "")
+
+            if is_offline and path:
+                existing = seen_paths.get(path)
+                if existing is None:
+                    seen_paths[path] = m
+                    deduplicated.append(m)
+                else:
+                    # Prefer the entry whose id looks like a short tag (no "/" or "::" )
+                    existing_id = existing.get("id", "")
+                    new_id = m.get("id", "")
+                    prefer_new = (
+                        "::" not in new_id
+                        and "/" not in new_id
+                        and ("::" in existing_id or "/" in existing_id)
+                    )
+                    if prefer_new:
+                        # Replace the existing entry with this shorter-tag one
+                        idx_in_list = deduplicated.index(existing)
+                        deduplicated[idx_in_list] = m
+                        seen_paths[path] = m
+            else:
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    deduplicated.append(m)
+
+        # Apply Online/Offline filter AFTER deduplication
+        filtered = []
+        for m in deduplicated:
+            is_offline = self._is_offline_model(m, providers)
+            if filter_text == "Online" and is_offline:
+                continue
+            if filter_text == "Offline" and not is_offline:
+                continue
+            filtered.append(m)
+
+        # Sort by display name / id
+        filtered.sort(key=lambda x: (x.get("display_name") or x.get("model_id") or x.get("id", "")).lower())
+
+        self.model_combo.clear()
+
+        if not filtered:
+            self.model_combo.addItem("No Models" if filter_text == "All" else f"No {filter_text} Models")
         else:
             saved_model_id = ConfigManager().get("chat_selected_model", "")
-            idx = 0
-            for i, m in enumerate(models):
-                p_id = m.get("provider_id") or m.get("provider", "Unknown")
-                provider = providers.get(p_id, {})
-                p_type = provider.get("type", "openai_compatible")
-                
-                is_offline = p_type in ["ollama", "llama_cpp"]
-                if filter_text == "Online" and is_offline: continue
-                if filter_text == "Offline" and not is_offline: continue
-                
+            best_idx = 0
+            for i, m in enumerate(filtered):
+                is_offline = self._is_offline_model(m, providers)
                 d_name = m.get("display_name") or m.get("model_id") or m.get("id", "Unknown")
-                if "/" in d_name:
+                if "/" in d_name and not d_name.startswith("http"):
                     d_name = d_name.split("/")[-1]
-                    
-                full_name = f"{d_name} ({'local' if is_offline else 'cloud'})"
-                
-                self.model_combo.addItem(full_name, userData=m.get("internal_id", m.get("id")))
-                
-                if m.get("internal_id", m.get("id")) == saved_model_id:
-                    idx = self.model_combo.count() - 1
-                    
-            if self.model_combo.count() > 0:
-                self.model_combo.setCurrentIndex(idx)
-            
+                # Strip "::" prefix artifacts
+                if "::" in d_name:
+                    d_name = d_name.split("::")[-1]
+
+                label = f"{d_name} ({'local' if is_offline else 'cloud'})"
+                uid = m.get("internal_id") or m.get("id") or m.get("model_id", "")
+                self.model_combo.addItem(label, userData=uid)
+
+                if uid == saved_model_id:
+                    best_idx = i
+
+            self.model_combo.setCurrentIndex(best_idx)
+
         # Connect change event to save preference
-        try: self.model_combo.currentIndexChanged.disconnect()
-        except: pass
-        
+        try:
+            self.model_combo.currentIndexChanged.disconnect()
+        except Exception:
+            pass
+
         def on_index_changed(index):
             if index >= 0:
                 data = self.model_combo.itemData(index)
                 if data:
                     ConfigManager().set("chat_selected_model", data)
-                    
+
         self.model_combo.currentIndexChanged.connect(on_index_changed)
 
     # ─────────────────────────────────────────────────────────────────────────
