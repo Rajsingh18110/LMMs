@@ -11,8 +11,6 @@ class DiagnosticManager(QObject):
     
     @classmethod
     def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = DiagnosticManager()
         return cls._instance
         
     def __init__(self):
@@ -53,3 +51,6 @@ class DiagnosticManager(QObject):
                     if d.get("severity") == 1:
                         return True
         return False
+
+# Pre-instantiate in the main thread to avoid QObject threading issues
+DiagnosticManager._instance = DiagnosticManager()

@@ -10,6 +10,8 @@ import getLayoutServiceOverride from '@codingame/monaco-vscode-layout-service-ov
 import getLocalizationServiceOverride from '@codingame/monaco-vscode-localization-service-override';
 import getModelServiceOverride from '@codingame/monaco-vscode-model-service-override';
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
+import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
+import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
 // Basic Monaco setup
 self.MonacoEnvironment = {
   getWorkerUrl: function (_moduleId, label) {
@@ -42,6 +44,9 @@ monaco.editor.defineTheme('lmms-dark', {
   }
 });
 
+import 'vscode/localExtensionHost';
+import { registerExtension, ExtensionHostKind } from 'vscode/extensions';
+
 // Call initialize before creating the editor
 await initialize({
   ...getBaseServiceOverride(),
@@ -53,6 +58,8 @@ await initialize({
   ...getLayoutServiceOverride(),
   ...getLocalizationServiceOverride(),
   ...getModelServiceOverride(),
+  ...getChatServiceOverride(),
+  ...getViewsServiceOverride(),
   ...getQuickAccessServiceOverride({
     isKeybindingConfigurationVisible: () => true,
     shouldUseGlobalPicker: () => true
@@ -88,8 +95,8 @@ class BridgeMessageReader {
         const handler = (msg) => {
             try { callback(JSON.parse(msg)); } catch (e) { console.error(e); }
         };
-        this.bridge.lspMessageFromJs.connect(handler);
-        return { dispose: () => this.bridge.lspMessageFromJs.disconnect(handler) };
+        this.bridge.sendLspMessage.connect(handler);
+        return { dispose: () => this.bridge.sendLspMessage.disconnect(handler) };
     }
     dispose() {}
 }
@@ -102,7 +109,7 @@ class BridgeMessageWriter {
     }
     write(msg) {
         try {
-            this.bridge.sendLspMessage(JSON.stringify(msg));
+            this.bridge.onLspMessage(JSON.stringify(msg));
             return Promise.resolve();
         } catch(e) { return Promise.reject(e); }
     }
@@ -179,6 +186,31 @@ if (typeof QWebChannel !== 'undefined') {
 
     // Let Python know we are ready
     window.pythonBridge.onEditorReady();
+    
+    // Register Extension (from Python)
+    if (window.pythonBridge.registerExtension) {
+      window.pythonBridge.registerExtension.connect(async function(manifestJson) {
+        try {
+          const manifest = JSON.parse(manifestJson);
+          const extensionLocation = manifest.extensionLocation || '';
+          // We use WebWorker or LocalProcess. If LocalProcess, it tells Monaco it's running outside.
+          const { registerFileUrl, getApi } = registerExtension(manifest, ExtensionHostKind.LocalProcess);
+          
+          if (extensionLocation) {
+             // In a full implementation, you would map paths via registerFileUrl
+             console.log(`Registered extension: ${manifest.name} at ${extensionLocation}`);
+          }
+          
+          const api = await getApi();
+          // Activation logic is often handled by Monaco internally when an activationEvent occurs, 
+          // but we can manually trigger activate if needed.
+          // Note: LocalProcess expects the actual code to run in Node.js (runner.js) which we still spawn.
+          console.log(`Extension API ready for ${manifest.name}`);
+        } catch (err) {
+          console.error("Failed to register extension", err);
+        }
+      });
+    }
   });
 }
 

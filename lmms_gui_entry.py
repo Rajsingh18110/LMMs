@@ -20,11 +20,15 @@ def main():
     if sys.platform.startswith("linux"):
         if "QT_QPA_PLATFORMTHEME" not in os.environ:
             os.environ["QT_QPA_PLATFORMTHEME"] = "gtk3"
+            
+    os.environ["QT_NO_DBUS"] = "1"
+    os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.core.qobject.*=false"
+    os.environ["XCOMPOSEFILE"] = "/dev/null"
 
     app = QApplication(sys.argv)
     app.setApplicationName("LMMs-GUI")
     app.setApplicationDisplayName("LMMs - GUI Mode")
-    app.setDesktopFileName("lmms")
+    app.setDesktopFileName(f"lmms-{os.getpid()}")
     
     icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "lmms_logo_transparent.png")
     if os.path.exists(icon_path):

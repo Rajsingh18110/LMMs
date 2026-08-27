@@ -76,6 +76,14 @@ class MainWindow(QMainWindow):
         self.command_context = CommandContext(self)
         CommandRegistry.set_context(self.command_context)
         
+        # Initialize Extension Manager
+        from lmms.extensions.manager import ExtensionManager
+        self.ext_manager = ExtensionManager.instance()
+        self.ext_manager.set_workspace_root(ConfigManager().get("workspace_dir", os.getcwd()))
+        
+        self.ext_manager.extension_ui_registered.connect(self.on_extension_ui_registered)
+        self.ext_manager.extension_js_activation.connect(self.on_extension_js_activation)
+        
         # Setup Menu Bar
         menu_bar = LMMsMenuBar(self)
         self.menu_bar_widget = menu_bar
@@ -97,14 +105,18 @@ class MainWindow(QMainWindow):
         self.heartbeat_timer.start(5000)
 
     def ping_engine(self):
-        import threading
         import requests
-        def ping():
-            try:
-                requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
-            except Exception:
-                pass
-        threading.Thread(target=ping, daemon=True).start()
+        from PyQt6.QtCore import QThread
+        
+        class PingThread(QThread):
+            def run(self):
+                try:
+                    requests.post("http://127.0.0.1:11435/v1/internal/ping", timeout=2)
+                except Exception:
+                    pass
+                    
+        self._ping_thread = PingThread(self)
+        self._ping_thread.start()
 
 
     def init_ui(self):
@@ -369,10 +381,10 @@ class MainWindow(QMainWindow):
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
         
-        # Set default width for left docks to 250px
+        # Set default width for docks
         self.inner_window.resizeDocks(
-            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock],
-            [250, 250, 250, 250, 250],
+            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock, self.chat_dock],
+            [250, 250, 250, 250, 250, 300],
             Qt.Orientation.Horizontal
         )
         
@@ -380,8 +392,8 @@ class MainWindow(QMainWindow):
         self.terminal_panel = TerminalPanel(self)
         self.central_splitter.addWidget(self.terminal_panel)
         
-        # Set default sizes for the splitter (e.g., 70% editor, 30% terminal)
-        self.central_splitter.setSizes([700, 300])
+        # Set default sizes for the splitter (e.g., 80% editor, 20% terminal)
+        self.central_splitter.setSizes([800, 250])
 
         # Sidebar Buttons
         self.nav_buttons = {}
@@ -396,78 +408,10 @@ class MainWindow(QMainWindow):
             ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]
         
-        def load_svg_icon(path, size=24):
-            try:
-                from PyQt6.QtSvg import QSvgRenderer # type: ignore
-                renderer = QSvgRenderer(path)
-                if not renderer.isValid():
-                    return None
-                    
-                def render_colored(color_hex):
-                    pixmap = QPixmap(size, size)
-                    pixmap.fill(Qt.GlobalColor.transparent)
-                    painter = QPainter(pixmap)
-                    renderer.render(painter)
-                    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-                    painter.fillRect(pixmap.rect(), QColor(color_hex))
-                    painter.end()
-                    return pixmap
-
-                icon = QIcon()
-                icon.addPixmap(render_colored("#8b949e"), QIcon.Mode.Normal, QIcon.State.Off) # Normal grey
-                icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Normal, QIcon.State.On)  # Active white
-                # Active mode is used for hover in some themes
-                icon.addPixmap(render_colored("#c9d1d9"), QIcon.Mode.Active, QIcon.State.Off)
-                icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Active, QIcon.State.On)
-                return icon
-            except ImportError:
-                return QIcon(path)
-
-        for text_icon, name, custom_icon_path in nav_items:
-            btn = QPushButton(text_icon if not custom_icon_path else "")
-            if custom_icon_path and os.path.exists(custom_icon_path):
-                svg_icon = load_svg_icon(custom_icon_path, 24)
-                if svg_icon:
-                    btn.setIcon(svg_icon)
-                else:
-                    btn.setIcon(QIcon(custom_icon_path))
-                
-                # VS Code activity bar icons are typically 24x24
-                btn.setIconSize(QSize(24, 24))
-                
-            btn.setToolTip(name)
-            btn.setObjectName("NavButton")
-            btn.setCheckable(True)
-            btn.setFixedSize(48, 48) # Match sidebar width so it fills horizontally
-            btn.setStyleSheet("""
-                QPushButton {
-                    border: none;
-                    background-color: transparent;
-                    border-left: 2px solid transparent;
-                }
-                QPushButton:hover {
-                    background-color: #2b2d31;
-                }
-                QPushButton:checked {
-                    border-left: 2px solid #58a6ff;
-                }
-            """)
-            
-            # Special case for Settings since we removed the dock
-            if name == "Settings":
-                btn.clicked.connect(lambda checked: CommandRegistry.execute("settings.providers"))
-            else:
-                btn.clicked.connect(lambda checked, n=name, b=btn: self.toggle_dock(n, b))
-                # Connect visibility changed to update button state
-                self.docks[name].visibilityChanged.connect(lambda visible, b=btn: b.setChecked(visible))
-                # Sync initial state
-                btn.setChecked(self.docks[name].isVisible())
-            
-            sidebar_layout.addWidget(btn)
-            if name != "Settings":
-                self.nav_buttons[name] = btn
-
+        self._sidebar_layout = sidebar_layout
         sidebar_layout.addStretch()
+        for text_icon, name, custom_icon_path in nav_items:
+            self._add_nav_item(text_icon, name, custom_icon_path)
 
         # Add to main layout
         main_layout.addWidget(self.sidebar)
@@ -548,6 +492,123 @@ class MainWindow(QMainWindow):
                 self.docks["Chats"].show()
                 if "Chats" in self.nav_buttons:
                     self.nav_buttons["Chats"].setChecked(True)
+    def _load_svg_icon(self, path, size=24):
+        try:
+            from PyQt6.QtSvg import QSvgRenderer # type: ignore
+            renderer = QSvgRenderer(path)
+            if not renderer.isValid():
+                return None
+                
+            def render_colored(color_hex):
+                pixmap = QPixmap(size, size)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                painter.fillRect(pixmap.rect(), QColor(color_hex))
+                painter.end()
+                return pixmap
+
+            icon = QIcon()
+            icon.addPixmap(render_colored("#8b949e"), QIcon.Mode.Normal, QIcon.State.Off) # Normal grey
+            icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Normal, QIcon.State.On)  # Active white
+            # Active mode is used for hover in some themes
+            icon.addPixmap(render_colored("#c9d1d9"), QIcon.Mode.Active, QIcon.State.Off)
+            icon.addPixmap(render_colored("#ffffff"), QIcon.Mode.Active, QIcon.State.On)
+            return icon
+        except ImportError:
+            return QIcon(path)
+
+    def _add_nav_item(self, text_icon, name, custom_icon_path, is_extension=False):
+        btn = QPushButton(text_icon if not custom_icon_path else "")
+        if custom_icon_path and os.path.exists(custom_icon_path):
+            svg_icon = self._load_svg_icon(custom_icon_path, 24)
+            if svg_icon:
+                btn.setIcon(svg_icon)
+            else:
+                btn.setIcon(QIcon(custom_icon_path))
+            
+            # VS Code activity bar icons are typically 24x24
+            btn.setIconSize(QSize(24, 24))
+            
+        btn.setToolTip(name)
+        btn.setObjectName("NavButton")
+        btn.setCheckable(True)
+        btn.setFixedSize(48, 48) # Match sidebar width so it fills horizontally
+        btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                border-left: 2px solid transparent;
+            }
+            QPushButton:hover {
+                background-color: #2b2d31;
+            }
+        QPushButton:checked {
+            border-left: 2px solid #58a6ff;
+        }
+        """)
+        
+        # Settings handled specially, or toggle dock
+        if name == "Settings":
+            btn.clicked.connect(lambda checked: CommandRegistry.execute("settings.providers"))
+        else:
+            if is_extension and name not in self.docks:
+                # Create an empty dock for the extension right now
+                dock = QDockWidget(name, self.inner_window)
+                dock.setObjectName(f"{name}Dock")
+                dock.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
+                
+                # Create a WebEngineView for extension UI
+                from PyQt6.QtWebEngineWidgets import QWebEngineView
+                webview = QWebEngineView()
+                webview.setHtml(f"<html><body style='background:#1e1e1e; color:white;'>Extension Panel: {name}</body></html>")
+                dock.setWidget(webview)
+                
+                self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+                dock.hide()
+                self.docks[name] = dock
+                
+            btn.clicked.connect(lambda checked, n=name, b=btn: self.toggle_dock(n, b))
+            # Connect visibility changed to update button state
+            if name in self.docks:
+                self.docks[name].visibilityChanged.connect(lambda visible, b=btn: b.setChecked(visible))
+                # Sync initial state
+                btn.setChecked(self.docks[name].isVisible())
+        
+        if name == "Settings":
+            # Add after stretch
+            self._sidebar_layout.addWidget(btn)
+        else:
+            # Insert before the stretch (which is the first stretch added)
+            # Find the stretch index. It's usually count() - 1, but we might have Settings at the end.
+            # A simpler way: we know items are added in order, we can insert at layout.count() - 1 
+            # if we assume stretch is at count - 1. But wait! If Settings is already added?
+            # Actually, Settings is always the last item in `nav_items`.
+            # So when Explorer, Search, etc. are added, Settings is not there yet.
+            # But for extensions added later dynamically, Settings IS there!
+            # So we should insert before the stretch. How to find stretch? 
+            # `self._sidebar_layout.count()` contains elements. 
+            # Let's just find the index of the stretch or just insert before Settings.
+            # Actually, `count() - 1` without Settings was inserting before stretch (if stretch was there).
+            # If Settings is present, the last item is Settings, the second to last is Stretch.
+            # But wait! For dynamic extensions, we want to insert them at the end of the top group.
+            # Let's find the stretch index dynamically or keep it simple: insert before stretch.
+            stretch_index = -1
+            for i in range(self._sidebar_layout.count()):
+                item = self._sidebar_layout.itemAt(i)
+                if item and item.spacerItem():
+                    stretch_index = i
+                    break
+            
+            if stretch_index >= 0:
+                self._sidebar_layout.insertWidget(stretch_index, btn)
+            else:
+                self._sidebar_layout.insertWidget(self._sidebar_layout.count() - 1, btn)
+
+        if name != "Settings":
+            self.nav_buttons[name] = btn
+
 
     def toggle_dock(self, name, button):
         dock = self.docks[name]
@@ -703,6 +764,10 @@ class MainWindow(QMainWindow):
         ConfigManager().set("workspace_dir", folder)
         self.is_empty_workspace = False
 
+        # Update extension manager workspace root
+        from lmms.extensions.manager import ExtensionManager
+        ExtensionManager.instance().set_workspace_root(folder)
+
         # Connect directoryLoaded to correctly set root index after async load
         try:
             self.file_model.directoryLoaded.disconnect(self._on_directory_loaded)
@@ -825,6 +890,18 @@ class MainWindow(QMainWindow):
             while self.editor_manager.tabs.count() > 0:
                 self.editor_manager.close_tab(0)
                 
+        if hasattr(self, 'terminal_panel'):
+            try:
+                self.terminal_panel.cleanup()
+            except Exception:
+                pass
+                
+        if hasattr(self, 'ext_manager'):
+            try:
+                self.ext_manager.cleanup()
+            except Exception:
+                pass
+                
         super().closeEvent(event)
 
     def toggle_bottom_panel(self):
@@ -833,3 +910,97 @@ class MainWindow(QMainWindow):
         
         is_visible = self.terminal_panel.isVisible()
         self.terminal_panel.setVisible(not is_visible)
+
+    def on_extension_ui_registered(self, ext_id, contributes):
+        import json
+        
+        # Keep track of view mappings
+        if not hasattr(self, '_extension_view_map'):
+            self._extension_view_map = {}
+            
+        views_containers = contributes.get("viewsContainers", {})
+        views = contributes.get("views", {})
+        
+        # Build mapping of view_id -> name (from the views block)
+        for container_id, view_list in views.items():
+            for v in view_list:
+                view_id = v.get("id")
+                name = v.get("name")
+                if view_id and name:
+                    self._extension_view_map[view_id] = name
+        
+        activity_bars = views_containers.get("activitybar", [])
+        
+        for bar in activity_bars:
+            title = bar.get("title", ext_id)
+            icon_path = bar.get("icon", "")
+            
+            # Find the actual path of the icon in the extension directory
+            rec = self.ext_manager._records.get(ext_id)
+            full_icon_path = ""
+            if rec and rec.path:
+                full_icon_path = os.path.join(rec.path, "extension", icon_path)
+            
+            # Use initials if no valid icon
+            text_icon = title[:2].upper() if not os.path.exists(full_icon_path) else ""
+            
+            # Add to sidebar
+            self._add_nav_item(text_icon, title, full_icon_path, is_extension=True)
+            
+        # Optional: Prompt for API keys if required
+        configuration = contributes.get("configuration", {})
+        if configuration:
+            props = configuration.get("properties", {})
+            for key, val in props.items():
+                if val.get("type") == "string":
+                    desc = val.get("description", "").lower()
+                    if "api key" in desc or "token" in desc or "api" in key.lower() or "key" in key.lower():
+                        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+                        text, ok = QInputDialog.getText(self, f"Configure {title}", f"Please enter {key}:")
+                        if ok and text:
+                            # Send configuration to JS context (or save globally)
+                            pass # TODO: push to Workspace Configuration
+
+    def update_extension_view_html(self, view_id: str, html: str):
+        if not hasattr(self, '_extension_view_map'):
+            return
+            
+        # Find the display name for this view_id
+        name = self._extension_view_map.get(view_id)
+        if not name:
+            # If not mapped, maybe the view_id itself is the name
+            name = view_id
+            
+        # Find the dock with this name
+        dock = self.docks.get(name)
+        if dock and dock.widget():
+            # Ensure it is a QWebEngineView
+            webview = dock.widget()
+            if hasattr(webview, 'setHtml'):
+                # Inject a base tag if needed, but for VS Code webviews, the HTML is usually fully formed.
+                # However, local resources might fail to load. We inject a script to handle VS Code Webview API.
+                injected_html = html
+                if "<head>" in injected_html and "acquireVsCodeApi" not in injected_html:
+                    vscode_api_script = "<script>function acquireVsCodeApi() { return { postMessage: function(msg) { console.log('VSCode API message:', msg); } }; }</script>"
+                    injected_html = injected_html.replace("<head>", f"<head>{vscode_api_script}")
+                webview.setHtml(injected_html)
+
+    def on_extension_js_activation(self, ext_id, manifest_json):
+        # We need to send this to the CodeEditor instances so JS can register it.
+        if hasattr(self, 'editor_manager'):
+            for i in range(self.editor_manager.tabs.count()):
+                widget = self.editor_manager.tabs.widget(i)
+                if hasattr(widget, 'bridge'):
+                    try:
+                        import json
+                        manifest = json.loads(manifest_json)
+                        # Ensure we have the path to load files from
+                        rec = self.ext_manager._records.get(ext_id)
+                        if rec and rec.path:
+                            manifest["extensionLocation"] = f"file://{os.path.join(rec.path, 'extension')}"
+                        # Emit a custom signal or call JS directly
+                        # We will need to define a new signal on PythonBridge for this
+                        if hasattr(widget.bridge, 'registerExtension'):
+                            widget.bridge.registerExtension.emit(json.dumps(manifest))
+                    except Exception as e:
+                        print(f"Error sending extension manifest to JS: {e}")

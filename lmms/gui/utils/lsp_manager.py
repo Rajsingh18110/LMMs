@@ -4,9 +4,8 @@ LSPManager — stdio ↔ JSON-RPC bridge between Monaco (JS) and a local LSP ser
 One instance is shared across all editor tabs (singleton via code_editor._get_lsp).
 """
 import subprocess
-import threading
 import json
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QThread
 
 
 class LSPManager(QObject):
@@ -19,6 +18,14 @@ class LSPManager(QObject):
         self.process    = None
         self._thread    = None
         self.is_running = False
+
+    class ReadThread(QThread):
+        def __init__(self, lsp_manager):
+            super().__init__()
+            self.lsp_manager = lsp_manager
+            
+        def run(self):
+            self.lsp_manager._read_loop()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -34,7 +41,7 @@ class LSPManager(QObject):
                 text=False,   # raw bytes — Content-Length framing
             )
             self.is_running = True
-            self._thread = threading.Thread(target=self._read_loop, daemon=True)
+            self._thread = self.ReadThread(self)
             self._thread.start()
             print(f"[LSP] Process started (PID {self.process.pid}): {self.command}")
         except FileNotFoundError:

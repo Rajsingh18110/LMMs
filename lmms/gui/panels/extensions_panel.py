@@ -15,11 +15,20 @@ from PyQt6.QtWidgets import (
     QMessageBox, QComboBox, QSizePolicy
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer, QUrl
 from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 
 PAGE_SIZE = 25   # results per page
+
+_icon_nam = None
+
+def get_icon_nam():
+    global _icon_nam
+    if _icon_nam is None:
+        _icon_nam = QNetworkAccessManager()
+    return _icon_nam
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -62,17 +71,23 @@ class ExtensionSearchThread(QThread):
             total      = int(data.get("totalSize", 0))
 
             # --- Exact-match boost (first page only) -------------------------
-            # If the top result isn't an obvious match, try fetching the exact
-            # extension by namespace/name (e.g. query = "ms-python.python" or
-            # just "codex" → try open-vsx.org/api/-/search?query=codex exactly)
+            # If the query is an exact match for namespace.name, prepend it.
+            # Otherwise, if it's just a name, try to bring the exact name match to the top.
             if self.offset == 0 and extensions:
                 exact = self._try_exact_lookup(self.query)
                 if exact:
-                    # Remove duplicate from list, then prepend exact match
                     ns_name = f"{exact.get('namespace','')}.{exact.get('name','')}"
                     extensions = [e for e in extensions
                                   if f"{e.get('namespace','')}.{e.get('name','')}" != ns_name]
                     extensions.insert(0, exact)
+                else:
+                    # If no exact namespace.name, try to boost exact 'name' match in the results
+                    q_lower = self.query.strip().lower()
+                    for i, e in enumerate(extensions):
+                        if e.get('name', '').lower() == q_lower or e.get('displayName', '').lower() == q_lower:
+                            exact_e = extensions.pop(i)
+                            extensions.insert(0, exact_e)
+                            break
             # -----------------------------------------------------------------
 
             self.results_ready.emit(extensions, total)
@@ -145,12 +160,34 @@ class ExtensionDetailThread(QThread):
 class ExtensionCard(QWidget):
     ICON_SIZE = 40
 
+    # Button label and style for each state
+    _BTN_CONFIG = {
+        "available":    ("Install",       "#0e639c", "#1177bb"),
+        "installing":   ("Installing…",   "#37373d", "#37373d"),
+        "installed":    ("Installed",     "#3c3c3c", "#505050"),
+        "activating":  ("Activating…",   "#37373d", "#37373d"),
+        "active":       ("✓ Active",      "#1b5e20", "#1b5e20"),
+        "disabled":     ("Enable",        "#5c6bc0", "#3f51b5"),
+        "failed":       ("Retry",         "#7b1a1a", "#9b2020"),
+        "uninstalling": ("Removing…",    "#37373d", "#37373d"),
+        "uninstalled":  ("Install",       "#0e639c", "#1177bb"),
+    }
+
     def __init__(self, ext: dict, row: int):
         super().__init__()
-        self._ext = ext
-        self.row  = row
+        self._ext   = ext
+        self._ext_id = f"{ext.get('namespace','')}.{ext.get('name','')}"
+        self.row    = row
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._build()
+        # Subscribe to state changes for THIS extension
+        from lmms.extensions.manager import ExtensionManager
+        mgr = ExtensionManager.instance()
+        # Restore current state on card creation
+        cur_state = mgr.get_state(self._ext_id).value
+        self._apply_state(cur_state)
+        mgr.state_changed.connect(self._on_state_changed)
+        mgr.install_progress.connect(self._on_progress)
 
     def _build(self):
         ext         = self._ext
@@ -171,8 +208,12 @@ class ExtensionCard(QWidget):
         self.icon_lbl.setStyleSheet(
             "background:#37373d; border-radius:4px; color:#555; font-size:16px;"
         )
-        self.icon_lbl.setText("⬜")
+        self.icon_lbl.setText("🧩")
         outer.addWidget(self.icon_lbl)
+        
+        icon_url = ext.get("iconUrl", "")
+        if icon_url:
+            self._load_icon(icon_url)
 
         # Text
         text_col = QVBoxLayout()
@@ -204,19 +245,84 @@ class ExtensionCard(QWidget):
 
         outer.addLayout(text_col, 1)
 
-        # Install button
+        # Install / state button
         self.btn_install = QPushButton("Install")
-        self.btn_install.setFixedSize(58, 22)
+        self.btn_install.setFixedSize(68, 22)
         self.btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_install.setStyleSheet("""
-            QPushButton {
-                background:#0e639c; color:white; border:none;
-                border-radius:2px; font-size:11px; font-weight:600;
-            }
-            QPushButton:hover   { background:#1177bb; }
-            QPushButton:pressed { background:#0a4f7e; }
-        """)
+        self._set_btn_style("#0e639c", "#1177bb")
+        self.btn_install.clicked.connect(self._on_btn_clicked)
         outer.addWidget(self.btn_install, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def _set_btn_style(self, bg: str, hover: str):
+        self.btn_install.setStyleSheet(f"""
+            QPushButton {{
+                background:{bg}; color:white; border:none;
+                border-radius:2px; font-size:10px; font-weight:600;
+            }}
+            QPushButton:hover   {{ background:{hover}; }}
+            QPushButton:pressed {{ background:{bg}; }}
+        """)
+
+    def _apply_state(self, state: str):
+        """Update button label + color to match extension state."""
+        label, bg, hover = self._BTN_CONFIG.get(state, ("Install", "#0e639c", "#1177bb"))
+        self.btn_install.setText(label)
+        self._set_btn_style(bg, hover)
+        is_busy = state in ("installing", "activating", "uninstalling")
+        self.btn_install.setEnabled(not is_busy)
+
+    def _on_state_changed(self, ext_id: str, state: str):
+        if ext_id == self._ext_id:
+            self._apply_state(state)
+
+    def _on_progress(self, ext_id: str, pct: int):
+        if ext_id == self._ext_id:
+            self.btn_install.setText(f"{pct}%")
+
+    def _on_btn_clicked(self):
+        from lmms.extensions.manager import ExtensionManager
+        mgr   = ExtensionManager.instance()
+        state = mgr.get_state(self._ext_id).value
+        if state in ("available", "uninstalled", "failed"):
+            mgr.install(self._ext)
+        elif state == "disabled":
+            mgr.enable(self._ext_id)
+        elif state in ("installed", "active"):
+            mgr.disable(self._ext_id)
+
+    def _load_icon(self, url: str):
+        from pathlib import Path
+        cache_dir = Path.home() / ".lmms" / "extensions" / "icons"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        cache_file = cache_dir / f"{self._ext_id}.png"
+        if cache_file.exists():
+            try:
+                with open(cache_file, "rb") as f:
+                    self.set_icon(f.read())
+                return
+            except Exception:
+                pass
+                
+        nam = get_icon_nam()
+        req = QNetworkRequest(QUrl(url))
+        self._icon_reply = nam.get(req)
+        self._icon_reply.finished.connect(self._on_icon_downloaded)
+        self._icon_cache_file = cache_file
+
+    def _on_icon_downloaded(self):
+        reply = self.sender()
+        if not reply:
+            return
+        if reply.error() == QNetworkReply.NetworkError.NoError:
+            data = reply.readAll().data()
+            try:
+                with open(self._icon_cache_file, "wb") as f:
+                    f.write(data)
+            except Exception:
+                pass
+            self.set_icon(data)
+        reply.deleteLater()
 
     def set_icon(self, data: bytes):
         px = QPixmap()
@@ -240,6 +346,18 @@ def _fmt_dl(n: int) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 # Extension Detail Tab  (QWebEngineView, real tab switching)
 # ══════════════════════════════════════════════════════════════════════════════
+
+from PyQt6.QtWebEngineCore import QWebEnginePage
+
+class ActionInterceptPage(QWebEnginePage):
+    """Intercepts action:* links to trigger Python methods."""
+    action_requested = pyqtSignal(str)
+
+    def acceptNavigationRequest(self, url, _type, isMainFrame):
+        if url.scheme() == "action":
+            self.action_requested.emit(url.path())
+            return False
+        return super().acceptNavigationRequest(url, _type, isMainFrame)
 
 _DETAIL_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
@@ -411,11 +529,7 @@ a:hover { text-decoration:underline; }
     </div>
     <div class="hero-desc">__DESC__</div>
     <div class="actions">
-      <button class="btn btn-primary">Install</button>
-      <button class="btn btn-secondary">Disable ▾</button>
-      <button class="btn btn-secondary">Uninstall ▾</button>
-      <button class="btn btn-prerel">Switch to Pre-Release Version</button>
-      <label class="auto-update"><input type="checkbox" checked> Auto Update</label>
+      __BUTTONS_HTML__
     </div>
   </div>
 </div>
@@ -719,17 +833,45 @@ class ExtensionDetailTab(QWebEngineView):
         super().__init__(parent)
         self._ext    = ext
         self._detail = {}
+        self._ext_id = f"{ext.get('namespace','')}.{ext.get('name','')}"
+
         self.setProperty("is_custom", True)
-        ns   = ext.get("namespace", "")
-        name = ext.get("name", "")
-        self.setProperty("identifier", f"ext:{ns}.{name}")
+        self.setProperty("identifier", f"ext:{self._ext_id}")
+
+        self._page = ActionInterceptPage(self)
+        self._page.action_requested.connect(self._on_action)
+        self.setPage(self._page)
+
         # Show skeleton while fetching detail
         self.setHtml(self._skeleton())
+
+        # Listen for extension manager state changes
+        from lmms.extensions.manager import ExtensionManager
+        ExtensionManager.instance().state_changed.connect(self._on_state_changed)
+
         # Fetch full detail from Open VSX
-        self._dt = ExtensionDetailThread(ns, name)
+        self._dt = ExtensionDetailThread(ext.get("namespace", ""), ext.get("name", ""))
         self._dt.detail_ready.connect(self._render)
         self._dt.error_occurred.connect(lambda _: self._render(ext))
         self._dt.start()
+
+    def _on_action(self, action: str):
+        from lmms.extensions.manager import ExtensionManager
+        mgr = ExtensionManager.instance()
+        if action == "install":
+            mgr.install(self._detail or self._ext)
+        elif action == "uninstall":
+            mgr.uninstall(self._ext_id)
+        elif action == "enable":
+            mgr.enable(self._ext_id)
+        elif action == "disable":
+            mgr.disable(self._ext_id)
+
+    def _on_state_changed(self, ext_id: str, state: str):
+        if ext_id == self._ext_id:
+            # Re-render to update buttons
+            if self._detail:
+                self._render(self._detail)
 
     def _skeleton(self) -> str:
         name = self._ext.get("displayName") or self._ext.get("name", "")
@@ -748,6 +890,7 @@ class ExtensionDetailTab(QWebEngineView):
         </body></html>"""
 
     def _render(self, detail: dict):
+        self._detail = detail
         ext = {**self._ext, **detail}
 
         name       = ext.get("displayName") or ext.get("name", "")
@@ -794,6 +937,44 @@ class ExtensionDetailTab(QWebEngineView):
         # Repo link
         repo_html = f'<a class="res-link" href="{repo_url}">📦 Repository</a>' if repo_url else ""
 
+        # Extension Manager integration for buttons/compat
+        from lmms.extensions.manager import ExtensionManager
+        mgr = ExtensionManager.instance()
+        state = mgr.get_state(ext_id).value
+        rec = mgr.get_record(ext_id)
+        compat = rec.compat.value if rec else "UNKNOWN"
+
+        buttons_html = ""
+        is_busy = state in ("installing", "activating", "uninstalling")
+        if state in ("available", "uninstalled", "failed"):
+            label = "Retry" if state == "failed" else "Install"
+            buttons_html += f'<a href="action:install" class="btn btn-primary">{label}</a>'
+        elif state == "installing":
+            buttons_html += f'<button class="btn btn-secondary" disabled>Installing…</button>'
+        elif state == "activating":
+            buttons_html += f'<button class="btn btn-secondary" disabled>Activating…</button>'
+        elif state == "uninstalling":
+            buttons_html += f'<button class="btn btn-secondary" disabled>Removing…</button>'
+        elif state == "installed":
+            buttons_html += f'<button class="btn btn-secondary" disabled>Installed</button>'
+            buttons_html += f'<a href="action:uninstall" class="btn btn-secondary">Uninstall</a>'
+        elif state == "active":
+            buttons_html += f'<button class="btn btn-secondary" disabled>✓ Active</button>'
+            buttons_html += f'<a href="action:disable" class="btn btn-secondary">Disable</a>'
+            buttons_html += f'<a href="action:uninstall" class="btn btn-secondary">Uninstall</a>'
+        elif state == "disabled":
+            buttons_html += f'<a href="action:enable" class="btn btn-secondary">Enable</a>'
+            buttons_html += f'<a href="action:uninstall" class="btn btn-secondary">Uninstall</a>'
+
+        if state not in ("available", "uninstalled"):
+            if compat == "FULL":
+                compat_color = "#1b5e20"
+            elif compat == "PARTIAL":
+                compat_color = "#cca700"
+            else:
+                compat_color = "#7b1a1a"
+            buttons_html += f'<span class="badge" style="margin-left:10px;background:{compat_color};color:white">Compat: {compat}</span>'
+
         # Build injected ext JSON (only include files + dependency fields)
         ext_json = json.dumps({
             "description": desc,
@@ -817,6 +998,7 @@ class ExtensionDetailTab(QWebEngineView):
             .replace("__PUBLISHED__", published or "—")
             .replace("__RELEASED__",  timestamp or "—")
             .replace("__CATEGORIES_HTML__", cats_html)
+            .replace("__BUTTONS_HTML__", buttons_html)
             .replace("__MKT_URL__",   f"https://open-vsx.org/extension/{namespace}/{ext_name}")
             .replace("__LICENSE_URL__", license_url)
             .replace("__REPO_LINK__", repo_html)

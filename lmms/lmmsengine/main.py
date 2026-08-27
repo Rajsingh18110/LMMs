@@ -6,6 +6,7 @@ Commands: lmms run, lmms ps, lmms stop, lmms list, etc.
 
 import sys
 import os
+os.environ["XCOMPOSEFILE"] = "/dev/null"
 import subprocess
 import json
 import site

@@ -29,12 +29,12 @@ class ProviderRegistry:
             json.dump(data, f, indent=4)
 
     @staticmethod
-    def create(name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "") -> str:
+    def create(name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "", category: str = "text") -> str:
         p_id = str(uuid.uuid4())
-        return ProviderRegistry.create_with_id(p_id, name, p_type, base_url, api_key, webhook_url)
+        return ProviderRegistry.create_with_id(p_id, name, p_type, base_url, api_key, webhook_url, category)
 
     @staticmethod
-    def create_with_id(p_id: str, name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "") -> str:
+    def create_with_id(p_id: str, name: str, p_type: str, base_url: str, api_key: str = "", webhook_url: str = "", category: str = "text") -> str:
         data = ProviderRegistry._load_raw()
         
         # TODO: In future, integrate with OS Keychain for api_key.
@@ -43,6 +43,7 @@ class ProviderRegistry:
             "id": p_id,
             "name": name,
             "type": p_type,
+            "category": category,
             "enabled": True,
             "base_url": base_url,
             "api_key": api_key, # Consider encryption here
@@ -62,7 +63,7 @@ class ProviderRegistry:
             
         provider = data[p_id]
         for k, v in updates.items():
-            if k in ["name", "base_url", "api_key", "webhook_url", "enabled", "type"]:
+            if k in ["name", "base_url", "api_key", "webhook_url", "enabled", "type", "category"]:
                 provider[k] = v
         
         provider["updated_at"] = datetime.utcnow().isoformat()

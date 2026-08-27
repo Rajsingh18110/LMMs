@@ -167,6 +167,11 @@ class TerminalPanel(QWidget):
         self.output_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
         self.tabs.addTab(self.output_text, "Output")
         
+        # Extension Logs Tab
+        from lmms.gui.panels.extension_host_logs_panel import ExtensionHostLogsPanel
+        self.ext_logs_panel = ExtensionHostLogsPanel()
+        self.tabs.addTab(self.ext_logs_panel, "Extension Logs")
+        
         # Debug Console Tab
         self.debug_text = QTextEdit()
         self.debug_text.setReadOnly(True)
@@ -246,7 +251,7 @@ class TerminalPanel(QWidget):
         self.add_window_controls(t_layout, btn_style)
         self.corner_widget.addWidget(terminal_tb)
         
-        # 3. Default Toolbar (for Output, Debug Console, Ports)
+        # 3. Default Toolbar (for Output, Debug Console, Ports, Extension Logs)
         default_tb = QWidget()
         d_layout = QHBoxLayout(default_tb)
         d_layout.setContentsMargins(0, 0, 15, 0)
@@ -272,6 +277,12 @@ class TerminalPanel(QWidget):
         
         layout.addWidget(btn_max)
         layout.addWidget(btn_close)
+    def cleanup(self):
+        for term in self.terminals:
+            try:
+                term.close_process()
+            except Exception:
+                pass
 
     def add_new_terminal(self):
         term = TerminalEdit()

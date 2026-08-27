@@ -682,7 +682,7 @@ def main():
             os.environ["QT_LOGGING_RULES"] = "*.debug=false;qt.qpa.*=false"
             
             # Tell the UI module to stop printing to terminal
-            lmms.ui.GUI_MODE = True
+            lmms.gui.core.ui.GUI_MODE = True
             
             # Start the PyQt6 GUI
             app = QApplication(sys.argv)

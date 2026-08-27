@@ -4,6 +4,7 @@ import functools
 from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSlot, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 
 
@@ -69,6 +70,7 @@ class PythonBridge(QObject):
     sendLspMessage      = pyqtSignal(str)         # LSP response → JS
     lspMessageFromJs    = pyqtSignal(str)         # LSP request ← JS
     updateGitDecorations = pyqtSignal(str)        # git gutter data → JS
+    registerExtension   = pyqtSignal(str)         # manifest string → JS
 
     @pyqtSlot(str)
     def onContentChanged(self, content: str):

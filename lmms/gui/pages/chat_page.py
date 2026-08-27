@@ -147,6 +147,25 @@ class ChatPage(QWidget):
         """)
         self.attach_btn.clicked.connect(self.attach_files)
 
+        self.model_filter_combo = QComboBox()
+        self.model_filter_combo.addItems(["All", "Online", "Offline"])
+        self.model_filter_combo.setFixedHeight(24)
+        self.model_filter_combo.setFixedWidth(80)
+        self.model_filter_combo.setStyleSheet("""
+            QComboBox {
+                background: #1f2937; border: 1px solid #374151;
+                border-radius: 4px; color: #9ca3af;
+                font-size: 11px; padding: 2px 8px;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background: #111827; color: #e5e7eb;
+                selection-background-color: #2563eb;
+                border: 1px solid #374151;
+            }
+        """)
+        self.model_filter_combo.currentTextChanged.connect(self.refresh_models)
+        
         self.model_combo = QComboBox()
         self.model_combo.setFixedHeight(24)
         self.model_combo.setStyleSheet("""
@@ -182,6 +201,7 @@ class ChatPage(QWidget):
         self._set_send_ready()
 
         toolbar.addWidget(self.attach_btn)
+        toolbar.addWidget(self.model_filter_combo)
         toolbar.addWidget(self.model_combo)
         toolbar.addStretch()
         toolbar.addWidget(self.mic_btn)
@@ -251,11 +271,12 @@ class ChatPage(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     # Model management
     # ─────────────────────────────────────────────────────────────────────────
-    def refresh_models(self):
+    def refresh_models(self, *_):
         from lmms.backend.core.registry.model_registry import ModelRegistry
+        from lmms.backend.core.registry.provider_registry import ProviderRegistry
         models = ModelRegistry.list()
         
-        # We only want to show Text or Vision models (no Audio/ImageGeneration models for normal chat usually, but fine to show all enabled for now)
+        # We only want to show Text or Vision models
         models = [m for m in models if m.get("enabled", True)]
         
         # Sort by display name
@@ -263,21 +284,36 @@ class ChatPage(QWidget):
         
         self.model_combo.clear()
         
+        filter_text = self.model_filter_combo.currentText()
+        providers = {p["id"]: p for p in ProviderRegistry.list_safe()}
+        
         if not models:
             self.model_combo.addItem("No Models")
         else:
             saved_model_id = ConfigManager().get("chat_selected_model", "")
             idx = 0
             for i, m in enumerate(models):
-                d_name = m.get("display_name") or m.get("model_id") or m.get("id", "Unknown")
                 p_id = m.get("provider_id") or m.get("provider", "Unknown")
-                full_name = f"{d_name} ({p_id})"
+                provider = providers.get(p_id, {})
+                p_type = provider.get("type", "openai_compatible")
+                
+                is_offline = p_type in ["ollama", "llama_cpp"]
+                if filter_text == "Online" and is_offline: continue
+                if filter_text == "Offline" and not is_offline: continue
+                
+                d_name = m.get("display_name") or m.get("model_id") or m.get("id", "Unknown")
+                if "/" in d_name:
+                    d_name = d_name.split("/")[-1]
+                    
+                full_name = f"{d_name} ({'local' if is_offline else 'cloud'})"
+                
                 self.model_combo.addItem(full_name, userData=m.get("internal_id", m.get("id")))
                 
                 if m.get("internal_id", m.get("id")) == saved_model_id:
-                    idx = i
+                    idx = self.model_combo.count() - 1
                     
-            self.model_combo.setCurrentIndex(idx)
+            if self.model_combo.count() > 0:
+                self.model_combo.setCurrentIndex(idx)
             
         # Connect change event to save preference
         try: self.model_combo.currentIndexChanged.disconnect()
