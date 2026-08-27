@@ -783,59 +783,90 @@ class ModelBrowser(QDockWidget):
         
     def load_downloaded_models(self):
         self.downloads_list.clear()
-        
-        from lmms.backend.logic.manager import BackendManager
+
         from lmms.backend.core.registry.model_registry import ModelRegistry
-        backend = BackendManager()
-        
-        # Scan and load using the unified provider manager
-        backend.provider.scan_all_models()
         models_list = ModelRegistry.list()
-        connected_models = backend.connection.get_connected_models()
 
         models = []
         seen_paths = set()
-        
+
         for m in models_list:
-            meta = m.get("metadata", {})
-            path = meta.get("path")
+            # Support BOTH old-format (top-level source/path) and
+            # new-format (nested metadata.source/metadata.path)
+            meta = m.get("metadata", {}) or {}
+
+            # Path: try top-level first, then metadata
+            path = m.get("path") or meta.get("path", "")
+            source = m.get("source") or meta.get("source", "")
+            provider_name = m.get("provider", "")
+            fmt = m.get("format") or meta.get("format", "")
+            provider_id = m.get("provider_id", "")
+            model_id = m.get("id", "") or m.get("model_id", "")
+
+            # Determine if this is a local/offline model
+            is_local = (
+                source in ["Local", "lmms", "Imported (HF Cache)"]
+                or provider_name in ["LMMs", "Ollama", "llama_cpp"]
+                or fmt in ["GGUF", "gguf"]
+                or (path and os.path.isabs(path))
+                or provider_id.startswith("local_native")
+                or model_id.startswith("local_native::")
+            )
+
+            if not is_local:
+                continue
+
+            # Deduplicate by file path
             if path:
                 if path in seen_paths:
                     continue
                 seen_paths.add(path)
-                
-            source = meta.get("source", "")
-            if source not in ["lmms", "Local"] and not m.get("provider_id", "").startswith("local_native"):
-                continue
-            
-            mid = m.get("id")
-            state = "Downloaded"
-            
-            if mid in connected_models:
-                state = connected_models[mid].get("state", "Connected")
+
+            # Build display name — strip :: prefix artifacts
+            display = m.get("display_name") or m.get("model_id") or model_id
+            if "::" in display:
+                display = display.split("::")[-1]
+
+            # File size label
+            size_bytes = m.get("size", 0) or meta.get("size", 0)
+            if size_bytes:
+                size_gb = size_bytes / (1024 ** 3)
+                size_str = f"{size_gb:.2f} GB"
+            else:
+                size_str = ""
+
+            tag_list = [fmt] if fmt else ["GGUF"]
 
             models.append({
-                "id": mid,
-                "modelId": m.get("model_id"),
-                "title": m.get("display_name"),
+                "id": model_id,
+                "modelId": model_id,
+                "title": display,
                 "downloads": "Local",
-                "tags": [meta.get("format", "Unknown")],
-                "lastModified": m.get("updated_at", ""),
+                "tags": tag_list,
+                "lastModified": m.get("updated_at", "") or m.get("last_used", ""),
                 "capabilities": m.get("capabilities", {}),
-                "state": state
+                "state": "Downloaded",
+                "size_str": size_str,
+                "path": path,
             })
-        
-        # Sort by recently updated
-        models.sort(key=lambda x: x.get("lastModified", ""), reverse=True)
+
+        # Sort by most recently used / updated
+        models.sort(key=lambda x: str(x.get("lastModified", "")), reverse=True)
+
+        if not models:
+            # Show a helpful empty state label
+            empty = QListWidgetItem("No downloaded models found.")
+            empty.setForeground(QColor("#8b949e"))
+            self.downloads_list.addItem(empty)
+            return
 
         for m in models:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
-            item.setData(Qt.ItemDataRole.UserRole + 2, m.get("id", "Unknown").split("/")[0])
+            org = m.get("id", "Unknown").split("/")[0]
+            item.setData(Qt.ItemDataRole.UserRole + 2, org)
             item.setSizeHint(QSize(0, 54))
             self.downloads_list.addItem(item)
-            
-            org = m.get("id", "Unknown").split("/")[0]
             self._logo_loader.load(org)
 
     def prompt_delete_model(self, mid):
