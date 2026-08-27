@@ -41,13 +41,13 @@ class ChatPage(QWidget):
             workspace_dir=workspace_dir
         )
         self.chat_service = ChatService(self.agent_manager)
-
         # Connect ChatService signals
         self.chat_service.event_received.connect(self.on_event_received)
         self.chat_service.response_finished.connect(self.on_response_finished)
         self.chat_service.error_occurred.connect(self.on_error_occurred)
         self.chat_service.cancelled.connect(self.on_cancelled)
         self.chat_service.no_response.connect(self.on_no_response)
+        self.chat_service.confirmation_requested.connect(self.on_confirmation_requested)
 
         # Message state
         self.messages: list[ChatMessage] = []
@@ -232,6 +232,24 @@ class ChatPage(QWidget):
             }
         """)
         self.refresh_models()
+        
+        self.agent_mode_toggle = QPushButton("🤖 Agent Mode: OFF")
+        self.agent_mode_toggle.setFixedHeight(26)
+        self.agent_mode_toggle.setCheckable(True)
+        self.agent_mode_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.agent_mode_toggle.setStyleSheet("""
+            QPushButton {
+                background: #21262d; border: 1px solid #30363d;
+                color: #8b949e; font-size: 11px; border-radius: 13px; padding: 2px 10px;
+            }
+            QPushButton:checked {
+                background: #1f6feb; color: #ffffff; border: 1px solid #1f6feb;
+            }
+            QPushButton:hover:!checked { background: #30363d; }
+        """)
+        self.agent_mode_toggle.toggled.connect(
+            lambda checked: self.agent_mode_toggle.setText("🤖 Agent Mode: ON" if checked else "🤖 Agent Mode: OFF")
+        )
 
         self.mic_btn = QPushButton("🎙️")
         self.mic_btn.setToolTip("Voice Input (Coming Soon)")
@@ -254,6 +272,7 @@ class ChatPage(QWidget):
         toolbar.addWidget(self.model_filter_combo)
         toolbar.addStretch()
         toolbar.addWidget(self.model_combo)
+        toolbar.addWidget(self.agent_mode_toggle)
         toolbar.addWidget(self.mic_btn)
         toolbar.addWidget(self.send_btn)
         input_layout.addLayout(toolbar)
@@ -576,7 +595,8 @@ class ChatPage(QWidget):
         self.set_send_btn_stop()
 
         # Start backend generation — pass message_id so ChatService can tag events
-        self.chat_service.start_chat(full_text, message_id=asst_msg.id, model_name=active_model)
+        agent_mode = self.agent_mode_toggle.isChecked()
+        self.chat_service.start_chat(full_text, message_id=asst_msg.id, model_name=active_model, agent_mode=agent_mode)
 
     def stop_generation(self):
         self.chat_service.cancel()
@@ -775,3 +795,20 @@ class ChatPage(QWidget):
         if url.startswith(("http://", "https://")):
             import webbrowser
             webbrowser.open(url)
+
+    @pyqtSlot(str, str, dict)
+    def on_confirmation_requested(self, message_id: str, tool_name: str, args: dict):
+        from PyQt6.QtWidgets import QMessageBox
+        import json
+        
+        args_str = json.dumps(args, indent=2)
+        reply = QMessageBox.question(
+            self,
+            "Permission Required",
+            f"The assistant wants to execute the following tool:\n\nTool: {tool_name}\nArguments:\n{args_str}\n\nDo you allow this?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        approved = (reply == QMessageBox.StandardButton.Yes)
+        self.chat_service.submit_confirmation(message_id, approved)

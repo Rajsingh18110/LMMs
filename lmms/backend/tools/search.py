@@ -12,7 +12,7 @@ default_registry.register(ToolDefinition(
     description="Search the web using a search provider.",
     category="web",
     parameters={"query": "str", "max_results": "int"},
-    permissions=[Permission.NETWORK],
+    permissions=[Permission.WEB_SEARCH],
     risk_level="low",
     requires_network=True,
     callback=canonical_search_callback

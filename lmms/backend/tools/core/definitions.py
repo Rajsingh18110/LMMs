@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Callable
-from lmms.backend.tools.core.permissions import Permission
+from lmms.backend.agents.permissions import Permission
 
 @dataclass
 class ToolDefinition:

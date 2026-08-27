@@ -20,7 +20,7 @@ import re
 import asyncio
 import sys
 from dataclasses import replace as dc_replace
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot
 
 from lmms.backend.agents.core_agents.agents.manager import AgentManager
 from lmms.backend.agents.core_agents.agents.context import ExecutionContext
@@ -43,6 +43,7 @@ class ChatService(QThread):
     response_finished = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
     cancelled = pyqtSignal()
+    confirmation_requested = pyqtSignal(str, str, dict)  # message_id, tool_name, tool_args
     no_response = pyqtSignal()
 
     def __init__(self, agent_manager: AgentManager):
@@ -50,16 +51,26 @@ class ChatService(QThread):
         self.agent_manager = agent_manager
         self.prompt: str = ""
         self.image_path: str | None = None
+        self.agent_mode = False
         self.active_message_id: str = ""
         self._is_cancelled = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._main_task = None
+        self._pending_confirmations = {}
 
-    def start_chat(self, prompt: str, message_id: str, image_path: str | None = None, model_name: str | None = None):
+    @pyqtSlot(str, bool)
+    def submit_confirmation(self, message_id: str, approved: bool):
+        if message_id in self._pending_confirmations:
+            fut = self._pending_confirmations.pop(message_id)
+            if self._loop and not fut.done():
+                self._loop.call_soon_threadsafe(fut.set_result, approved)
+
+    def start_chat(self, prompt: str, message_id: str, image_path: str | None = None, model_name: str | None = None, agent_mode: bool = False):
         self.prompt = prompt
         self.active_message_id = message_id
         self.image_path = image_path
         self.model_name = model_name
+        self.agent_mode = agent_mode
         self._is_cancelled = False
         self.start()
 
@@ -77,6 +88,12 @@ class ChatService(QThread):
                 self._loop = asyncio.SelectorEventLoop()
             asyncio.set_event_loop(self._loop)
 
+            async def request_confirmation(tool_name: str, args: dict) -> bool:
+                fut = self._loop.create_future()
+                self._pending_confirmations[self.active_message_id] = fut
+                self.confirmation_requested.emit(self.active_message_id, tool_name, args)
+                return await fut
+
             context = ExecutionContext(
                 task=Task(
                     id="chat-1",
@@ -84,8 +101,11 @@ class ChatService(QThread):
                     description=self.prompt
                 ),
                 memory=[{"role": "user", "content": self.prompt}],
-                selected_model=self.model_name
+                selected_model=self.model_name,
+                agent_mode=self.agent_mode
             )
+            # Monkey-patch the callback into context since it's specific to ChatService
+            context.request_confirmation = request_confirmation
 
             visible_deltas = 0
 

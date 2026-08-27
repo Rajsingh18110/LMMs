@@ -41,13 +41,7 @@ class CodingAgent(BaseAgent):
         import asyncio
         import difflib
         import re
-        from lmms.backend.tools.files import FileTool
-        from lmms.backend.tools.terminal import TerminalTool
-
-        yield "Starting CodingAgent execution...\n"
-        
-        file_tool = FileTool()
-        term_tool = TerminalTool()
+        from lmms.backend.tools.core import default_executor
         
         files_to_read = set(context.files if context.files else [])
         if context.task:
@@ -59,11 +53,11 @@ class CodingAgent(BaseAgent):
         if files_to_read:
             yield f"Reading files: {', '.join(files_to_read)}\n"
             for f in files_to_read:
-                try:
-                    content = file_tool.read(f)
-                    file_contents[f] = content
-                except Exception as e:
-                    file_contents[f] = f"Error reading: {e}"
+                res = default_executor.execute("file.read", {"path": f})
+                if res.success:
+                    file_contents[f] = res.data.get("content", "")
+                else:
+                    file_contents[f] = f"Error reading: {res.error}"
         else:
             yield "No specific files provided in context. Proceeding...\n"
 
@@ -157,7 +151,8 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                     old_content = file_contents.get(path, "")
                     if not old_content and os.path.exists(path):
                         try:
-                            old_content = file_tool.read(path)
+                            r = default_executor.execute("file.read", {"path": path})
+                            old_content = r.data.get("content", "") if r.success else ""
                         except Exception:
                             old_content = ""
                             
@@ -178,8 +173,8 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                             
                         yield f"Writing to file: {path}...\n"
                         backups[path] = old_content
-                        res = file_tool.write(path, new_content)
-                        yield f"  Result: {res}\n"
+                        r = default_executor.execute("file.write", {"path": path, "content": new_content})
+                        yield f"  Result: {'OK' if r.success else r.error}\n"
                     else:
                         yield f"Search block not found in {path}. Edit skipped.\n"
                         edits_successful = False
@@ -191,7 +186,9 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             if cmd:
                 yield f"Running validation command: `{cmd}`...\n"
                 try:
-                    exit_code, out = term_tool.run(cmd, require_confirm=False, return_exit_code=True)
+                    r = default_executor.execute("terminal.run", {"command": cmd, "cwd": os.getcwd()})
+                    out = r.data.get("output", "") if r.success else r.error
+                    exit_code = r.data.get("exit_code", 1) if r.success else 1
                     yield f"  Terminal Output:\n{out}\n"
                     if exit_code != 0:
                         validation_successful = False
@@ -204,7 +201,7 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             else:
                 yield "Execution completed with validation errors. Rolling back changes...\n"
                 for p, old_val in backups.items():
-                    file_tool.write(p, old_val)
+                    default_executor.execute("file.write", {"path": p, "content": old_val})
                     yield f"  Rolled back: {p}\n"
             
         except json.JSONDecodeError as e:

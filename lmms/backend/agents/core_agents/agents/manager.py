@@ -27,13 +27,16 @@ class AgentManager:
             from lmms.backend.agents.core_agents.agents.specialized.tester import TesterAgent
             from lmms.backend.agents.core_agents.agents.specialized.reviewer import ReviewerAgent
             from lmms.backend.agents.core_agents.agents.specialized.chat import PlainChatAgent
+            from lmms.backend.agents.core_agents.agents.specialized.universal import UniversalAgent
             
-            self.register_agent(CodingAgent())
-            self.register_agent(VisionAgent())
-            self.register_agent(OrchestratorAgent())
-            self.register_agent(TesterAgent())
-            self.register_agent(ReviewerAgent())
-            self.register_agent(PlainChatAgent())
+            if not self.agents:
+                self.register_agent(CodingAgent())
+                self.register_agent(VisionAgent())
+                self.register_agent(OrchestratorAgent())
+                self.register_agent(TesterAgent())
+                self.register_agent(ReviewerAgent())
+                self.register_agent(PlainChatAgent())
+                self.register_agent(UniversalAgent())
         except ImportError as e:
             print(f"Failed to load default agents: {e}")
 
@@ -46,6 +49,11 @@ class AgentManager:
         Evaluate the context against all registered agents to find the best match.
         If no agent scores above 0.3, returns None.
         """
+        if getattr(context, 'agent_mode', False):
+            for agent in self.agents:
+                if agent.name == "UniversalAgent":
+                    return agent
+                    
         best_agent = None
         highest_score = 0.0
         

@@ -4,14 +4,14 @@ from typing import Dict, Any, Optional
 
 from lmms.backend.tools.core.result import ToolResult, ToolError, ToolPermissionError
 from lmms.backend.tools.core.registry import ToolRegistry
-from lmms.backend.tools.core.permissions import ToolPermissionManager
+from lmms.backend.agents.permissions import PermissionValidator
 
 class ToolExecutor:
     """
     Executes tools securely, enforcing boundaries, permissions, and timeout policies.
     Normalizes all execution states into standard ToolResults.
     """
-    def __init__(self, registry: ToolRegistry, permission_manager: ToolPermissionManager):
+    def __init__(self, registry: ToolRegistry, permission_manager: PermissionValidator):
         self.registry = registry
         self.permission_manager = permission_manager
         

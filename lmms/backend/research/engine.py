@@ -39,7 +39,7 @@ class ResearchEngine:
         errors = []
         
         # 1. Enforce ToolRuntime permission policy (NETWORK is required)
-        if not default_permission_manager.check_permission([Permission.NETWORK]):
+        if not default_permission_manager.check_permission([Permission.WEB_SEARCH]):
             error_msg = "Permission Denied: NETWORK permission is required for Web Research."
             await dispatch_event(emit_cb, ResearchFailed(run_id=run_id, error=error_msg))
             res = ResearchResult(

@@ -29,7 +29,7 @@ setup(
         "huggingface_hub", "watchdog", "transformers", "airllm",
 
         # GUI (PyQt6)
-        "PyQt6", "PyQt6-Qt6", "PyQt6-sip", "qasync",
+        "PyQt6", "PyQt6-Qt6", "PyQt6-sip", "qasync", "PyQt6-WebEngine", "python-lsp-server",
 
         # Backend API & Server
         "fastapi", "uvicorn[standard]", "httpx[http2]",
@@ -43,6 +43,9 @@ setup(
 
         # Database
         "sqlite-vec",
+        
+        # Utilities
+        "keyring", "debugpy>=1.8.0",
     ],
     entry_points={
         "console_scripts": [

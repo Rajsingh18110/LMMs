@@ -54,7 +54,7 @@ default_registry.register(ToolDefinition(
     description="Execute shell commands safely within the workspace boundary.",
     category="system",
     parameters={"command": "str", "cwd": "str"},
-    permissions=[Permission.SAFE_WRITE],
+    permissions=[Permission.TERMINAL],
     risk_level="medium",
     requires_confirmation=False,
     callback=canonical_terminal_callback

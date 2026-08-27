@@ -34,7 +34,7 @@ default_registry.register(ToolDefinition(
     description="Read content from a file.",
     category="fs",
     parameters={"path": "str"},
-    permissions=[Permission.READ_ONLY],
+    permissions=[Permission.READ_FILE],
     callback=canonical_file_read
 ))
 
@@ -43,7 +43,7 @@ default_registry.register(ToolDefinition(
     description="Write content to a file.",
     category="fs",
     parameters={"path": "str", "content": "str"},
-    permissions=[Permission.SAFE_WRITE],
+    permissions=[Permission.WRITE_FILE],
     callback=canonical_file_write
 ))
 

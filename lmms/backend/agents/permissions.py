@@ -17,9 +17,34 @@ class PermissionError(Exception):
     pass
 
 class PermissionValidator:
+    def __init__(self, granted_permissions: List[Permission] = None):
+        if granted_permissions is None:
+            # By default, assume a safe profile
+            self.granted_permissions = {
+                Permission.READ_FILE,
+                Permission.WEB_SEARCH
+            }
+        else:
+            self.granted_permissions = set(granted_permissions)
+
+    def grant(self, permission: Permission):
+        self.granted_permissions.add(permission)
+        
+    def revoke(self, permission: Permission):
+        self.granted_permissions.discard(permission)
+
+    def check_permission(self, required_permissions: List[Permission]) -> bool:
+        """
+        Checks if ALL required permissions are currently granted.
+        """
+        for p in required_permissions:
+            if p not in self.granted_permissions:
+                return False
+        return True
+
     def validate(self, tool_name: str, agent_permissions: List[str]):
         """
-        Validates if the requested tool corresponds to an allowed permission.
+        Legacy string-based validation. Validates if the requested tool corresponds to an allowed permission.
         Throws PermissionError if violated, which leads to AgentFailed.
         """
         # Hardcoded map of tools to permissions for Phase I.
