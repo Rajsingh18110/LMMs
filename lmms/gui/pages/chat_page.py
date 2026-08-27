@@ -98,17 +98,56 @@ class ChatPage(QWidget):
         input_container.setObjectName("ChatInputFrame")
         input_container.setStyleSheet("""
             QFrame#ChatInputFrame {
-                background-color: #111827;
-                border: 1px solid #1f2937;
-                border-radius: 8px;
+                background-color: #181818;
+                border: 1px solid #30363d;
+                border-radius: 10px;
             }
             QFrame#ChatInputFrame:focus-within {
-                border-color: #2563eb;
+                border-color: #1f6feb;
             }
         """)
         input_layout = QVBoxLayout(input_container)
-        input_layout.setContentsMargins(10, 8, 10, 6)
+        input_layout.setContentsMargins(12, 8, 12, 8)
         input_layout.setSpacing(4)
+        
+        # Action row: Walkthrough + Review Changes
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 4)
+        action_row.setSpacing(6)
+        
+        self.btn_walkthrough = QPushButton("📋 Walkthrough")
+        self.btn_walkthrough.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_walkthrough.setStyleSheet("""
+            QPushButton {
+                background: #21262d;
+                border: 1px solid #30363d;
+                border-radius: 4px;
+                color: #8b949e;
+                font-size: 11px;
+                padding: 3px 8px;
+            }
+            QPushButton:hover { background: #30363d; color: #e5e7eb; }
+        """)
+        
+        self.btn_review = QPushButton("🔄 0 Files With Changes")
+        self.btn_review.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_review.setStyleSheet("""
+            QPushButton {
+                background: #21262d;
+                border: 1px solid #30363d;
+                border-radius: 4px;
+                color: #8b949e;
+                font-size: 11px;
+                padding: 3px 8px;
+            }
+            QPushButton:hover { background: #30363d; color: #e5e7eb; }
+        """)
+        self._dirty_file_count = 0
+        
+        action_row.addWidget(self.btn_walkthrough)
+        action_row.addWidget(self.btn_review)
+        action_row.addStretch()
+        input_layout.addLayout(action_row)
 
         # Attachment chips
         self.attachment_container = QWidget()
@@ -149,36 +188,47 @@ class ChatPage(QWidget):
 
         self.model_filter_combo = QComboBox()
         self.model_filter_combo.addItems(["All", "Online", "Offline"])
-        self.model_filter_combo.setFixedHeight(24)
-        self.model_filter_combo.setFixedWidth(80)
+        self.model_filter_combo.setFixedHeight(26)
+        self.model_filter_combo.setFixedWidth(82)
         self.model_filter_combo.setStyleSheet("""
             QComboBox {
-                background: #1f2937; border: 1px solid #374151;
-                border-radius: 4px; color: #9ca3af;
-                font-size: 11px; padding: 2px 8px;
+                background: #21262d;
+                border: 1px solid #30363d;
+                border-radius: 13px;
+                color: #8b949e;
+                font-size: 11px;
+                padding: 2px 10px;
             }
             QComboBox::drop-down { border: none; }
             QComboBox QAbstractItemView {
-                background: #111827; color: #e5e7eb;
-                selection-background-color: #2563eb;
-                border: 1px solid #374151;
+                background: #181818;
+                color: #e5e7eb;
+                selection-background-color: #1f6feb;
+                border: 1px solid #30363d;
             }
         """)
         self.model_filter_combo.currentTextChanged.connect(self.refresh_models)
         
         self.model_combo = QComboBox()
-        self.model_combo.setFixedHeight(24)
+        self.model_combo.setFixedHeight(26)
+        self.model_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.model_combo.setMinimumWidth(120)
+        self.model_combo.setMaximumWidth(240)
         self.model_combo.setStyleSheet("""
             QComboBox {
-                background: #1f2937; border: 1px solid #374151;
-                border-radius: 4px; color: #9ca3af;
-                font-size: 11px; padding: 2px 8px;
+                background: #21262d;
+                border: 1px solid #30363d;
+                border-radius: 13px;
+                color: #8b949e;
+                font-size: 11px;
+                padding: 2px 10px;
             }
             QComboBox::drop-down { border: none; }
             QComboBox QAbstractItemView {
-                background: #111827; color: #e5e7eb;
-                selection-background-color: #2563eb;
-                border: 1px solid #374151;
+                background: #181818;
+                color: #e5e7eb;
+                selection-background-color: #1f6feb;
+                border: 1px solid #30363d;
             }
         """)
         self.refresh_models()
@@ -202,8 +252,8 @@ class ChatPage(QWidget):
 
         toolbar.addWidget(self.attach_btn)
         toolbar.addWidget(self.model_filter_combo)
-        toolbar.addWidget(self.model_combo)
         toolbar.addStretch()
+        toolbar.addWidget(self.model_combo)
         toolbar.addWidget(self.mic_btn)
         toolbar.addWidget(self.send_btn)
         input_layout.addLayout(toolbar)
@@ -213,6 +263,14 @@ class ChatPage(QWidget):
         main_layout.addWidget(chat_container)
 
         self.start_new_chat()
+
+    def set_dirty_count(self, count: int):
+        """Update the Review Changes button with the number of dirty files."""
+        self._dirty_file_count = count
+        if count > 0:
+            self.btn_review.setText(f"🔄 {count} Files With Changes")
+        else:
+            self.btn_review.setText("🔄 0 Files With Changes")
 
     # ── Send button states ────────────────────────────────────────────────────
     def _set_send_ready(self):

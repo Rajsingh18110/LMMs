@@ -11,6 +11,9 @@ from lmms.gui.widgets.ai_tabs import CanvasTab, MarkdownTab, ReviewTab
 
 class EditorManager(QWidget):
     file_saved = pyqtSignal(str) # file_path
+    file_dirty = pyqtSignal(str) # file_path
+    cursor_position_changed = pyqtSignal(int, int) # line, col
+    file_context_changed = pyqtSignal(str, int, str, str) # language, indent, encoding, eol
     
     def __init__(self):
         super().__init__()
@@ -51,7 +54,7 @@ class EditorManager(QWidget):
         # Tabs
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
-        self.tabs.setMovable(True)
+        self.tabs.setMovable(False)
         self.tabs.setDocumentMode(True)
         self.tabs.setUsesScrollButtons(True)
         
@@ -67,6 +70,9 @@ class EditorManager(QWidget):
         close_icon_hover = os.path.join(assets_dir, "icon_close_tab_hover.svg").replace("\\", "/")
         
         self.tabs.setStyleSheet(f"""
+            QTabWidget::tab-bar {{
+                alignment: left;
+            }}
             QTabWidget::pane {{ border: none; }}
             QTabBar::tab {{
                 background-color: #161b22;
@@ -95,7 +101,21 @@ class EditorManager(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
                 border-radius: 4px;
             }}
+            QTabBar::scroller {{
+                width: 28px;
+            }}
+            QTabBar QToolButton {{
+                background-color: #161b22;
+                color: #8b949e;
+                border: 1px solid #30363d;
+                border-radius: 2px;
+            }}
+            QTabBar QToolButton:hover {{
+                background-color: #30363d;
+            }}
         """)
+        
+        self.tabs.tabBar().setExpanding(False)
         
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self.on_tab_changed)
@@ -155,9 +175,12 @@ class EditorManager(QWidget):
         
         self.empty_state_widget.show() # Initially empty
         
-    def open_file(self, file_path: str):
+    def open_file(self, file_path: str, line: int = 0, col: int = 0):
         if file_path in self.open_files:
-            self.tabs.setCurrentWidget(self.open_files[file_path])
+            editor = self.open_files[file_path]
+            self.tabs.setCurrentWidget(editor)
+            if hasattr(editor, "jump_to"):
+                editor.jump_to(line, col)
             return
             
         import os
@@ -187,6 +210,7 @@ class EditorManager(QWidget):
         
         # Track changes
         editor.textChanged.connect(lambda e=editor: self.mark_unsaved(e))
+        editor.bridge.cursorPositionChanged.connect(self.cursor_position_changed.emit)
         
         self.open_files[file_path] = editor
         file_name = os.path.basename(file_path)
@@ -197,6 +221,9 @@ class EditorManager(QWidget):
         idx = self.tabs.addTab(editor, icon, file_name)
         self.tabs.setCurrentIndex(idx)
         self.update_breadcrumbs(file_path)
+        
+        if hasattr(editor, "jump_to"):
+            editor.jump_to(line, col)
 
     def open_custom_tab(self, widget: QWidget, title: str, identifier: str = None):
         # Open a generic widget as a tab
@@ -285,6 +312,17 @@ class EditorManager(QWidget):
             if file_path:
                 self.update_breadcrumbs(file_path)
             
+            if hasattr(widget, 'current_language'):
+                # Extract some heuristics
+                content = getattr(widget, '_current_content', '')
+                eol = "CRLF" if "\r\n" in content else "LF"
+                indent = 4
+                if "  " in content and "    " not in content:
+                    indent = 2
+                self.file_context_changed.emit(widget.current_language.capitalize(), indent, "UTF-8", eol)
+        else:
+            self.file_context_changed.emit("", 4, "UTF-8", "LF")
+            
     def update_breadcrumbs(self, file_path: str):
         parts = file_path.split(os.sep)
         if len(parts) > 3:
@@ -295,12 +333,17 @@ class EditorManager(QWidget):
         
     def mark_unsaved(self, editor: CodeEditor):
         file_path = editor.property("file_path")
-        for i in range(self.tabs.count()):
-            if self.tabs.widget(i) == editor:
-                name = os.path.basename(file_path)
-                if not self.tabs.tabText(i).endswith("*"):
-                    self.tabs.setTabText(i, name + " *")
-                break
+        is_dirty = getattr(editor, 'is_dirty', False)
+        
+        if not is_dirty:
+            editor.is_dirty = True
+            name = os.path.basename(file_path)
+            for i in range(self.tabs.count()):
+                if self.tabs.widget(i) == editor:
+                    if not self.tabs.tabText(i).endswith("*"):
+                        self.tabs.setTabText(i, name + " *")
+                    break
+            self.file_dirty.emit(file_path)
                 
     def save_current_file(self):
         idx = self.tabs.currentIndex()
@@ -314,6 +357,7 @@ class EditorManager(QWidget):
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(editor.toPlainText())
+                editor.is_dirty = False
                 self.tabs.setTabText(idx, os.path.basename(file_path))
                 self.file_saved.emit(file_path)
             except Exception as e:

@@ -63,3 +63,4 @@ crawl4ai
 GitPython
 PyGithub
 keyring
+debugpy>=1.8.0

@@ -6,6 +6,7 @@ One instance is shared across all editor tabs (singleton via code_editor._get_ls
 import subprocess
 import json
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QThread
+from lmms.gui.utils.output_channel import OutputChannelRegistry
 
 
 class LSPManager(QObject):
@@ -43,12 +44,12 @@ class LSPManager(QObject):
             self.is_running = True
             self._thread = self.ReadThread(self)
             self._thread.start()
-            print(f"[LSP] Process started (PID {self.process.pid}): {self.command}")
+            OutputChannelRegistry.get_instance().append("LSP", f"[LSP] Process started (PID {self.process.pid}): {self.command}")
         except FileNotFoundError:
-            print(f"[LSP] Command not found: {self.command[0]}. LSP disabled.")
+            OutputChannelRegistry.get_instance().append("LSP", f"[LSP] Command not found: {self.command[0]}. LSP disabled.")
             self.command = []
         except Exception as e:
-            print(f"[LSP] Failed to start {self.command}: {e}")
+            OutputChannelRegistry.get_instance().append("LSP", f"[LSP] Failed to start {self.command}: {e}")
             self.command = []
 
     def stop(self):
@@ -60,7 +61,7 @@ class LSPManager(QObject):
             except Exception:
                 pass
             self.process = None
-        print("[LSP] Stopped.")
+        OutputChannelRegistry.get_instance().append("LSP", "[LSP] Stopped.")
 
     # ── write (JS → LSP) ─────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ class LSPManager(QObject):
             self.process.stdin.write(header + body)
             self.process.stdin.flush()
         except Exception as e:
-            print(f"[LSP] Write error: {e}")
+            OutputChannelRegistry.get_instance().append("LSP", f"[LSP] Write error: {e}")
 
     # ── read loop (LSP → JS) ──────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ class LSPManager(QObject):
 
             except Exception as e:
                 if self.is_running:
-                    print(f"[LSP] Read error: {e}")
+                    OutputChannelRegistry.get_instance().append("LSP", f"[LSP] Read error: {e}")
                 break
 
     def _handle_diagnostics(self, body: str):

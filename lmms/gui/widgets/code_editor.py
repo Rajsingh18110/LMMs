@@ -71,6 +71,8 @@ class PythonBridge(QObject):
     lspMessageFromJs    = pyqtSignal(str)         # LSP request ← JS
     updateGitDecorations = pyqtSignal(str)        # git gutter data → JS
     registerExtension   = pyqtSignal(str)         # manifest string → JS
+    jumpTo              = pyqtSignal(int, int)    # line, col -> JS
+    cursorPositionChanged = pyqtSignal(int, int)  # line, col <- JS
 
     @pyqtSlot(str)
     def onContentChanged(self, content: str):
@@ -116,6 +118,7 @@ class CodeEditor(QWebEngineView):
         self._pending_content = ""
         self._pending_language = ""
         self._is_ready = False
+        self._pending_jump = None
 
         # Debounce timer for git decorations (don't call git on every keystroke)
         self._git_timer = QTimer(self)
@@ -124,8 +127,9 @@ class CodeEditor(QWebEngineView):
         self._git_timer.timeout.connect(self._compute_git_decorations)
 
         # Background colour while loading
-        self.setStyleSheet("background-color: #0d1117; border: none;")
-        self.page().setBackgroundColor(QColor("#0d1117"))
+        self.setStyleSheet("background-color: #1e1e1e; border: none;")
+        self.page().setBackgroundColor(QColor("#1e1e1e"))
+
 
         # Load Monaco dist
         dist_path = os.path.join(
@@ -145,6 +149,10 @@ class CodeEditor(QWebEngineView):
             self._push_content(self._pending_content, self._pending_language)
             self._pending_content = ""
             self._pending_language = ""
+            
+        if self._pending_jump:
+            self.bridge.jumpTo.emit(*self._pending_jump)
+            self._pending_jump = None
 
     def _push_content(self, content: str, language: str):
         self.bridge.setContent.emit(content, language)
@@ -154,6 +162,22 @@ class CodeEditor(QWebEngineView):
         self.textChanged.emit()
         # Restart the debounce timer
         self._git_timer.start()
+        
+    def jump_to(self, line: int, col: int):
+        self._pending_jump = (line, col)
+        if self._is_ready:
+            self.bridge.jumpTo.emit(line, col)
+            
+    @pyqtSlot(int)
+    def toggleBreakpoint(self, line: int):
+        from lmms.gui.utils.output_channel import OutputChannelRegistry
+        OutputChannelRegistry.get_instance().append("DAP", f"[DAP] Breakpoint toggled on line {line + 1}")
+        # In a real implementation, this would send setBreakpoints to DAPManager
+        pass
+        
+    @pyqtSlot(int, int)
+    def onCursorPositionChanged(self, line: int, col: int):
+        self.cursorPositionChanged.emit(line, col)
 
     def load_file(self, file_path: str, content: str, disable_highlighting=False):
         self.setProperty("file_path", file_path)
@@ -185,6 +209,7 @@ class CodeEditor(QWebEngineView):
         }
         language = "plaintext" if disable_highlighting else lang_map.get(ext, "plaintext")
 
+        self.current_language = language
         if self._is_ready:
             self._push_content(content, language)
         else:

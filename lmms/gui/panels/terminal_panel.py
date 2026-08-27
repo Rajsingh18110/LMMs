@@ -18,7 +18,7 @@ ANSI_COLORS = {
 class TerminalEdit(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace;")
+        self.setStyleSheet("background-color: #1e1e1e; color: #c9d1d9; border: none; font-family: monospace;")
         self.setFont(QFont("monospace", 10))
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -121,7 +121,7 @@ class TerminalPanel(QWidget):
         self.init_ui()
         
         from lmms.gui.utils.diagnostic_manager import DiagnosticManager
-        DiagnosticManager.get_instance().diagnostics_updated.connect(self.update_problems_ui)
+        DiagnosticManager.get_instance().diagnostics_updated.connect(self._update_problems_badge)
         
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -131,7 +131,7 @@ class TerminalPanel(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.setStyleSheet("""
-            QTabWidget::pane { border-top: 1px solid #30363d; background-color: #0d1117; }
+            QTabWidget::pane { border-top: 1px solid #30363d; background-color: #1e1e1e; }
             QTabBar::tab {
                 background: transparent;
                 color: #8b949e;
@@ -150,33 +150,20 @@ class TerminalPanel(QWidget):
             }
         """)
         
-        # Problems Tab
-        from PyQt6.QtWidgets import QTreeWidget
-        self.problems_tree = QTreeWidget()
-        self.problems_tree.setHeaderHidden(True)
-        self.problems_tree.setStyleSheet("""
-            QTreeWidget { background-color: #0d1117; color: #c9d1d9; border: none; padding: 5px; font-size: 12px; }
-            QTreeWidget::item { padding: 4px; }
-            QTreeWidget::item:selected { background-color: #373e47; }
-        """)
-        self.tabs.addTab(self.problems_tree, "Problems")
+        # Problems Tab — full Phase 5 widget with filter toolbar and live count
+        from lmms.gui.panels.problems_tab import ProblemsTab
+        self.problems_tab = ProblemsTab()
+        self.tabs.addTab(self.problems_tab, "Problems")
         
-        # Output Tab
-        self.output_text = QTextEdit()
-        self.output_text.setReadOnly(True)
-        self.output_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
-        self.tabs.addTab(self.output_text, "Output")
+        # Output Tab — full Phase 5 widget with channel dropdown
+        from lmms.gui.panels.output_tab import OutputTab
+        self.output_tab = OutputTab()
+        self.tabs.addTab(self.output_tab, "Output")
         
-        # Extension Logs Tab
-        from lmms.gui.panels.extension_host_logs_panel import ExtensionHostLogsPanel
-        self.ext_logs_panel = ExtensionHostLogsPanel()
-        self.tabs.addTab(self.ext_logs_panel, "Extension Logs")
-        
-        # Debug Console Tab
-        self.debug_text = QTextEdit()
-        self.debug_text.setReadOnly(True)
-        self.debug_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
-        self.tabs.addTab(self.debug_text, "Debug Console")
+        # Debug Console Tab — full Phase 5 widget with DAP REPL
+        from lmms.gui.panels.debug_console_tab import DebugConsoleTab
+        self.debug_console_tab = DebugConsoleTab()
+        self.tabs.addTab(self.debug_console_tab, "Debug Console")
         
         # Terminal Tab
         self.terminal_container = QWidget()
@@ -188,12 +175,10 @@ class TerminalPanel(QWidget):
         terminal_layout.addWidget(self.terminal_stack)
         self.tabs.addTab(self.terminal_container, "Terminal")
         
-        # Ports Tab
-        self.ports_text = QTextEdit()
-        self.ports_text.setReadOnly(True)
-        self.ports_text.setStyleSheet("background-color: #0d1117; color: #c9d1d9; border: none; font-family: monospace; padding: 10px;")
-        self.ports_text.setPlainText("No forwarded ports.")
-        self.tabs.addTab(self.ports_text, "Ports")
+        # Ports Tab — full Phase 5 widget with psutil
+        from lmms.gui.panels.ports_tab import PortsTab
+        self.ports_tab = PortsTab()
+        self.tabs.addTab(self.ports_tab, "Ports")
         
         # --- Corner Widget Toolbars ---
         self.corner_widget = QStackedWidget()
@@ -312,7 +297,7 @@ class TerminalPanel(QWidget):
                 
     def on_tab_changed(self, index):
         title = self.tabs.tabText(index)
-        if title == "Problems":
+        if title.startswith("Problems"):
             self.corner_widget.setCurrentIndex(0)
         elif title == "Terminal":
             self.corner_widget.setCurrentIndex(1)
@@ -339,35 +324,15 @@ class TerminalPanel(QWidget):
     def close_panel(self):
         self.setVisible(False)
 
-    def update_problems_ui(self, file_path=None):
+    def _update_problems_badge(self, file_path=None):
+        """Update the Problems tab title badge count."""
         from lmms.gui.utils.diagnostic_manager import DiagnosticManager
-        from PyQt6.QtWidgets import QTreeWidgetItem
-        import os
-        
-        self.problems_tree.clear()
         diags = DiagnosticManager.get_instance().get_diagnostics()
-        
-        total_problems = sum(len(d) for d in diags.values())
-        if total_problems == 0:
-            item = QTreeWidgetItem(["No problems have been detected in the workspace."])
-            self.problems_tree.addTopLevelItem(item)
-            return
-            
-        for path, file_diags in diags.items():
-            if not file_diags:
-                continue
-                
-            filename = os.path.basename(path)
-            file_item = QTreeWidgetItem([f"{filename} - {len(file_diags)} problems"])
-            
-            for diag in file_diags:
-                msg = diag.get("message", "Unknown error")
-                line = diag.get("range", {}).get("start", {}).get("line", 0) + 1
-                severity = diag.get("severity", 1)
-                
-                icon = "❌" if severity == 1 else "⚠️"
-                diag_item = QTreeWidgetItem([f"{icon} [{line}] {msg}"])
-                file_item.addChild(diag_item)
-                
-            self.problems_tree.addTopLevelItem(file_item)
-            file_item.setExpanded(True)
+        count = sum(len(v) for v in diags.values())
+        idx = self.tabs.indexOf(self.problems_tab)
+        if idx != -1:
+            self.tabs.setTabText(idx, f"Problems {count}" if count else "Problems")
+
+    def set_dap_manager(self, dap_manager):
+        """Wire the DAP manager into the Debug Console tab."""
+        self.debug_console_tab.set_dap_manager(dap_manager)

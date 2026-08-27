@@ -36,11 +36,28 @@ monaco.editor.defineTheme('lmms-dark', {
   inherit: true,
   rules: [],
   colors: {
-    'editor.background': '#0d1117',
-    'editor.lineHighlightBackground': '#161b22',
-    'editorLineNumber.foreground': '#484f58',
-    'editorIndentGuide.background': '#21262d',
-    'editorIndentGuide.activeBackground': '#30363d'
+    'editor.background':                '#1e1e1e',
+    'editor.foreground':                '#d4d4d4',
+    'editorLineNumber.foreground':      '#858585',
+    'editorLineNumber.activeForeground':'#c6c6c6',
+    'editorCursor.foreground':          '#aeafad',
+    'editor.selectionBackground':       '#264f78',
+    'editor.inactiveSelectionBackground':'#3a3d41',
+    'editor.lineHighlightBackground':   '#2a2a2a',
+    'editor.lineHighlightBorder':       '#00000000',
+    'editorGutter.background':          '#1e1e1e',
+    'editorWidget.background':          '#252526',
+    'editorWidget.border':              '#454545',
+    'editorSuggestWidget.background':   '#252526',
+    'editorSuggestWidget.border':       '#454545',
+    'editorSuggestWidget.selectedBackground': '#062f4a',
+    'editorHoverWidget.background':     '#252526',
+    'editorHoverWidget.border':         '#454545',
+    'editorIndentGuide.background1':    '#404040',
+    'editorIndentGuide.activeBackground1': '#707070',
+    'scrollbarSlider.background':       '#424242',
+    'scrollbarSlider.hoverBackground':  '#4f4f4f',
+    'scrollbarSlider.activeBackground': '#646464',
   }
 });
 
@@ -77,6 +94,7 @@ const editor = monaco.editor.create(document.getElementById('editor'), {
   language: 'python',
   theme: 'lmms-dark',
   automaticLayout: true,
+  glyphMargin: true,
   minimap: {
     enabled: true
   }
@@ -157,6 +175,54 @@ if (typeof QWebChannel !== 'undefined') {
     // Send content changes to Python
     editor.onDidChangeModelContent(() => {
       window.pythonBridge.onContentChanged(editor.getValue());
+    });
+    
+    // Send cursor position changes
+    editor.onDidChangeCursorPosition((e) => {
+      if (window.pythonBridge.onCursorPositionChanged) {
+        window.pythonBridge.onCursorPositionChanged(e.position.lineNumber, e.position.column);
+      }
+    });
+    
+    // Listen for jumpTo requests
+    window.pythonBridge.jumpTo.connect(function (line, col) {
+      editor.setPosition({ lineNumber: line + 1, column: col + 1 });
+      editor.revealLineInCenter(line + 1);
+      editor.focus();
+    });
+    
+    // Listen for Breakpoint clicks
+    let breakpointDecorations = editor.createDecorationsCollection();
+    let currentBreakpoints = [];
+    
+    editor.onMouseDown(function (e) {
+      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+        const line = e.target.position.lineNumber;
+        
+        // Toggle breakpoint
+        const idx = currentBreakpoints.indexOf(line);
+        if (idx !== -1) {
+          currentBreakpoints.splice(idx, 1);
+        } else {
+          currentBreakpoints.push(line);
+        }
+        
+        // Redraw
+        const newDecorations = currentBreakpoints.map(l => ({
+          range: new monaco.Range(l, 1, l, 1),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: 'dap-breakpoint-glyph',
+            glyphMarginHoverMessage: { value: 'Breakpoint' }
+          }
+        }));
+        breakpointDecorations.set(newDecorations);
+        
+        // Notify Python
+        if (window.pythonBridge.toggleBreakpoint) {
+          window.pythonBridge.toggleBreakpoint(line - 1); // 0-indexed for Python
+        }
+      }
     });
     
     // Receive Git Decorations

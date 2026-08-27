@@ -244,14 +244,57 @@ class MainWindow(QMainWindow):
                         if hasattr(self.sourceModel(), 'filePath'):
                             file_path = self.sourceModel().filePath(source_index)
                             if DiagnosticManager.get_instance().has_errors(file_path):
-                                return QColor("#ff7b72")
+                                return QColor("#f14c4c") # error_color
                     return super().data(proxy_index, role)
                     
             self.diagnostic_model = DiagnosticProxyModel(self)
             self.diagnostic_model.setSourceModel(self.file_model)
             
+            from PyQt6.QtWidgets import QStyledItemDelegate
+            from PyQt6.QtGui import QPainter
+            class ExplorerItemDelegate(QStyledItemDelegate):
+                def __init__(self, main_window, parent=None):
+                    super().__init__(parent)
+                    self.main_window = main_window
+                    
+                def paint(self, painter, option, index):
+                    super().paint(painter, option, index)
+                    
+                    # Check dirty state
+                    if hasattr(index.model(), 'sourceModel'):
+                        proxy_model = index.model()
+                        source_index = proxy_model.mapToSource(index)
+                        file_model = proxy_model.sourceModel()
+                        if hasattr(file_model, 'filePath'):
+                            file_path = file_model.filePath(source_index)
+                            
+                            # Is it dirty?
+                            editor_mgr = self.main_window.editor_manager
+                            editor = editor_mgr.open_files.get(file_path)
+                            if editor and getattr(editor, 'is_dirty', False):
+                                # Draw dirty dot (white or accent color)
+                                painter.save()
+                                painter.setBrush(QColor("#e5e7eb"))
+                                painter.setPen(Qt.PenStyle.NoPen)
+                                # Draw dot on the right side
+                                radius = 4
+                                rect = option.rect
+                                painter.drawEllipse(rect.right() - 10, rect.center().y() - radius//2, radius, radius)
+                                painter.restore()
+                                
+            self.tree_delegate = ExplorerItemDelegate(self, self.tree_view)
+            self.tree_view.setItemDelegate(self.tree_delegate)
+            
             DiagnosticManager.get_instance().diagnostics_updated.connect(
                 lambda: self.diagnostic_model.layoutChanged.emit()
+            )
+            
+            # Repaint for dirty dots
+            self.editor_manager.file_saved.connect(
+                lambda p: self.diagnostic_model.layoutChanged.emit()
+            )
+            self.editor_manager.file_dirty.connect(
+                lambda p: self.diagnostic_model.layoutChanged.emit()
             )
             
             self.tree_view.setModel(self.diagnostic_model)
@@ -381,19 +424,52 @@ class MainWindow(QMainWindow):
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
         
-        # Set default width for docks
+        # Set default width for docks — match Antigravity IDE proportions
+        # Explorer ~18-20%, Chat ~22-25%, Bottom panel ~28% height
+        screen_w = 1280 # assume 1280px default window
+        explorer_w = int(screen_w * 0.19) # ~242px
+        chat_w = int(screen_w * 0.24)     # ~307px
         self.inner_window.resizeDocks(
-            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock, self.chat_dock],
-            [250, 250, 250, 250, 250, 300],
+            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock],
+            [explorer_w, explorer_w, explorer_w, explorer_w, explorer_w],
+            Qt.Orientation.Horizontal
+        )
+        self.inner_window.resizeDocks(
+            [self.chat_dock],
+            [chat_w],
             Qt.Orientation.Horizontal
         )
         
-        # 5. Terminal/Panel (Now inside the central splitter)
+        # 5. Bottom Panel (unified — TerminalPanel now includes Phase 5 tabs)
+        from lmms.gui.utils.dap_manager import DAPManager
+        
+        self.dap_manager = DAPManager(["python3", "-m", "debugpy.adapter"])
+        
         self.terminal_panel = TerminalPanel(self)
+        self.terminal_panel.set_dap_manager(self.dap_manager)
+        
+        # Keep bottom_panel as an alias so existing references still work
+        self.bottom_panel = self.terminal_panel
+        
         self.central_splitter.addWidget(self.terminal_panel)
         
-        # Set default sizes for the splitter (e.g., 80% editor, 20% terminal)
-        self.central_splitter.setSizes([800, 250])
+        # Wire Problems Tab double clicks to Editor Manager
+        self.terminal_panel.problems_tab.diagnostic_clicked.connect(self.editor_manager.open_file)
+        
+        # Wire file dirty counter to ChatPage's Review Changes button
+        def on_file_dirty(file_path):
+            count = sum(1 for e in self.editor_manager.open_files.values() if getattr(e, 'is_dirty', False))
+            self.chat_page.set_dirty_count(count)
+        
+        def on_file_saved(file_path):
+            count = sum(1 for e in self.editor_manager.open_files.values() if getattr(e, 'is_dirty', False))
+            self.chat_page.set_dirty_count(count)
+        
+        self.editor_manager.file_dirty.connect(on_file_dirty)
+        self.editor_manager.file_saved.connect(on_file_saved)
+        
+        # Set default sizes for the splitter — 72% editor, 28% bottom panel
+        self.central_splitter.setSizes([720, 280])
 
         # Sidebar Buttons
         self.nav_buttons = {}
@@ -436,15 +512,17 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container_widget)
         
         # Status Bar
-        self.status_bar = QStatusBar()
-        self.status_bar.setFixedHeight(22)
-        self.status_bar.setStyleSheet("background-color: #161b22; color: #8b949e; border-top: 1px solid #30363d; padding-left: 10px; font-size: 11px;")
-        self.setStatusBar(self.status_bar)
+        from lmms.gui.widgets.status_bar import CustomStatusBar
+        self.custom_status_bar = CustomStatusBar(self)
+        self.setStatusBar(None) # Remove default
+        container_layout.addWidget(self.custom_status_bar)
         
-        self.status_file_info = QLabel("Ready")
-        self.status_ai_info = QLabel("AI: Idle | Model: default")
-        self.status_bar.addWidget(self.status_file_info)
-        self.status_bar.addPermanentWidget(self.status_ai_info)
+        # Wire git_manager from SourceControlPanel
+        if hasattr(self, 'source_control_dock') and hasattr(self.source_control_dock, 'git_manager'):
+            self.custom_status_bar.set_git_manager(self.source_control_dock.git_manager)
+        
+        self.editor_manager.cursor_position_changed.connect(self.custom_status_bar.update_cursor_position)
+        self.editor_manager.file_context_changed.connect(self.custom_status_bar.update_file_context)
         
         # Auto-manage Chat visibility based on tab context
         self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed)
@@ -723,7 +801,7 @@ class MainWindow(QMainWindow):
         file_path = self.file_model.filePath(index)
         if not self.file_model.isDir(index):
             self.editor_manager.open_file(file_path)
-            self.status_file_info.setText(f"Opened: {os.path.basename(file_path)}")
+
 
     def prompt_open_folder(self):
         folder = ""

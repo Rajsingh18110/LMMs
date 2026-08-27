@@ -1,18 +1,34 @@
-/* dark.qss - LM Studio / Cursor inspired dark theme */
+/* dark.qss - Antigravity IDE Pixel-Parity Dark Theme */
+
+/* =========================================
+   Design Tokens (From Reference Screenshot)
+   sidebar_bg: #181818
+   editor_bg: #1e1e1e
+   panel_bg: #181818
+   statusbar_bg: #181818
+   tab_active_bg: #1e1e1e
+   tab_inactive_bg: #2d2d2d
+   accent_color: #1f6feb
+   border_color: #30363d
+   text_primary: #e5e7eb
+   text_secondary: #8b949e
+   error_color: #f14c4c
+   warning_color: #cca700
+   ========================================= */
 
 QMainWindow {
-    background-color: #0e1116; /* Very dark background */
+    background-color: #1e1e1e; /* editor_bg */
 }
 
 QWidget {
-    color: #e5e7eb; /* Light gray text */
+    color: #e5e7eb; /* text_primary */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
 }
 
 #Sidebar {
-    background-color: #161b22;
-    border-right: 1px solid #30363d;
+    background-color: #181818; /* sidebar_bg */
+    border-right: 1px solid #30363d; /* border_color */
 }
 
 #NavButton {
@@ -37,7 +53,7 @@ QWidget {
 }
 
 #ContentArea {
-    background-color: #0e1116;
+    background-color: #1e1e1e; /* editor_bg */
 }
 
 /* Scrollbars */
@@ -128,13 +144,13 @@ QDockWidget {
 
 QDockWidget::title {
     text-align: left;
-    background: #0d1117;
+    background: #181818; /* panel_bg */
     padding-left: 10px;
     padding-top: 5px;
     padding-bottom: 5px;
     font-size: 11px;
     text-transform: uppercase;
-    border-bottom: 1px solid #30363d;
+    border-bottom: 1px solid #30363d; /* border_color */
 }
 
 /* =========================================
@@ -245,15 +261,15 @@ QTreeView#explorerTree::branch:!has-children:!has-siblings:adjoins-item {
    4. AI Chat Panel
    ========================================= */
 QTextEdit#chatInput {
-    background-color: #1e1e24;
-    border: 1px solid #3c3c3c;
+    background-color: #1e1e1e; /* editor_bg */
+    border: 1px solid #30363d; /* border_color */
     border-radius: 6px;
     padding: 8px;
-    color: #ffffff;
+    color: #e5e7eb; /* text_primary */
     font-size: 13px;
 }
 QTextEdit#chatInput:focus {
-    border: 1px solid #007acc; /* VS Code focus highlight */
+    border: 1px solid #1f6feb; /* accent_color */
     outline: none;
 }
 
