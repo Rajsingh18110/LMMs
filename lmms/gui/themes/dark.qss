@@ -304,3 +304,33 @@ QPushButton#attachBtn:hover {
     color: #c9d1d9;
     border-bottom: 1px solid #30363d;
 }
+
+/* =========================================
+   6. Status Bar (Footer) — VS Code Blue
+      objectName ensures global QPushButton /
+      QWidget rules CANNOT bleed in here.
+   ========================================= */
+QWidget#CustomStatusBar {
+    background-color: #007acc;
+    border-top: none;
+    min-height: 22px;
+    max-height: 22px;
+}
+QWidget#CustomStatusBar QLabel {
+    background-color: transparent;
+    color: #ffffff;
+    font-size: 12px;
+    padding: 0 6px;
+    border: none;
+}
+QWidget#CustomStatusBar QPushButton {
+    background-color: transparent;
+    color: #ffffff;
+    font-size: 12px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 0px;
+}
+QWidget#CustomStatusBar QPushButton:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
