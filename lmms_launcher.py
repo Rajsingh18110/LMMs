@@ -117,8 +117,9 @@ def main():
         launch("engine", args)
         return
 
-    # Pass everything else to the CLI (Backend OS)
-    launch("cli", args)
+    # Pass everything else to the default mode (e.g. workspace paths)
+    mode = config.get("default_mode", "cli")
+    launch(mode, args)
 
 def launch(mode, forward_args=None):
     if forward_args is None:
@@ -145,7 +146,7 @@ def launch(mode, forward_args=None):
             else:
                 cmd = [sys.executable, "-m", "lmms.backend.main"]
                 
-        if mode == "cli":
+        if mode in ["cli", "gui"] and forward_args:
             cmd.extend(forward_args)
     elif mode == "engine":
         if getattr(sys, 'frozen', False):

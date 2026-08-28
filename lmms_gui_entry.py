@@ -5,6 +5,20 @@ def main():
     # Make sure python path is correct for imports
     sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
     
+    # Handle workspace path argument (e.g. 'lmms .')
+    if len(sys.argv) > 1:
+        target_path = sys.argv[1]
+        if os.path.exists(target_path) and os.path.isdir(target_path):
+            abs_path = os.path.abspath(target_path)
+            try:
+                from lmms.backend.config.config import ConfigManager
+                config_mgr = ConfigManager()
+                config_mgr.set("workspace_dir", abs_path)
+                config_mgr.save()
+                os.chdir(abs_path)
+            except Exception:
+                pass
+                
     import qasync
     import asyncio
     from PyQt6.QtWidgets import QApplication
