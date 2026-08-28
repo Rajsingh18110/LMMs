@@ -1,6 +1,28 @@
 import sys
 import os
 
+def launch_main_window(icon_path):
+    try:
+        from lmms.gui.core.main_window import MainWindow
+        from PyQt6.QtGui import QIcon
+        
+        window = MainWindow()
+        if os.path.exists(icon_path):
+            window.setWindowIcon(QIcon(icon_path))
+        
+        # Keep a global reference to prevent garbage collection
+        global _main_window
+        _main_window = window
+        window.show()
+    except Exception as e:
+        print(f"[FATAL] MainWindow failed to load: {e}")
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(None, "LMMs failed to start", str(e))
+        except:
+            pass
+        sys.exit(1)
+
 def main():
     # Make sure python path is correct for imports
     sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -28,8 +50,6 @@ def main():
     import lmms.gui.core.ui as ui
     ui.GUI_MODE = True
     
-    from lmms.gui.core.main_window import MainWindow
-
     # Force native GTK file dialog on Linux (e.g. Kali/XFCE)
     if sys.platform.startswith("linux"):
         if "QT_QPA_PLATFORMTHEME" not in os.environ:
@@ -38,6 +58,11 @@ def main():
     os.environ["QT_NO_DBUS"] = "1"
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.core.qobject.*=false"
     os.environ["XCOMPOSEFILE"] = "/dev/null"
+
+    try:
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+    except Exception:
+        pass
 
     app = QApplication(sys.argv)
     app.setApplicationName("LMMs-GUI")
@@ -65,10 +90,20 @@ def main():
     except Exception as e:
         print(f"Warning: Failed to auto-start engine: {e}")
     
-    window = MainWindow()
-    if os.path.exists(icon_path):
-        window.setWindowIcon(QIcon(icon_path))
-    window.show()
+    # Escape hatch: env var to skip splash entirely
+    if os.environ.get("LMMS_SKIP_SPLASH") == "1":
+        launch_main_window(icon_path)
+    else:
+        try:
+            from lmms.gui.widgets.splash_screen import CinematicSplashScreen
+            # Global reference to prevent garbage collection while async loop starts
+            global _splash
+            _splash = CinematicSplashScreen()
+            _splash.finished.connect(lambda: launch_main_window(icon_path))
+            _splash.show()
+        except Exception as e:
+            print(f"[Splash Error - skipping animation]: {e}")
+            launch_main_window(icon_path)
     
     with loop:
         sys.exit(loop.run_forever())

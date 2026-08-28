@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #1e1e1e; /* Match main editor background */
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    perspective: 1000px;
+  }
+  
+  /* Volumetric Fog */
+  .fog {
+    position: absolute;
+    width: 200vw;
+    height: 200vh;
+    top: -50vh;
+    left: -50vw;
+    background: radial-gradient(circle at center, transparent 20%, #1e1e1e 70%);
+    box-shadow: inset 0 0 150px rgba(31, 111, 235, 0.05); /* Match accent color #1f6feb */
+    z-index: 10;
+    animation: pulseFog 6s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  
+  /* Fast dolly code particles */
+  .code-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    z-index: 1;
+    /* Slide in from right */
+  }
+
+  .code-line {
+    position: absolute;
+    font-family: Consolas, "Courier New", monospace;
+    opacity: 0;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 500;
+    transform: translateX(100vw);
+    /* Slide animation */
+  }
+  
+  /* Monaco syntax colors for dark theme */
+  .c-keyword { color: #569cd6; } /* Blue */
+  .c-string  { color: #ce9178; } /* Orange */
+  .c-func    { color: #dcdcaa; } /* Yellow */
+  .c-type    { color: #4ec9b0; } /* Teal */
+  .c-var     { color: #9cdcfe; } /* Light Blue */
+  .c-comment { color: #6A9955; } /* Green */
+  .c-num     { color: #b5cea8; } /* Light Green */
+
+  /* Animated lines with right-to-left slide */
+  .c1 { top: 15%; animation: slideIn 2.2s 0.10s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c2 { top: 35%; animation: slideIn 1.8s 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c3 { top: 60%; animation: slideIn 2.5s 0.40s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c4 { top: 75%; animation: slideIn 2.0s 0.55s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c5 { top: 45%; animation: slideIn 2.3s 0.70s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c6 { top: 25%; animation: slideIn 1.9s 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c7 { top: 85%; animation: slideIn 2.1s 1.00s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+  .c8 { top: 10%; animation: slideIn 1.7s 1.15s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+
+  /* Markanm Logo */
+  #brand-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    z-index: 20;
+    text-align: center;
+    opacity: 0;
+    
+    font-size: 100px;
+    font-weight: 900;
+    letter-spacing: 12px;
+    
+    /* Brushed gunmetal gradient */
+    background: linear-gradient(135deg, #3a3a3a, #5a5a5a, #3a3a3a);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    text-transform: uppercase;
+    
+    /* LMMs Accent Blue (#1f6feb) Glow */
+    text-shadow: 
+      0 0 8px rgba(31, 111, 235, 0.8), 
+      0 0 20px rgba(31, 111, 235, 0.6), 
+      0 0 40px rgba(31, 111, 235, 0.4);
+      
+    /* Reveal animation */
+    animation: assembleLogo 2.5s 1.2s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  }
+
+  /* Anamorphic Lens Flare */
+  .lens-flare {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    height: 4px;
+    background: rgba(31, 111, 235, 0.8);
+    box-shadow: 0 0 50px #1f6feb, 0 0 100px #58a6ff;
+    transform: translate(-50%, -50%) scaleX(0);
+    z-index: 15;
+    animation: flareStrike 1.5s 1.4s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+  }
+
+  @keyframes slideIn {
+    0% { transform: translateX(100vw); opacity: 0; }
+    20% { opacity: 0.3; } /* dim background fragments */
+    60% { transform: translateX(0); opacity: 0.3; } /* assemble at center */
+    90% { transform: translateX(0); opacity: 0; } /* fade out as brand text appears */
+    100% { transform: translateX(0); opacity: 0; }
+  }
+
+  @keyframes assembleLogo {
+    0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0; filter: blur(10px); }
+    100% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; filter: blur(0px); }
+  }
+
+  @keyframes flareStrike {
+    0% { transform: translate(-50%, -50%) scaleX(0); opacity: 0; }
+    50% { transform: translate(-50%, -50%) scaleX(1); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) scaleX(0); opacity: 0; }
+  }
+
+  @keyframes pulseFog {
+    0% { box-shadow: inset 0 0 150px rgba(31, 111, 235, 0.02); }
+    100% { box-shadow: inset 0 0 250px rgba(31, 111, 235, 0.08); }
+  }
+</style>
+</head>
+<body>
+  <div class="fog"></div>
+  
+  <div class="code-container">
+    <!-- Floating syntax with Monaco colors -->
+    <div class="code-line c1"><span class="c-keyword">def</span> <span class="c-func">execute_quantum_matrix</span>(<span class="c-var">tensor</span>):</div>
+    <div class="code-line c2"><span class="c-keyword">const</span> <span class="c-var">engine</span> = <span class="c-keyword">new</span> <span class="c-type">WebGLRenderer</span>();</div>
+    <div class="code-line c3"><span class="c-type">std::vector</span>&lt;<span class="c-keyword">int</span>&gt; <span class="c-var">nodes</span> = <span class="c-var">graph</span>.<span class="c-func">traverse</span>();</div>
+    <div class="code-line c4"><span class="c-keyword">import</span> * <span class="c-keyword">as</span> <span class="c-var">THREE</span> <span class="c-keyword">from</span> <span class="c-string">'three'</span>;</div>
+    <div class="code-line c5"><span class="c-keyword">async fn</span> <span class="c-func">compile_pipeline</span>(<span class="c-var">ast</span>: <span class="c-type">AST</span>) -&gt; <span class="c-type">Result</span>&lt;()&gt;</div>
+    <div class="code-line c6"><span class="c-var">model</span>.<span class="c-func">compile</span>(<span class="c-var">optimizer</span>=<span class="c-string">'adam'</span>, <span class="c-var">loss</span>=<span class="c-string">'mse'</span>)</div>
+    <div class="code-line c7"><span class="c-keyword">interface</span> <span class="c-type">INeuralNet</span> { <span class="c-func">forward</span>(): <span class="c-type">void</span>; }</div>
+    <div class="code-line c8"><span class="c-func">malloc</span>(<span class="c-keyword">sizeof</span>(<span class="c-type">Node</span>) * <span class="c-var">max_vertices</span>);</div>
+  </div>
+
+  <div class="lens-flare"></div>
+  
+  <div id="brand-text">markanm</div>
+</body>
+</html>
