@@ -14,7 +14,7 @@
     perspective: 1000px;
   }
   
-  /* Volumetric Fog */
+  /* Volumetric Fog - Neutral Grey */
   .fog {
     position: absolute;
     width: 200vw;
@@ -22,7 +22,7 @@
     top: -50vh;
     left: -50vw;
     background: radial-gradient(circle at center, transparent 20%, #1e1e1e 70%);
-    box-shadow: inset 0 0 150px rgba(31, 111, 235, 0.05); /* Match accent color #1f6feb */
+    box-shadow: inset 0 0 150px rgba(229, 231, 235, 0.03); /* Muted neutral text_primary */
     z-index: 10;
     animation: pulseFog 6s ease-in-out infinite alternate;
     pointer-events: none;
@@ -35,7 +35,6 @@
     height: 100%;
     transform-style: preserve-3d;
     z-index: 1;
-    /* Slide in from right */
   }
 
   .code-line {
@@ -46,10 +45,9 @@
     font-size: 14px;
     font-weight: 500;
     transform: translateX(100vw);
-    /* Slide animation */
   }
   
-  /* Monaco syntax colors for dark theme */
+  /* Monaco syntax colors for dark theme - Muted opacity applied via animation */
   .c-keyword { color: #569cd6; } /* Blue */
   .c-string  { color: #ce9178; } /* Orange */
   .c-func    { color: #dcdcaa; } /* Yellow */
@@ -82,32 +80,31 @@
     font-weight: 900;
     letter-spacing: 12px;
     
-    /* Brushed gunmetal gradient */
-    background: linear-gradient(135deg, #3a3a3a, #5a5a5a, #3a3a3a);
+    /* Brushed gunmetal gradient as requested */
+    background: linear-gradient(135deg, #4a4a4a, #8a8a8a, #4a4a4a);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
     text-transform: uppercase;
     
-    /* LMMs Accent Blue (#1f6feb) Glow */
+    /* Soft neutral white/grey glow based on text_primary (#e5e7eb) */
     text-shadow: 
-      0 0 8px rgba(31, 111, 235, 0.8), 
-      0 0 20px rgba(31, 111, 235, 0.6), 
-      0 0 40px rgba(31, 111, 235, 0.4);
+      0 0 6px rgba(229, 231, 235, 0.4), 
+      0 0 16px rgba(229, 231, 235, 0.2);
       
     /* Reveal animation */
     animation: assembleLogo 2.5s 1.2s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
   }
 
-  /* Anamorphic Lens Flare */
+  /* Anamorphic Lens Flare - Neutral Grey/White */
   .lens-flare {
     position: absolute;
     top: 50%;
     left: 50%;
     width: 200%;
     height: 4px;
-    background: rgba(31, 111, 235, 0.8);
-    box-shadow: 0 0 50px #1f6feb, 0 0 100px #58a6ff;
+    background: rgba(229, 231, 235, 0.6);
+    box-shadow: 0 0 30px rgba(229, 231, 235, 0.5), 0 0 60px rgba(229, 231, 235, 0.3);
     transform: translate(-50%, -50%) scaleX(0);
     z-index: 15;
     animation: flareStrike 1.5s 1.4s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
@@ -115,8 +112,8 @@
 
   @keyframes slideIn {
     0% { transform: translateX(100vw); opacity: 0; }
-    20% { opacity: 0.3; } /* dim background fragments */
-    60% { transform: translateX(0); opacity: 0.3; } /* assemble at center */
+    20% { opacity: 0.15; } /* very dim background fragments */
+    60% { transform: translateX(0); opacity: 0.15; } /* assemble at center */
     90% { transform: translateX(0); opacity: 0; } /* fade out as brand text appears */
     100% { transform: translateX(0); opacity: 0; }
   }
@@ -128,13 +125,13 @@
 
   @keyframes flareStrike {
     0% { transform: translate(-50%, -50%) scaleX(0); opacity: 0; }
-    50% { transform: translate(-50%, -50%) scaleX(1); opacity: 0.7; }
+    50% { transform: translate(-50%, -50%) scaleX(1); opacity: 0.5; }
     100% { transform: translate(-50%, -50%) scaleX(0); opacity: 0; }
   }
 
   @keyframes pulseFog {
-    0% { box-shadow: inset 0 0 150px rgba(31, 111, 235, 0.02); }
-    100% { box-shadow: inset 0 0 250px rgba(31, 111, 235, 0.08); }
+    0% { box-shadow: inset 0 0 100px rgba(229, 231, 235, 0.01); }
+    100% { box-shadow: inset 0 0 150px rgba(229, 231, 235, 0.03); }
   }
 </style>
 </head>
