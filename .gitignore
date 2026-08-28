@@ -15,6 +15,7 @@ find_*.py
 *.log
 recovered_*.txt
 dist/
+!lmms/gui/assets/monaco_build/dist/
 build/
 *.spec
 *.zip

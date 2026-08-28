@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monaco Editor Wrapper</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #1e1e1e;
+      }
+      #editor {
+        width: 100vw;
+        height: 100vh;
+      }
+      .git-gutter-added { border-left: 3px solid #3fb950; margin-left: 2px; }
+      .git-gutter-modified { border-left: 3px solid #e3b341; margin-left: 2px; }
+      .git-gutter-deleted { border-left: 3px solid #ff7b72; margin-left: 2px; }
+      
+      .dap-breakpoint-glyph {
+        background-color: #ea6c6c;
+        border-radius: 50%;
+        width: 10px !important;
+        height: 10px !important;
+        margin-top: 4px;
+        margin-left: 4px;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-By9zPlV4.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Be2cCsGw.css">
+  </head>
+  <body>
+    <div id="editor"></div>
+    <!-- QWebChannel for PyQt6 bridge -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  </body>
+</html>
