@@ -1229,15 +1229,18 @@ def run_cli():
                             if r.status_code == 200:
                                 downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
                                 import time
-                                from rich.progress import Progress, SpinnerColumn, TextColumn
+                                from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
                                 with Progress(
                                     SpinnerColumn(),
                                     TextColumn("[progress.description]{task.description}"),
+                                    BarColumn(bar_width=40),
+                                    TaskProgressColumn(),
+                                    TextColumn("{task.fields[status_info]}"),
                                     transient=True
                                 ) as progress:
-                                    task_id = progress.add_task(f"Downloading {result}...", total=None)
+                                    task_id = progress.add_task(f"Downloading [cyan]{result}[/cyan]", total=100, status_info="...")
                                     while True:
-                                        time.sleep(1)
+                                        time.sleep(0.5)
                                         try:
                                             with open(downloads_file, "r") as f:
                                                 state = json.load(f)
@@ -1245,8 +1248,20 @@ def run_cli():
                                             # Ensure repo_id is in state
                                             if repo_id in state:
                                                 status = state[repo_id].get("status", "")
-                                                progress.update(task_id, description=f"Downloading [cyan]{result}[/cyan]: {status}")
+                                                pct = 0
+                                                status_info = status
+                                                if "%" in status:
+                                                    try:
+                                                        pct_str = status.split("%")[0].strip()
+                                                        pct = int(pct_str)
+                                                        status_info = status.split("%", 1)[1].strip()
+                                                    except:
+                                                        pass
+                                                        
+                                                progress.update(task_id, completed=pct, status_info=status_info)
+                                                
                                                 if "100%" in status:
+                                                    progress.update(task_id, completed=100)
                                                     break
                                                 elif "failed" in status:
                                                     console.print(f"[red]Failed: {status}[/red]")
