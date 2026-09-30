@@ -1219,14 +1219,43 @@ def run_cli():
                             
                         result = radiolist_dialog(
                             title=f"Pull {repo_id}",
-                            text="Select a quantization format to download (Use UP/DOWN arrows and ENTER):",
+                            text="Select a quantization format (Use UP/DOWN, press SPACE to select *, then TAB to Ok and ENTER):",
                             values=values
                         ).run()
                         
                         if result:
                             console.print(f"[dim]Requesting download for {result}...[/dim]")
                             r = requests.post(f"{ENGINE_URL}/v1/models/pull", json={"model_name": repo_id, "file_name": result})
-                            console.print(r.json())
+                            if r.status_code == 200:
+                                downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
+                                import time
+                                from rich.progress import Progress, SpinnerColumn, TextColumn
+                                with Progress(
+                                    SpinnerColumn(),
+                                    TextColumn("[progress.description]{task.description}"),
+                                    transient=True
+                                ) as progress:
+                                    task_id = progress.add_task(f"Downloading {result}...", total=None)
+                                    while True:
+                                        time.sleep(1)
+                                        try:
+                                            with open(downloads_file, "r") as f:
+                                                state = json.load(f)
+                                            
+                                            # Ensure repo_id is in state
+                                            if repo_id in state:
+                                                status = state[repo_id].get("status", "")
+                                                progress.update(task_id, description=f"Downloading [cyan]{result}[/cyan]: {status}")
+                                                if "100%" in status:
+                                                    break
+                                                elif "failed" in status:
+                                                    console.print(f"[red]Failed: {status}[/red]")
+                                                    break
+                                        except Exception:
+                                            pass
+                                console.print(f"[bold green]✓ Download complete: {repo_id}/{result}[/bold green]")
+                            else:
+                                console.print(r.json())
                         else:
                             console.print("[yellow]Pull cancelled.[/yellow]")
                     except Exception as e:
