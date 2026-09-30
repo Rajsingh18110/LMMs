@@ -761,7 +761,8 @@ def run_cli():
     session = PromptSession(
         completer=CommandCompleter(),
         complete_while_typing=True,
-        bottom_toolbar=get_bottom_toolbar
+        bottom_toolbar=get_bottom_toolbar,
+        reserve_space_for_menu=8
     )
     # ----------------------------------------
     
@@ -1423,7 +1424,11 @@ def run_cli():
                     console.print(f"Usage: {base_cmd} -f <file> or {base_cmd} -wf <folder>")
 
             elif base_cmd.startswith("/"):
-                console.print(f"[red]Unknown command: {base_cmd}. Type /cl for list.[/red]")
+                if "/" in base_cmd[1:] or os.path.exists(cmd.strip("'\" ")):
+                    pass # Let absolute file paths fall through to chat logic
+                else:
+                    console.print(f"[red]Unknown command: {base_cmd}. Type /cl for list.[/red]")
+                    continue
 
             # Chat Prompt Fallback
             else:
@@ -1639,14 +1644,23 @@ def run_cli():
                     messages.extend(chat_history[-10:])
                     
                     # Multimodal parsing
-                    img_paths = re.findall(r"'(/[a-zA-Z0-9_./-]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
-                    if not img_paths:
-                        img_paths = re.findall(r"(/[a-zA-Z0-9_./-]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
+                    valid_img_paths = []
+                    potential_path = cmd.strip("'\" ")
+                    if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                        valid_img_paths.append(potential_path)
+                    else:
+                        img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
+                        if not img_paths:
+                            # Try matching without quotes but stop at extensions
+                            img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
+                        for p in img_paths:
+                            if os.path.exists(p.strip()):
+                                valid_img_paths.append(p.strip())
                         
                     user_content = cmd
-                    if img_paths:
+                    if valid_img_paths:
                         user_content = [{"type": "text", "text": cmd}]
-                        for p in img_paths:
+                        for p in valid_img_paths:
                             try:
                                 with open(p, "rb") as img_file:
                                     b64 = base64.b64encode(img_file.read()).decode("utf-8")
