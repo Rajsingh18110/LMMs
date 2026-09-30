@@ -732,15 +732,31 @@ def run_cli():
             word = document.get_word_before_cursor()
             text = document.text
             
-            if text.startswith("lmms pull ") or text.startswith("pull "):
+            if text.startswith("lmms pull ") or text.startswith("pull ") or text.startswith("/pull "):
                 search_term = text.split("pull ", 1)[1]
                 if len(search_term) >= 2:
                     try:
                         from huggingface_hub import HfApi
                         api = HfApi()
-                        models = list(api.list_models(search=search_term, filter="gguf", limit=10, sort="downloads"))
-                        for m in models:
-                            yield Completion(m.id, start_position=-len(search_term), display_meta=f"{m.downloads} DLs")
+                        
+                        # Apply mapping for common tags
+                        mapped_term = search_term.replace(":", "-").lower()
+                        KNOWN_MODELS = {
+                            "qwen3-8b": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+                            "qwen3": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+                            "gemma4": "bartowski/gemma-2-2b-it-GGUF",
+                            "gemma": "bartowski/gemma-2-2b-it-GGUF",
+                            "llama3": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF",
+                            "llama3-8b": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF"
+                        }
+                        
+                        # If exact match in known models, return just that
+                        if mapped_term in KNOWN_MODELS:
+                            yield Completion(KNOWN_MODELS[mapped_term], start_position=-len(search_term), display_meta="Known Model")
+                        else:
+                            models = list(api.list_models(search=mapped_term, filter="gguf", limit=10, sort="downloads"))
+                            for m in models:
+                                yield Completion(m.id, start_position=-len(search_term), display_meta=f"{m.downloads} DLs")
                     except Exception:
                         pass
                 return
