@@ -347,8 +347,8 @@ def main():
         
     # GUI mode bypass
     if clean_args and clean_args[0] in ["gui", "-gui", "--gui", "-g"]:
-        import lmms_gui_entry
-        lmms_gui_entry.main()
+        import gui
+        gui.main()
         sys.exit(0)
     
     # Engine CLI Commands Bypass

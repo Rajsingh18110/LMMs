@@ -201,7 +201,7 @@ if __name__ == "__main__":
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] == "--internal-gui":
         sys.argv = [sys.argv[0]] + sys.argv[2:]
-        from lmms_gui_entry import main as gui_main
+        from gui import main as gui_main
         gui_main()
         sys.exit(0)
         
