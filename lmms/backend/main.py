@@ -722,6 +722,7 @@ def run_cli():
         "/undo": "Undo the last action",
         "/redo": "Redo the last undone action",
         "/workspace": "Manage workspaces",
+        "/reboot": "Restart the CLI and Engine",
         "exit": "Quit CLI",
         "clear": "Clear screen"
     }
@@ -845,11 +846,19 @@ def run_cli():
             parts = cmd.split()
             base_cmd = parts[0]
 
-            if cmd in ["exit", "quit", "clear"]:
+            if cmd in ["exit", "quit", "clear", "/reboot", "reboot"]:
                 if cmd == "clear":
                     console.clear()
                     print_banner()
                     continue
+                if cmd in ["/reboot", "reboot"]:
+                    console.print("[yellow]Initiating system reboot...[/yellow]")
+                    try:
+                        requests.post("http://127.0.0.1:11435/v1/internal/shutdown", timeout=2)
+                    except:
+                        pass
+                    sys.exit(42)
+                    
                 try:
                     requests.post("http://127.0.0.1:11435/v1/internal/shutdown", timeout=2)
                 except:

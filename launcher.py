@@ -137,44 +137,54 @@ def launch(mode, forward_args=None, ensure_engine=True):
 
     # In a compiled environment, this would call ./lmms-backend or ./lmms-engine
     # For now, we call the python scripts.
-    engine_proc = None
-    if mode in ["cli", "gui"]:
-        if ensure_engine:
-            engine_proc = ensure_engine_running()
-            env["LMMS_ENGINE_MANAGED"] = "1"
-        
-        # If gui mode, we could pass an argument to backend to start API + Electron
-        if mode == "gui":
-            if getattr(sys, 'frozen', False):
-                cmd = [sys.executable, "--internal-gui"]
-            else:
-                cmd = [sys.executable, os.path.abspath(__file__), "--internal-gui"]
-        else:
-            if getattr(sys, 'frozen', False):
-                cmd = [sys.executable, "--internal-backend"]
-            else:
-                cmd = [sys.executable, "-m", "lmms.backend.main"]
-                
-        if mode in ["cli", "gui"] and forward_args:
-            cmd.extend(forward_args)
-    elif mode == "engine":
-        if getattr(sys, 'frozen', False):
-            cmd = [sys.executable, "--internal-engine"]
-        else:
-            cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
-            # cmd already set
-        
-        if forward_args:
-            cmd.extend(forward_args)
+    while True:
+        engine_proc = None
+        if mode in ["cli", "gui"]:
+            if ensure_engine:
+                engine_proc = ensure_engine_running()
+                env["LMMS_ENGINE_MANAGED"] = "1"
             
-    try:
-        subprocess.run(cmd, env=env)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        if engine_proc:
-            print("\n\033[96m[INFO]\033[0m Shutting down auto-started Engine...")
-            engine_proc.terminate()
+            # If gui mode, we could pass an argument to backend to start API + Electron
+            if mode == "gui":
+                if getattr(sys, 'frozen', False):
+                    cmd = [sys.executable, "--internal-gui"]
+                else:
+                    cmd = [sys.executable, os.path.abspath(__file__), "--internal-gui"]
+            else:
+                if getattr(sys, 'frozen', False):
+                    cmd = [sys.executable, "--internal-backend"]
+                else:
+                    cmd = [sys.executable, "-m", "lmms.backend.main"]
+                    
+            if mode in ["cli", "gui"] and forward_args:
+                cmd.extend(forward_args)
+        elif mode == "engine":
+            if getattr(sys, 'frozen', False):
+                cmd = [sys.executable, "--internal-engine"]
+            else:
+                cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
+                # cmd already set
+            
+            if forward_args:
+                cmd.extend(forward_args)
+                
+        should_reboot = False
+        try:
+            result = subprocess.run(cmd, env=env)
+            if result.returncode == 42:
+                should_reboot = True
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if engine_proc:
+                if should_reboot:
+                    print("\n\033[96m[INFO]\033[0m Rebooting system (Engine & CLI)...")
+                else:
+                    print("\n\033[96m[INFO]\033[0m Shutting down auto-started Engine...")
+                engine_proc.terminate()
+                
+        if not should_reboot:
+            break
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--internal-backend":
