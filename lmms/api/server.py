@@ -97,6 +97,7 @@ class UnloadRequest(BaseModel):
 
 class PullRequest(BaseModel):
     model_name: str
+    file_name: Optional[str] = None
 
 class ChatRequest(BaseModel):
     model_name: str
@@ -388,7 +389,7 @@ async def engine_doctor(req: DoctorRequest):
         
     return {"report": report, "fixes": fixes_applied}
 
-def download_model_task(model_name: str):
+def download_model_task(model_name: str, file_name: Optional[str] = None):
     try:
         from huggingface_hub import HfApi
         api = HfApi()
@@ -421,17 +422,20 @@ def download_model_task(model_name: str):
                     print(f"Could not find any GGUF repo matching {model_name}")
                     return
                 
-        files = api.list_repo_files(repo_id=repo_id)
-        gguf_files = [f for f in files if f.endswith(".gguf")]
-        if not gguf_files:
-            print(f"No GGUF files found in {repo_id}")
-            return
-            
-        target_file = gguf_files[0]
-        for f in gguf_files:
-            if "q4_k_m" in f.lower():
-                target_file = f
-                break
+        if file_name:
+            target_file = file_name
+        else:
+            files = api.list_repo_files(repo_id=repo_id)
+            gguf_files = [f for f in files if f.endswith(".gguf")]
+            if not gguf_files:
+                print(f"No GGUF files found in {repo_id}")
+                return
+                
+            target_file = gguf_files[0]
+            for f in gguf_files:
+                if "q4_k_m" in f.lower():
+                    target_file = f
+                    break
                 
         print(f"Starting download for {repo_id}/{target_file}...")
         
@@ -498,8 +502,8 @@ def download_model_task(model_name: str):
 
 @app.post("/v1/models/pull")
 async def pull_model(req: PullRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(download_model_task, req.model_name)
-    return {"status": "downloading", "model": req.model_name}
+    background_tasks.add_task(download_model_task, req.model_name, req.file_name)
+    return {"status": "downloading", "model": req.model_name, "file": req.file_name}
 
 @app.get("/v1/model/context")
 async def get_model_context(model_name: str):

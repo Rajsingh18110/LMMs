@@ -321,21 +321,49 @@ def main():
                             break
                             
                     repo_id = best_match.id
-                files = api.list_repo_files(repo_id=repo_id)
-                target_file = None
-                for f in files:
-                    if "q4_k_m" in f.lower() and f.endswith(".gguf"):
-                        target_file = f
-                        break
-                if not target_file:
-                    for f in files:
-                        if f.endswith(".gguf"):
-                            target_file = f
-                            break
-                            
-                if not target_file:
+                print(f"\nFetching available formats for {repo_id}...")
+                try:
+                    repo_info = api.model_info(repo_id, files_metadata=True)
+                except Exception as e:
+                    print(f"Error fetching repo info: {e}")
+                    sys.exit(1)
+                    
+                gguf_files = [f for f in repo_info.siblings if f.rfilename.endswith(".gguf")]
+                if not gguf_files:
                     print(f"No GGUF file found in {repo_id}")
                     sys.exit(1)
+                
+                # Sort files by size
+                gguf_files.sort(key=lambda x: x.size if x.size else 0)
+                
+                print(f"\nAvailable Quantizations for {repo_id}:")
+                for i, f in enumerate(gguf_files):
+                    size_mb = (f.size / (1024 * 1024)) if f.size else 0
+                    if size_mb > 1024:
+                        size_str = f"{size_mb/1024:.2f} GB"
+                    else:
+                        size_str = f"{size_mb:.2f} MB"
+                    print(f"[{i+1}] {f.rfilename} ({size_str})")
+                    
+                print(f"[{len(gguf_files)+1}] Cancel")
+                
+                while True:
+                    try:
+                        choice = input(f"\nSelect a format to download [1-{len(gguf_files)+1}]: ")
+                        choice_idx = int(choice) - 1
+                        if choice_idx == len(gguf_files):
+                            print("Cancelled.")
+                            sys.exit(0)
+                        if 0 <= choice_idx < len(gguf_files):
+                            target_file = gguf_files[choice_idx].rfilename
+                            break
+                        else:
+                            print("Invalid selection.")
+                    except ValueError:
+                        print("Please enter a number.")
+                    except KeyboardInterrupt:
+                        print("\nCancelled.")
+                        sys.exit(130)
                     
                 MODELS_DIR = os.path.expanduser("~/.lmms/models")
                 os.makedirs(MODELS_DIR, exist_ok=True)
