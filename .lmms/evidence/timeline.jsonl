@@ -1,0 +1,6 @@
+{"timestamp": "2026-09-30T14:23:12.126882Z", "tool": "terminal.run", "arguments": {"command": "echo hello"}, "target": "echo hello", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 0}
+{"timestamp": "2026-09-30T14:23:12.129027Z", "tool": "terminal.run", "arguments": {"command": "echo testing_evidence"}, "target": "echo testing_evidence", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 0}
+{"timestamp": "2026-09-30T14:23:13.151110Z", "tool": "terminal.run", "arguments": {"command": "sleep 2"}, "target": "sleep 2", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 124}
+{"timestamp": "2026-09-30T14:24:11.649518Z", "tool": "terminal.run", "arguments": {"command": "echo hello"}, "target": "echo hello", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 0}
+{"timestamp": "2026-09-30T14:24:11.651659Z", "tool": "terminal.run", "arguments": {"command": "echo testing_evidence"}, "target": "echo testing_evidence", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 0}
+{"timestamp": "2026-09-30T14:24:12.655289Z", "tool": "terminal.run", "arguments": {"command": "sleep 2"}, "target": "sleep 2", "decision": "allowed", "reason": "ok", "risk_level": "safe", "exit_code": 124}

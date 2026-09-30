@@ -34,32 +34,18 @@ def save_scope(workspace: str, scope_data: Dict[str, Any]) -> bool:
 
 def init_default_scope() -> Dict[str, Any]:
     return {
+        "version": 1,
         "engagement_name": "Default Offline Lab",
         "authorized_targets": [],
         "allowed_tools": ["cat", "grep", "ls", "pwd", "nmap", "curl", "ping"],
         "network_actions_allowed": False,
         "evidence_directory": ".lmms/evidence",
-        "status": "active"
+        "status": "safe"
     }
 
-def validate_target(target: str, authorized_targets: list) -> bool:
-    # Always allow local interfaces if offline mode/default?
-    # Actually, we should strictly check against authorized_targets.
-    if target in ["127.0.0.1", "localhost", "::1"]:
-        return True
-        
-    for auth in authorized_targets:
-        if target == auth:
-            return True
-            
-        # Check CIDR match
-        try:
-            if "/" in auth:
-                network = ipaddress.ip_network(auth, strict=False)
-                ip = ipaddress.ip_address(target)
-                if ip in network:
-                    return True
-        except ValueError:
-            pass
-            
-    return False
+def is_scope_active(scope: Dict[str, Any]) -> bool:
+    if not scope:
+        return False
+    return scope.get("status") == "active"
+
+

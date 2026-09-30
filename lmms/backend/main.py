@@ -21,8 +21,13 @@ from lmms.backend.cli.review import git_review, is_read_only_command, preview_fi
 from lmms.backend.tools.boundaries import is_within_workspace
 from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
 from lmms.backend.security.validator import validate_security_command
-from lmms.backend.cli.scope_cli import cmd_scope_init, cmd_scope_status, cmd_scope_validate
+from lmms.backend.cli.scope_cli import cmd_scope_init, cmd_scope_status, cmd_scope_validate, cmd_scope_activate, cmd_scope_complete, cmd_scope_export, cmd_scope_reset
 from lmms.backend.security.report import generate_report
+from lmms.backend.security.models import ToolRequest, ToolResult, PermissionResult
+from lmms.backend.security.permission_manager import permission_manager
+from lmms.backend.security.executor import executor
+from lmms.backend.security.evidence import record_tool_evidence
+from lmms.backend.cli.tools_cli import cmd_tools_status
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -551,6 +556,8 @@ def run_cli():
     
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
         nonlocal checkpoint_created_this_session
+        
+        # Backward compatibility for planning mode
         if planning_mode and tool_name in ["files.write", "browser.click_element", "browser.fill_form"]:
             console.print("[yellow]Planning mode is read-only. Use /apply before making changes.[/yellow]")
             return False
@@ -558,49 +565,30 @@ def run_cli():
         if planning_mode and tool_name == "terminal.run" and not is_read_only_command(kwargs.get("command", "")):
             console.print("[yellow]Planning mode only permits read-only terminal commands. Use /apply before running this command.[/yellow]")
             return False
-
-        # 1. Global Path Denylist (Applies to all tools, all permission levels)
-        protected_paths = ["/.ssh/", "/etc/", "/boot/", "/.aws/", "/.config/gh/", "/.config/google-chrome/", "/.mozilla/", "/.lmms/config/"]
+            
+        req = ToolRequest(
+            tool_name=tool_name,
+            command_line=kwargs.get("command", ""),
+            arguments=[],
+            kwargs=kwargs,
+            workspace=current_workspace,
+            permission_level=current_perm_level
+        )
         
-        target_path = ""
-        if tool_name in ["files.read", "files.write"]:
-            target_path = kwargs.get("path", "")
-        elif tool_name == "terminal.run":
-            target_path = kwargs.get("command", "")
+        perm = permission_manager.check_permission(req)
+        
+        if not perm.allowed:
+            console.print(f"[bold red]Tool Execution Denied:[/bold red] {perm.reason}")
+            # Evidence recording handled in execution loop or executor
+            return False
             
-        if target_path:
-            # Add trailing slash for exact boundary matching
-            tp_check = target_path if target_path.endswith("/") else target_path + "/"
-            for p_path in protected_paths:
-                if p_path in tp_check:
-                    return Prompt.ask(f"[bold red]AI wants to access PROTECTED path ({p_path}) in {tool_name}. Allow? (y/n)[/bold red]").lower() == "y"
-                    
-        # 2. Terminal specific logic (Git & Destructive Commands)
-        if tool_name == "terminal.run":
-            cmd = kwargs.get("command", "").strip()
-            
-            is_allowed, reason = validate_security_command(current_workspace, cmd)
-            if not is_allowed:
-                console.print(f"[bold red]Scope Block: {reason}[/bold red]")
+        if perm.requires_confirmation:
+            console.print(f"[bold yellow]Tool Policy Requires Confirmation: {perm.reason}[/bold yellow]")
+            approved = Prompt.ask(f"[bold yellow]Allow {tool_name} with args {kwargs}? (y/n)[/bold yellow]").lower() == "y"
+            if not approved:
                 return False
-            
-            # Git logic
-            if cmd.startswith("git"):
-                if cmd.startswith("git status") or cmd.startswith("git diff") or cmd.startswith("git log"):
-                    return True # Auto-allow read-only git
-                if cmd.startswith("git push"):
-                    if re.search(r'(--force\b|-f\b)', cmd) or re.search(r'\b(main|master)\b', cmd):
-                        return Prompt.ask(f"[bold red]DANGER: AI wants to FORCE PUSH or push to MAIN: {cmd}. Allow? (y/n)[/bold red]").lower() == "y"
-                    return Prompt.ask(f"[bold yellow]AI wants to GIT PUSH: {cmd}. Allow? (y/n)[/bold yellow]").lower() == "y"
-                if current_perm_level in ["medium", "full"] and (cmd.startswith("git add") or cmd.startswith("git commit")):
-                    return True
-            
-            # Destructive denylist
-            denylist = ["rm -rf", "mkfs", "dd", ":(){:|:&};:", "fork", "wget -O-", "curl | bash"]
-            for bad in denylist:
-                if bad in cmd:
-                    return Prompt.ask(f"[bold red]AI wants to run DESTRUCTIVE command: {cmd}. Allow? (y/n)[/bold red]").lower() == "y"
-
+                
+        # Workspace boundary check for files.write
         if tool_name == "files.write":
             path = kwargs.get("path", "")
             content = kwargs.get("content", "")
@@ -614,33 +602,8 @@ def run_cli():
                 create_checkpoint(current_workspace, "Auto Checkpoint before write")
                 checkpoint_created_this_session = True
             return approved
-
-        # 3. Standard Permission Levels
-        if current_perm_level == "full":
-            return True
             
-        if current_perm_level == "low":
-            if tool_name in ["web_search", "browser.open_url", "files.read"]:
-                return True
-            return Prompt.ask(f"[bold yellow]AI wants to run {tool_name} with {kwargs}. Allow? (y/n)[/bold yellow]").lower() == "y"
-            
-        if current_perm_level == "medium":
-            if tool_name in ["web_search", "browser.open_url", "files.read"]:
-                return True
-            if tool_name == "terminal.run":
-                cmd = kwargs.get("command", "")
-                import platform
-                if platform.system() == "Windows":
-                    safelist = ["dir", "type", "curl", "cd", "echo", "tree"]
-                else:
-                    safelist = ["ls", "cat", "curl", "pwd", "echo", "tree"]
-                if any(cmd.strip().startswith(s) for s in safelist):
-                    return True
-                return Prompt.ask(f"[bold yellow]AI wants to run unverified command: {cmd}. Allow? (y/n)[/bold yellow]").lower() == "y"
-            if tool_name in ["browser.click_element", "browser.fill_form"]:
-                return Prompt.ask(f"[bold red]AI wants to modify DOM state: {tool_name} {kwargs}. Allow? (y/n)[/bold red]").lower() == "y"
-                
-        return Prompt.ask(f"[bold yellow]AI wants to run {tool_name} with {kwargs}. Allow? (y/n)[/bold yellow]").lower() == "y"
+        return True
 
     import uuid
     import base64
@@ -1109,10 +1072,24 @@ lmms update
                         cmd_scope_status(current_workspace)
                     elif subcmd == "validate":
                         cmd_scope_validate(current_workspace)
+                    elif subcmd == "activate":
+                        cmd_scope_activate(current_workspace)
+                    elif subcmd == "complete":
+                        cmd_scope_complete(current_workspace)
+                    elif subcmd == "reset":
+                        cmd_scope_reset(current_workspace)
+                    elif subcmd == "export":
+                        cmd_scope_export(current_workspace, parts[2] if len(parts) > 2 else "scope_export.json")
                     else:
-                        console.print("[red]Usage: /scope init|status|validate[/red]")
+                        console.print("[red]Usage: /scope init|status|validate|activate|complete|reset|export[/red]")
                 else:
                     cmd_scope_status(current_workspace)
+
+            elif base_cmd == "/tools":
+                if len(parts) > 1 and parts[1] in ["status", "list", "permissions"]:
+                    cmd_tools_status()
+                else:
+                    cmd_tools_status()
 
             elif base_cmd == "/report":
                 console.print("[cyan]Triggering AI to generate a security report...[/cyan]")
@@ -1937,6 +1914,16 @@ lmms update
                             # Append assistant's partial reply
                             messages.append({"role": "assistant", "content": full_reply})
                             
+                            req = ToolRequest(
+                                tool_name=t_name,
+                                command_line=t_kwargs.get("command", ""),
+                                arguments=[],
+                                kwargs=t_kwargs,
+                                workspace=current_workspace,
+                                permission_level=current_permission_level
+                            )
+                            perm = permission_manager.check_permission(req)
+                            
                             if check_permission(t_name, t_kwargs, current_workspace, current_permission_level):
                                 console.print(f"\n[bold magenta][Step {iter_count}/{MAX_ITERATIONS}] Running:[/bold magenta] [white]{t_name} {t_kwargs}[/white]")
                                 observation = ""
@@ -1958,8 +1945,8 @@ lmms update
                                     path = generate_report(current_workspace, t_kwargs.get("findings_summary", ""))
                                     observation = f"Report successfully generated at: {path}"
                                 elif t_name == "terminal.run":
-                                    run_cwd = current_workspace if current_workspace != "None" else None
-                                    observation = terminal_tool.run(t_kwargs.get("command", ""), cwd=run_cwd)
+                                    res = executor.execute(req, perm)
+                                    observation = (res.stdout + "\n" + res.stderr).strip()
                                 elif t_name == "browser.scroll":
                                     observation = browser_tool.scroll(t_kwargs.get("url", ""), t_kwargs.get("direction", "down"), t_kwargs.get("amount", 1000))
                                 elif t_name == "browser.open_authenticated":
@@ -2016,13 +2003,17 @@ lmms update
                                 else:
                                     observation = f"Tool {t_name} not found."
                                     
+                                if t_name != "terminal.run":
+                                    record_tool_evidence(req, perm, ToolResult(str(observation), "", 0))
+                                    
                                 # Truncate observation for display
                                 disp_obs = str(observation)
                                 if len(disp_obs) > 500:
                                     disp_obs = disp_obs[:500] + "... (truncated)"
                                 console.print(f"[bold cyan][Step {iter_count}/{MAX_ITERATIONS}] Observation:[/bold cyan] [dim]{disp_obs}[/dim]")
                             else:
-                                observation = "Tool execution denied by user."
+                                record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason="Denied by interactive check or policy"))
+                                observation = "Tool execution denied by user or policy."
                                 console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
                                 
                             obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
