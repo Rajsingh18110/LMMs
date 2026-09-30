@@ -14,6 +14,15 @@ from lmms.backend.tools.search import web_search
 from lmms.backend.tools.browser import BrowserTool
 from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
+from lmms.backend.config.config import ConfigManager
+from lmms.backend.context.workspace_rules import load_workspace_rules
+from lmms.backend.cli.diagnostics import collect_doctor_report, collect_status, render_doctor, render_status
+from lmms.backend.cli.review import git_review, is_read_only_command, preview_file_change
+from lmms.backend.tools.boundaries import is_within_workspace
+from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
+from lmms.backend.security.validator import validate_security_command
+from lmms.backend.cli.scope_cli import cmd_scope_init, cmd_scope_status, cmd_scope_validate
+from lmms.backend.security.report import generate_report
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -167,6 +176,17 @@ def auto_start_engine():
     if check_engine_health():
         return True
         
+    import time
+    for _ in range(10):
+        if check_engine_health():
+            return True
+        time.sleep(0.5)
+
+    # The launcher already owns startup for interactive CLI/GUI sessions.
+    # Do not race it by spawning a second engine on the same port.
+    if os.environ.get("LMMS_ENGINE_MANAGED") == "1":
+        return False
+
     internal_token = os.environ.get("LMMS_INTERNAL_TOKEN")
     if not internal_token:
         internal_token = secrets.token_hex(16)
@@ -463,6 +483,9 @@ def run_cli():
                 if os.path.exists(saved_ws):
                     current_workspace = saved_ws
         except: pass
+
+    if current_workspace != "None":
+        ConfigManager().set("workspace_dir", current_workspace)
         
     current_model = "None"
     
@@ -499,6 +522,8 @@ def run_cli():
     current_mode = "/fast"
     current_permission_level = "medium"
     show_thoughts = False
+    planning_mode = False
+    checkpoint_created_this_session = False
 
     def visible_cli_reply(text: str) -> str:
         display = text or ""
@@ -525,6 +550,15 @@ def run_cli():
     terminal_tool = TerminalTool()
     
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
+        nonlocal checkpoint_created_this_session
+        if planning_mode and tool_name in ["files.write", "browser.click_element", "browser.fill_form"]:
+            console.print("[yellow]Planning mode is read-only. Use /apply before making changes.[/yellow]")
+            return False
+
+        if planning_mode and tool_name == "terminal.run" and not is_read_only_command(kwargs.get("command", "")):
+            console.print("[yellow]Planning mode only permits read-only terminal commands. Use /apply before running this command.[/yellow]")
+            return False
+
         # 1. Global Path Denylist (Applies to all tools, all permission levels)
         protected_paths = ["/.ssh/", "/etc/", "/boot/", "/.aws/", "/.config/gh/", "/.config/google-chrome/", "/.mozilla/", "/.lmms/config/"]
         
@@ -545,6 +579,11 @@ def run_cli():
         if tool_name == "terminal.run":
             cmd = kwargs.get("command", "").strip()
             
+            is_allowed, reason = validate_security_command(current_workspace, cmd)
+            if not is_allowed:
+                console.print(f"[bold red]Scope Block: {reason}[/bold red]")
+                return False
+            
             # Git logic
             if cmd.startswith("git"):
                 if cmd.startswith("git status") or cmd.startswith("git diff") or cmd.startswith("git log"):
@@ -562,6 +601,20 @@ def run_cli():
                 if bad in cmd:
                     return Prompt.ask(f"[bold red]AI wants to run DESTRUCTIVE command: {cmd}. Allow? (y/n)[/bold red]").lower() == "y"
 
+        if tool_name == "files.write":
+            path = kwargs.get("path", "")
+            content = kwargs.get("content", "")
+            if current_workspace == "None" or not is_within_workspace(path, current_workspace):
+                return Prompt.ask(f"[bold red]AI wants to write outside the active workspace: {path}. Allow? (y/n)[/bold red]").lower() == "y"
+
+            diff = preview_file_change(path, content)
+            console.print(Panel(diff, title=f"Proposed change: {path}", border_style="yellow"))
+            approved = Prompt.ask("[bold yellow]Apply this file change? (y/n)[/bold yellow]").lower() == "y"
+            if approved and not checkpoint_created_this_session:
+                create_checkpoint(current_workspace, "Auto Checkpoint before write")
+                checkpoint_created_this_session = True
+            return approved
+
         # 3. Standard Permission Levels
         if current_perm_level == "full":
             return True
@@ -574,12 +627,6 @@ def run_cli():
         if current_perm_level == "medium":
             if tool_name in ["web_search", "browser.open_url", "files.read"]:
                 return True
-            if tool_name == "files.write":
-                # Only allow if inside current workspace
-                path = kwargs.get("path", "")
-                if current_workspace != "None" and current_workspace in os.path.abspath(path):
-                    return True
-                return Prompt.ask(f"[bold yellow]AI wants to write to {path} outside workspace. Allow? (y/n)[/bold yellow]").lower() == "y"
             if tool_name == "terminal.run":
                 cmd = kwargs.get("command", "")
                 import platform
@@ -817,6 +864,26 @@ def run_cli():
                 state_str = "ENABLED" if show_thoughts else "DISABLED"
                 console.print(f"[bold green]Thought process visibility is now {state_str}.[/bold green]")
 
+            elif base_cmd == "/plan":
+                planning_mode = True
+                current_mode = "/plan"
+                console.print("[bold cyan]Planning mode enabled. LMMs can inspect, but cannot edit or run mutating commands. Use /apply when you approve the plan.[/bold cyan]")
+
+            elif base_cmd == "/apply":
+                planning_mode = False
+                current_mode = "/code"
+                checkpoint_created_this_session = False
+                console.print("[bold green]Apply mode enabled. LMMs will show a diff and ask before each file change.[/bold green]")
+
+            elif base_cmd == "/review":
+                review = git_review(current_workspace)
+                if not review["available"]:
+                    console.print(f"[yellow]{review['message']}[/yellow]")
+                else:
+                    console.print(Panel(review["stat"], title="Git Diff Summary", border_style="cyan"))
+                    color = "green" if review["clean"] else "red"
+                    console.print(f"[{color}]Diff check: {review['check']}[/{color}]")
+
             elif base_cmd == "/cl":
                 console.print("\n[bold yellow]=== LMMs Complete Command List ===[/bold yellow]")
                 console.print("""
@@ -858,6 +925,9 @@ lmms route | orchestrate
 lmms set --engine | --cli | --gui
 lmms stop  (or type /stop)
 lmms update
+[bold cyan]16) Coding Workflow[/bold cyan]
+/plan | /apply | /review | /status | /doctor
+/checkpoint | /checkpoints | /rollback <id>
 """)
                 console.print("[bold yellow]==================================[/bold yellow]\n")
 
@@ -866,7 +936,7 @@ lmms update
             # -------------------------------------
             elif base_cmd in ["/stop", "--stop", "stop engine"]:
                 console.print("[dim]Stopping engine...[/dim]")
-                subprocess.run("pkill -f 'lmmsengine/main.py server'", shell=True)
+                subprocess.run("pkill -f 'lmms.lmmsengine.main server'", shell=True)
                 console.print("[bold green]Engine stopped![/bold green]")
                 
             elif base_cmd == "/read" and len(parts) > 1:
@@ -905,6 +975,7 @@ lmms update
 
                     if folder_path and os.path.exists(folder_path):
                         current_workspace = os.path.abspath(folder_path)
+                        ConfigManager().set("workspace_dir", current_workspace)
                         ws_id = str(uuid.uuid4())[:8]
                         workspaces[ws_id] = {"path": current_workspace, "created_at": str(datetime.now())}
                         with open(WORKSPACES_FILE, "w") as f: json.dump(workspaces, f)
@@ -940,6 +1011,7 @@ lmms update
                             ws_id = str(uuid.uuid4())[:8]
                             workspaces[ws_id] = {"path": target, "created_at": str(datetime.now())}
                             with open(WORKSPACES_FILE, "w") as f: json.dump(workspaces, f)
+                        ConfigManager().set("workspace_dir", current_workspace)
                         console.print(f"[green]Workspace Opened:[/green] {current_workspace}")
                         if not os.path.exists(os.path.join(current_workspace, ".git")):
                             subprocess.run(["git", "init"], cwd=current_workspace, capture_output=True)
@@ -1028,7 +1100,44 @@ lmms update
                 else:
                     console.print("[red]Usage: lmms git status|commits|branch|timeline|memory|summarize|explain[/red]")
 
-            elif base_cmd in ["/pull", "/run", "/stop", "/ps", "/rm", "/list", "/info", "/search", "/doctor"] or base_cmd == "-e" or base_cmd == "-air" or base_cmd == "--air":
+            elif base_cmd == "/scope":
+                if len(parts) > 1:
+                    subcmd = parts[1]
+                    if subcmd == "init":
+                        cmd_scope_init(current_workspace)
+                    elif subcmd == "status":
+                        cmd_scope_status(current_workspace)
+                    elif subcmd == "validate":
+                        cmd_scope_validate(current_workspace)
+                    else:
+                        console.print("[red]Usage: /scope init|status|validate[/red]")
+                else:
+                    cmd_scope_status(current_workspace)
+
+            elif base_cmd == "/report":
+                console.print("[cyan]Triggering AI to generate a security report...[/cyan]")
+                cmd = "Please generate a comprehensive security report summarizing our findings, the assets we discovered, and the timeline of actions. Use the security.generate_report tool."
+
+            elif base_cmd == "/checkpoint":
+                c_name = " ".join(parts[1:]) if len(parts) > 1 else "Manual Checkpoint"
+                create_checkpoint(current_workspace, c_name)
+
+            elif base_cmd == "/checkpoints":
+                list_checkpoints(current_workspace)
+
+            elif base_cmd == "/rollback":
+                if len(parts) > 1:
+                    rollback_checkpoint(current_workspace, parts[1])
+                else:
+                    console.print("[red]Usage: /rollback <id>[/red]")
+
+            elif base_cmd == "/status":
+                render_status(console, collect_status(current_workspace, ENGINE_URL))
+
+            elif base_cmd == "/doctor":
+                render_doctor(console, collect_doctor_report(current_workspace, ENGINE_URL))
+
+            elif base_cmd in ["/pull", "/run", "/stop", "/ps", "/rm", "/list", "/info", "/search"] or base_cmd == "-e" or base_cmd == "-air" or base_cmd == "--air":
                 if base_cmd == "-e":
                     engine_cmd = parts[1] if len(parts) > 1 else ""
                 elif base_cmd.startswith("/"):
@@ -1439,6 +1548,7 @@ lmms update
                         "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
                         "12. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
                         "13. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
+                        "14. security.generate_report: {\"tool\": \"security.generate_report\", \"kwargs\": {\"findings_summary\": \"Exec summary of what was found...\"}} (Generate a markdown security report of all actions)\n"
                     )
                     filtered_tools = cap_manager.filter_tools(base_tools)
                     
@@ -1489,6 +1599,14 @@ lmms update
                         "AVAILABLE TOOLS: web_search, browser.open_url, files.read, files.write, terminal.run\n\n"
                     )
 
+                if planning_mode:
+                    system_prompt += (
+                        "## Planning Mode\n"
+                        "The user is planning a coding task. Inspect files and use only read-only tools when useful. "
+                        "Do not write files, run mutating commands, commit, push, or claim that changes were made. "
+                        "Return a concise numbered implementation plan, affected files, risks, and validation commands.\n\n"
+                    )
+
                 # Global Persona Injection
                 persona_facts = get_persona()
                 if persona_facts:
@@ -1500,6 +1618,10 @@ lmms update
                 if current_workspace != "None":
                     system_prompt += f"The user's current workspace directory is: {current_workspace}\\n"
                     system_prompt += "If you need to understand the project structure, use the `terminal.run` tool with `ls` or `tree` commands. To search the workspace context, use the `vector_db.search` tool.\n"
+                    workspace_rules = load_workspace_rules(current_workspace)
+                    if workspace_rules:
+                        system_prompt += "## Workspace Instructions (LMMS.md)\n"
+                        system_prompt += workspace_rules + "\n\n"
                     system_prompt += "Instructions: Answer concisely. Do not repeat yourself. Use tools to gather context when necessary.\n"
                         
                 # Trigger background persona extraction
@@ -1832,6 +1954,9 @@ lmms update
                                     observation = file_tool.read(t_kwargs.get("path", ""))
                                 elif t_name == "files.write":
                                     observation = file_tool.write(t_kwargs.get("path", ""), t_kwargs.get("content", ""))
+                                elif t_name == "security.generate_report":
+                                    path = generate_report(current_workspace, t_kwargs.get("findings_summary", ""))
+                                    observation = f"Report successfully generated at: {path}"
                                 elif t_name == "terminal.run":
                                     run_cwd = current_workspace if current_workspace != "None" else None
                                     observation = terminal_tool.run(t_kwargs.get("command", ""), cwd=run_cwd)

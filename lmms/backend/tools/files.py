@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from lmms.backend.tools.core import default_registry, default_executor, ToolDefinition, Permission
 from lmms.backend.config.config import ConfigManager
+from lmms.backend.tools.boundaries import require_workspace_path
 
 config = ConfigManager()
 
@@ -12,9 +13,7 @@ def get_workspace_dir() -> str:
     return config.get("workspace_dir", os.getcwd())
 
 def enforce_boundary(path: str):
-    workspace = get_workspace_dir()
-    if not os.path.abspath(path).startswith(os.path.abspath(workspace)):
-        raise PermissionError(f"Path {path} is outside the allowed workspace boundary.")
+    return require_workspace_path(path, get_workspace_dir())
 
 def canonical_file_read(path: str) -> Dict[str, Any]:
     enforce_boundary(path)
@@ -50,12 +49,18 @@ default_registry.register(ToolDefinition(
 class FileTool:
     def read(self, path: str) -> str:
         try:
+            enforce_boundary(path)
             with open(path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
     def write(self, path: str, content: str) -> str:
+        try:
+            enforce_boundary(path)
+        except Exception as e:
+            return f"Error: {str(e)}"
+
         old_content = None
         if os.path.exists(path):
             try:
@@ -94,6 +99,7 @@ class FileTool:
     def list_folder(self, path: str) -> str:
         # Return folder tree structure
         try:
+            enforce_boundary(path)
             if not os.path.exists(path):
                 return f"Path {path} does not exist."
 
@@ -116,6 +122,7 @@ class FileTool:
 
     def create_folder(self, path: str) -> str:
         try:
+            enforce_boundary(path)
             os.makedirs(path, exist_ok=True)
             return f"Created folder {path}"
         except Exception as e:
@@ -123,6 +130,11 @@ class FileTool:
 
     def delete(self, path: str, confirm: bool = False) -> str:
         # Safe delete with confirmation check handled by agent
+        try:
+            enforce_boundary(path)
+        except Exception as e:
+            return f"Error: {str(e)}"
+
         if not confirm:
             return f"Delete operation requires confirm=True to execute. Path: {path}"
 
@@ -140,6 +152,7 @@ class FileTool:
     def search_in_files(self, folder: str, query: str) -> str:
         # Search text across all files in folder
         try:
+            enforce_boundary(folder)
             results = []
             for root, _, files in os.walk(folder):
                 for file in files:

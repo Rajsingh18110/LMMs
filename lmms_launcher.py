@@ -34,6 +34,9 @@ def ensure_engine_running():
         urllib.request.urlopen("http://localhost:11435/webhook", timeout=1)
     except Exception:
         print("Starting LMMs Engine in the background...")
+        import secrets
+        if not os.environ.get("LMMS_INTERNAL_TOKEN"):
+            os.environ["LMMS_INTERNAL_TOKEN"] = secrets.token_hex(16)
         log_dir = os.path.expanduser("~/.lmms/logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, "server.log")
@@ -74,6 +77,10 @@ def main():
         launch(mode)
         return
 
+    if args[0] in ["--help", "-h", "help"]:
+        launch("cli", args, ensure_engine=False)
+        return
+
     if args[0] in ["--update", "update"]:
         print("\033[96m[INFO]\033[0m LMMs updates are now managed by the LMMs-builder.")
         print("Running: LMMs-builder update --all")
@@ -82,7 +89,7 @@ def main():
         
     if args[0] in ["--stop", "stop"]:
         print("\033[96m[INFO]\033[0m Stopping LMMs Engine...")
-        subprocess.run("pkill -f 'lmmsengine/main.py server'", shell=True)
+        subprocess.run("pkill -f 'lmms.lmmsengine.main server'", shell=True)
         print("\033[92m[SUCCESS]\033[0m Engine stopped.")
         return
 
@@ -121,7 +128,7 @@ def main():
     mode = config.get("default_mode", "cli")
     launch(mode, args)
 
-def launch(mode, forward_args=None):
+def launch(mode, forward_args=None, ensure_engine=True):
     if forward_args is None:
         forward_args = []
         
@@ -132,7 +139,9 @@ def launch(mode, forward_args=None):
     # For now, we call the python scripts.
     engine_proc = None
     if mode in ["cli", "gui"]:
-        engine_proc = ensure_engine_running()
+        if ensure_engine:
+            engine_proc = ensure_engine_running()
+            env["LMMS_ENGINE_MANAGED"] = "1"
         
         # If gui mode, we could pass an argument to backend to start API + Electron
         if mode == "gui":
