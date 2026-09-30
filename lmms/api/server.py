@@ -401,8 +401,7 @@ def download_model_task(model_name: str, file_name: Optional[str] = None):
             KNOWN_MODELS = {
                 "qwen3-8b": "Qwen/Qwen2.5-7B-Instruct-GGUF",
                 "qwen3": "Qwen/Qwen2.5-7B-Instruct-GGUF",
-                "gemma4": "bartowski/gemma-2-2b-it-GGUF",
-                "gemma": "bartowski/gemma-2-2b-it-GGUF",
+                "gemma": "bartowski/gemma-2-9b-it-GGUF",
                 "llama3": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF",
                 "llama3-8b": "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF"
             }
