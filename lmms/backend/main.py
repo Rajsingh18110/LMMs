@@ -729,11 +729,28 @@ def run_cli():
     class CommandCompleter(Completer):
         def get_completions(self, document, complete_event):
             word = document.get_word_before_cursor()
+            text = document.text
+            
+            if text.startswith("lmms pull ") or text.startswith("pull "):
+                search_term = text.split("pull ", 1)[1]
+                if len(search_term) >= 2:
+                    try:
+                        from huggingface_hub import HfApi
+                        api = HfApi()
+                        models = list(api.list_models(search=search_term, filter="gguf", limit=10, sort="downloads"))
+                        for m in models:
+                            yield Completion(m.id, start_position=-len(search_term), display_meta=f"{m.downloads} DLs")
+                    except Exception:
+                        pass
+                return
+
             if word.startswith("/") or document.text.startswith("/"):
                 for cmd, desc in command_dict.items():
                     if cmd.startswith(word):
                         # Truncate desc if needed
                         yield Completion(cmd, start_position=-len(word), display_meta=desc[:60])
+
+    from prompt_toolkit.completion import ThreadedCompleter
 
     _cached_engine_health = [check_engine_health()]
     
@@ -759,7 +776,7 @@ def run_cli():
         )
 
     session = PromptSession(
-        completer=CommandCompleter(),
+        completer=ThreadedCompleter(CommandCompleter()),
         complete_while_typing=True,
         bottom_toolbar=get_bottom_toolbar,
         reserve_space_for_menu=8
@@ -1142,11 +1159,54 @@ def run_cli():
                         console.print(f"[red]Failed to reach engine: {e}[/red]")
                 elif engine_cmd == "pull" and len(parts) > 1:
                     target = parts[2] if base_cmd == "-e" else parts[1]
+                    console.print(f"[dim]Fetching available formats for {target}...[/dim]")
                     try:
-                        r = requests.post(f"{ENGINE_URL}/v1/models/pull", json={"model_name": target})
-                        console.print(r.json())
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", category=FutureWarning)
+                            from huggingface_hub import HfApi
+                        api = HfApi()
+                        
+                        if "/" in target:
+                            repo_id = target
+                        else:
+                            search_term = target.replace(":", "-").lower()
+                            models = list(api.list_models(search=search_term, filter="gguf", limit=10, sort="downloads"))
+                            if not models:
+                                console.print(f"[red]Could not find any GGUF repo matching {target}[/red]")
+                                continue
+                            repo_id = models[0].id
+                            
+                        repo_info = api.model_info(repo_id, files_metadata=True)
+                        gguf_files = [f for f in repo_info.siblings if f.rfilename.endswith(".gguf")]
+                        
+                        if not gguf_files:
+                            console.print(f"[red]No GGUF file found in {repo_id}[/red]")
+                            continue
+                            
+                        gguf_files.sort(key=lambda x: x.size if x.size else 0)
+                        
+                        from prompt_toolkit.shortcuts import radiolist_dialog
+                        values = []
+                        for i, f in enumerate(gguf_files):
+                            size_mb = (f.size / (1024 * 1024)) if f.size else 0
+                            size_str = f"{size_mb/1024:.2f} GB" if size_mb > 1024 else f"{size_mb:.2f} MB"
+                            values.append((f.rfilename, f"{f.rfilename} ({size_str})"))
+                            
+                        result = radiolist_dialog(
+                            title=f"Pull {repo_id}",
+                            text="Select a quantization format to download (Use UP/DOWN arrows and ENTER):",
+                            values=values
+                        ).run()
+                        
+                        if result:
+                            console.print(f"[dim]Requesting download for {result}...[/dim]")
+                            r = requests.post(f"{ENGINE_URL}/v1/models/pull", json={"model_name": repo_id, "file_name": result})
+                            console.print(r.json())
+                        else:
+                            console.print("[yellow]Pull cancelled.[/yellow]")
                     except Exception as e:
-                        console.print(f"[red]Failed to reach engine: {e}[/red]")
+                        console.print(f"[red]Failed to pull model: {e}[/red]")
                 else:
                     console.print("[dim]Executing generic Engine bridge hook...[/dim]")
 
