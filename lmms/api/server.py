@@ -488,8 +488,13 @@ def download_model_task(model_name: str, file_name: Optional[str] = None):
                 
                 try:
                     with open(downloads_file, "r") as file: d = json.load(file)
+                    if d.get(model_name, {}).get("cancel", False):
+                        raise RuntimeError("Download cancelled by user.")
+                        
                     d[model_name]["status"] = f"{pct}% ({size_str} @ {speed_str})"
                     with open(downloads_file, "w") as file: json.dump(d, file)
+                except RuntimeError as re:
+                    raise re
                 except Exception: pass
 
         _tqdm.tqdm = DownloadTqdm
