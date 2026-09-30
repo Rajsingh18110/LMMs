@@ -47,11 +47,11 @@ setup(
         # Utilities
         "keyring", "debugpy>=1.8.0",
     ],
-    py_modules=["lmms_launcher", "lmms_gui_entry"],
+    py_modules=["launcher", "gui"],
     entry_points={
         "console_scripts": [
-            "LMMs=lmms_launcher:main",
-            "lmms-gui=lmms_gui_entry:main",
+            "LMMs=launcher:main",
+            "lmms-gui=gui:main",
         ],
     },
     cmdclass={
