@@ -20,7 +20,7 @@ from lmms.backend.cli.diagnostics import collect_doctor_report, collect_status, 
 from lmms.backend.cli.review import git_review, is_read_only_command, preview_file_change
 from lmms.backend.tools.boundaries import is_within_workspace
 from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
-from lmms.backend.security.validator import validate_security_command
+
 from lmms.backend.cli.scope_cli import cmd_scope_init, cmd_scope_status, cmd_scope_validate, cmd_scope_activate, cmd_scope_complete, cmd_scope_export, cmd_scope_reset
 from lmms.backend.security.report import generate_report
 from lmms.backend.security.models import ToolRequest, ToolResult, PermissionResult
@@ -37,9 +37,7 @@ from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.formatted_text import HTML, ANSI
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.completion import Completer, Completion
-from lmms.backend.memory.embeddings.faiss_provider import VectorDB
-from fastapi import FastAPI
-import uvicorn
+
 
 def _patched_ask(message, choices=None, default=None, **kwargs):
     import io
@@ -61,7 +59,6 @@ def _patched_ask(message, choices=None, default=None, **kwargs):
             return ans
 Prompt.ask = staticmethod(_patched_ask)
 
-app = FastAPI(title="LMMs Backend OS")
 
 ENGINE_URL = "http://localhost:11435"
 
@@ -165,17 +162,12 @@ def should_force_tool_mode(prompt: str) -> bool:
 
 def check_engine_health():
     try:
-        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=15)
+        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=2)
         return resp.status_code == 200
     except Exception as e:
         with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
             f.write(f"Health Check Failed: {str(e)}\n")
         return False
-
-@app.get("/v1/health")
-def health_check():
-    return {"status": "Backend OS is running", "engine_connected": check_engine_health()}
-
 
 def auto_start_engine():
     if check_engine_health():
@@ -249,6 +241,15 @@ async def ipc_handshake():
 
 def start_api():
     print("Starting Backend OS API on port 11436...")
+    from fastapi import FastAPI
+    import uvicorn
+    
+    app = FastAPI(title="LMMs Backend OS")
+    
+    @app.get("/v1/health")
+    def health_check():
+        return {"status": "Backend OS is running", "engine_connected": check_engine_health()}
+        
     uvicorn.run(app, host="0.0.0.0", port=11436, log_level="warning")
 
 
@@ -707,6 +708,20 @@ def run_cli():
         "/pair": "Manage agent pairs",
         "/cl": "Show command list",
         "/stop": "Stop the engine",
+        "/scope": "Manage authorized security scopes",
+        "/tools": "View security tool status and permissions",
+        "/report": "Generate security engagement report",
+        "/plan": "Switch to Planning mode",
+        "/apply": "Apply planned changes",
+        "/review": "Review git diff for current workspace",
+        "/status": "Show engine and workspace status",
+        "/doctor": "Run diagnostics on engine",
+        "/checkpoint": "Create a workspace checkpoint",
+        "/checkpoints": "List workspace checkpoints",
+        "/rollback": "Rollback workspace to a checkpoint",
+        "/undo": "Undo the last action",
+        "/redo": "Redo the last undone action",
+        "/workspace": "Manage workspaces",
         "exit": "Quit CLI",
         "clear": "Clear screen"
     }
@@ -760,15 +775,16 @@ def run_cli():
 
             # --- Audio & Mic Logic ---
             if not cmd:
+                continue
+
+            if cmd == "/mic":
                 import platform
                 if platform.system() == "Windows":
                     console.print("[yellow]Microphone recording natively on Windows is not yet supported. Please use text input.[/yellow]")
-                    # TODO: Implement Windows recording using sounddevice or pyaudio
                     continue
                     
                 console.print("[bold red]🎙️  Recording from Mic... Press ENTER to stop.[/bold red]")
                 import speech_recognition as sr
-                # Start arecord in background
                 p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
                 try:
                     input() # Wait for user to press Enter again
@@ -891,6 +907,10 @@ lmms update
 [bold cyan]16) Coding Workflow[/bold cyan]
 /plan | /apply | /review | /status | /doctor
 /checkpoint | /checkpoints | /rollback <id>
+[bold cyan]17) Security & Authorization[/bold cyan]
+/scope init|status|validate|activate|complete|reset|export
+/tools status|list|permissions
+/report
 """)
                 console.print("[bold yellow]==================================[/bold yellow]\n")
 
