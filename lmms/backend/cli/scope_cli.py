@@ -96,3 +96,41 @@ def cmd_scope_validate(workspace: str):
         console.print("[bold red]Scope validation failed.[/bold red]")
     else:
         console.print("[bold green]Scope validation passed. Scope is well-formed.[/bold green]")
+
+def cmd_scope_activate(workspace: str):
+    scope = load_scope(workspace)
+    if not scope:
+        console.print("[red]No scope found. Use /scope init first.[/red]")
+        return
+    scope["status"] = "active"
+    save_scope(workspace, scope)
+    console.print("[bold green]Scope activated successfully.[/bold green]")
+    
+def cmd_scope_complete(workspace: str):
+    scope = load_scope(workspace)
+    if not scope:
+        console.print("[red]No scope found.[/red]")
+        return
+    scope["status"] = "completed"
+    save_scope(workspace, scope)
+    console.print("[bold green]Scope marked as completed.[/bold green]")
+    
+def cmd_scope_reset(workspace: str):
+    import os
+    from lmms.backend.security.scope import get_scope_file
+    path = get_scope_file(workspace)
+    if os.path.exists(path):
+        os.remove(path)
+        console.print("[bold green]Scope file deleted.[/bold green]")
+    else:
+        console.print("[yellow]No scope file found to delete.[/yellow]")
+        
+def cmd_scope_export(workspace: str, dest_path: str):
+    import json
+    scope = load_scope(workspace)
+    if not scope:
+        console.print("[red]No scope found to export.[/red]")
+        return
+    with open(dest_path, "w") as f:
+        json.dump(scope, f, indent=2)
+    console.print(f"[bold green]Scope exported to {dest_path}.[/bold green]")
