@@ -1239,36 +1239,39 @@ def run_cli():
                                     transient=True
                                 ) as progress:
                                     task_id = progress.add_task(f"Downloading [cyan]{result}[/cyan]", total=100, status_info="...")
-                                    while True:
-                                        time.sleep(0.5)
-                                        try:
-                                            with open(downloads_file, "r") as f:
-                                                state = json.load(f)
-                                            
-                                            # Ensure repo_id is in state
-                                            if repo_id in state:
-                                                status = state[repo_id].get("status", "")
-                                                pct = 0
-                                                status_info = status
-                                                if "%" in status:
-                                                    try:
-                                                        pct_str = status.split("%")[0].strip()
-                                                        pct = int(pct_str)
-                                                        status_info = status.split("%", 1)[1].strip()
-                                                    except:
-                                                        pass
-                                                        
-                                                progress.update(task_id, completed=pct, status_info=status_info)
+                                    try:
+                                        while True:
+                                            time.sleep(0.5)
+                                            try:
+                                                with open(downloads_file, "r") as f:
+                                                    state = json.load(f)
                                                 
-                                                if "100%" in status:
-                                                    progress.update(task_id, completed=100)
-                                                    break
-                                                elif "failed" in status:
-                                                    console.print(f"[red]Failed: {status}[/red]")
-                                                    break
-                                        except Exception:
-                                            pass
-                                console.print(f"[bold green]✓ Download complete: {repo_id}/{result}[/bold green]")
+                                                if repo_id in state:
+                                                    status = state[repo_id].get("status", "")
+                                                    pct = 0
+                                                    status_info = status
+                                                    if "%" in status:
+                                                        try:
+                                                            pct_str = status.split("%")[0].strip()
+                                                            pct = int(pct_str)
+                                                            status_info = status.split("%", 1)[1].strip()
+                                                        except:
+                                                            pass
+                                                            
+                                                    progress.update(task_id, completed=pct, status_info=status_info)
+                                                    
+                                                    if "100%" in status:
+                                                        progress.update(task_id, completed=100)
+                                                        console.print(f"[bold green]✓ Download complete: {repo_id}/{result}[/bold green]")
+                                                        break
+                                                    elif "failed" in status:
+                                                        console.print(f"[red]Failed: {status}[/red]")
+                                                        break
+                                            except Exception:
+                                                pass
+                                    except KeyboardInterrupt:
+                                        console.print("\n[yellow]Tracking stopped (download continues in background).[/yellow]")
+                                        pass
                             else:
                                 console.print(r.json())
                         else:
