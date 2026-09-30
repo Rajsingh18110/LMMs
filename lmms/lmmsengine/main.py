@@ -86,93 +86,38 @@ def main():
     args = sys.argv[1:]
     
     if not args or args[0] in ("-h", "--help", "help"):
-        print('''
-=========================================
-      LMMs AI Operating System
-=========================================
+        from rich.console import Console
+        Console().print("""
+[bold cyan]╭──────────────────────────────────────────────────────────────╮[/bold cyan]
+[bold cyan]│[/bold cyan]                    [bold white]LMMs AI Operating System[/bold white]                  [bold cyan]│[/bold cyan]
+[bold cyan]╰──────────────────────────────────────────────────────────────╯[/bold cyan]
 
-1. Installer / Builder
-  pip install lmms-builder       # Install bootstrap
-  lmms-builder detect            # Hardware detection
-  lmms-builder compatibility     # Compatibility check
-  lmms-builder doctor            # Missing dependencies
-  lmms-builder benchmark         # Test hardware
-  lmms-builder install           # Install core components
+[bold magenta]🧠 Core AI & Interaction[/bold magenta]
+  [green]/fast, /deep, /code[/green]      Switch reasoning modes
+  [green]/vision, /mic[/green]            Use vision OCR and microphone input
+  [green]/ml <model>[/green]              Swap AI models on the fly
+  [green]/chat, /newchat[/green]          Manage conversation threads
 
-2. Launcher / Mode Selection
-  lmms set --gui                 # Set default to Desktop App
-  lmms set --cli                 # Set default to Smart Shell
-  lmms set --engine              # Set default to Raw Engine
-  lmms gui / cli / engine        # Direct launch bypass
-  lmms -g / -c / -e              # Fast aliases
-  lmms                           # Open default mode
+[bold magenta]💻 Autonomous Coding Workflow[/bold magenta]
+  [green]/plan, /apply, /review[/green]   Plan and execute code changes
+  [green]/checkpoint, /rollback[/green]   Save states and rollback mistakes
+  [green]/undo, /redo[/green]             Instantly revert AI file edits
+  [green]/status, /doctor[/green]         System and project health checks
 
-3. Core Engine (Dual Engine Architecture)
-  lmms pull <model>              # Auto-detect best quant & download
-  lmms run <model> [-use l|p]    # Load & chat (-use l: llama.cpp, -use p: pytorch)
-  lmms stop <model>              # Unload model
-  lmms ps                        # Show active loaded models
-  lmms list                      # List local downloaded models
-  lmms info <model>              # Metadata for a model
-  lmms rm <model>                # Delete a model
-  lmms search <query>            # Search hub
-  lmms benchmark <model>         # Engine speed test
-  lmms doctor [--fix]            # Fix engine health
-  lmms create <model> -f <file>  # Create from Modelfile
-  lmms server                    # Start API Webhook Server (Dashboard)
+[bold magenta]🛡️  Workspace & Security[/bold magenta]
+  [green]/scope init|status[/green]       Manage strict workspace boundaries
+  [green]/tools list[/green]              View allowed system/terminal tools
+  [green]/report[/green]                  Generate security audit of AI actions
+  [green]/workspace, /folder[/green]      Manage and open projects
 
-4. Air Engine (Distributed)
-  lmms -air run <model>          # Run heavy model with swapping
-  lmms --air run <m1> <m2>       # Cluster mode scheduling
-  lmms air ps / cache / stats    # Air metrics
-  lmms air unload / benchmark    # Air management
+[bold magenta]⚙️  Engine & Local Models[/bold magenta]
+  [green]lmms pull <model>[/green]          Download a model from HuggingFace
+  [green]lmms run <model>[/green]           Start a model directly
+  [green]lmms ps, stop, rm[/green]        View active, stop, or delete models
+  [green]lmms set --gui|--cli[/green]     Change default launch mode
 
-5. Component Installation
-  lmms install --gui/cli/air     # Modular install
-  lmms uninstall --all --purge   # Full wipe
-
-6. Package Management
-  lmms package install runtime <x>
-  lmms package install provider <x>
-  lmms package install tool <x>
-  lmms package list/remove
-
-7. AI Shell Slash Commands
-  /fast, /deep, /code, /research # Reasoning modes
-  /vision, /image                # Visual modes
-  /memory, /task, /git, /workspace
-  /explain, /summarize, /benchmark
-
-8. Workspace Commands
-  /folder                        # Open file manager
-  lmms workspace create/list/open/close/delete/restore
-
-9. Permissions
-  /perm low/medium/full          # Agentic freedom scope
-
-10. Chat History
-  /chat                          # List workspace chats
-  /newchat                       # Fresh thread
-  /chat -r <id> / -d <id>        # Rename / Delete
-
-11. Interactive Model Swap
-  /ml <model> [-f | -d]          # Switch model mid-chat
-
-12. Pair Commands (Bundles)
-  /pair -n 1 text:qwen image:llava ...
-  /pair 1                        # Activate slot 1
-  /pair -l / -d 1                # List / Delete
-
-13. Undo / Redo
-  /undo <file> / <folder>        # Revert AI changes
-  /redo <file> / <folder>        # Reapply
-
-14. Orchestration
-  lmms task create/list/show     # Workflow
-  lmms git status/commits/explain# Git intel
-  lmms agent run <type>          # Predefined agents
-  lmms route / orchestrate       # Handoff flow
-''')
+[dim]For full help, type any command followed by --help[/dim]
+""")
         sys.exit(0)
 
     # Parse args
@@ -245,93 +190,38 @@ def main():
             prompt_parts.append(args[i])
             i += 1
         elif args[i] == "-cl":
-            print('''
-=========================================
-      LMMs AI Operating System
-=========================================
+            from rich.console import Console
+            Console().print("""
+[bold cyan]╭──────────────────────────────────────────────────────────────╮[/bold cyan]
+[bold cyan]│[/bold cyan]                    [bold white]LMMs AI Operating System[/bold white]                  [bold cyan]│[/bold cyan]
+[bold cyan]╰──────────────────────────────────────────────────────────────╯[/bold cyan]
 
-1. Installer / Builder
-  pip install lmms-builder       # Install bootstrap
-  lmms-builder detect            # Hardware detection
-  lmms-builder compatibility     # Compatibility check
-  lmms-builder doctor            # Missing dependencies
-  lmms-builder benchmark         # Test hardware
-  lmms-builder install           # Install core components
+[bold magenta]🧠 Core AI & Interaction[/bold magenta]
+  [green]/fast, /deep, /code[/green]      Switch reasoning modes
+  [green]/vision, /mic[/green]            Use vision OCR and microphone input
+  [green]/ml <model>[/green]              Swap AI models on the fly
+  [green]/chat, /newchat[/green]          Manage conversation threads
 
-2. Launcher / Mode Selection
-  lmms set --gui                 # Set default to Desktop App
-  lmms set --cli                 # Set default to Smart Shell
-  lmms set --engine              # Set default to Raw Engine
-  lmms gui / cli / engine        # Direct launch bypass
-  lmms -g / -c / -e              # Fast aliases
-  lmms                           # Open default mode
+[bold magenta]💻 Autonomous Coding Workflow[/bold magenta]
+  [green]/plan, /apply, /review[/green]   Plan and execute code changes
+  [green]/checkpoint, /rollback[/green]   Save states and rollback mistakes
+  [green]/undo, /redo[/green]             Instantly revert AI file edits
+  [green]/status, /doctor[/green]         System and project health checks
 
-3. Core Engine (Dual Engine Architecture)
-  lmms pull <model>              # Auto-detect best quant & download
-  lmms run <model> [-use l|p]    # Load & chat (-use l: llama.cpp, -use p: pytorch)
-  lmms stop <model>              # Unload model
-  lmms ps                        # Show active loaded models
-  lmms list                      # List local downloaded models
-  lmms info <model>              # Metadata for a model
-  lmms rm <model>                # Delete a model
-  lmms search <query>            # Search hub
-  lmms benchmark <model>         # Engine speed test
-  lmms doctor [--fix]            # Fix engine health
-  lmms create <model> -f <file>  # Create from Modelfile
-  lmms server                    # Start API Webhook Server (Dashboard)
+[bold magenta]🛡️  Workspace & Security[/bold magenta]
+  [green]/scope init|status[/green]       Manage strict workspace boundaries
+  [green]/tools list[/green]              View allowed system/terminal tools
+  [green]/report[/green]                  Generate security audit of AI actions
+  [green]/workspace, /folder[/green]      Manage and open projects
 
-4. Air Engine (Distributed)
-  lmms -air run <model>          # Run heavy model with swapping
-  lmms --air run <m1> <m2>       # Cluster mode scheduling
-  lmms air ps / cache / stats    # Air metrics
-  lmms air unload / benchmark    # Air management
+[bold magenta]⚙️  Engine & Local Models[/bold magenta]
+  [green]lmms pull <model>[/green]          Download a model from HuggingFace
+  [green]lmms run <model>[/green]           Start a model directly
+  [green]lmms ps, stop, rm[/green]        View active, stop, or delete models
+  [green]lmms set --gui|--cli[/green]     Change default launch mode
 
-5. Component Installation
-  lmms install --gui/cli/air     # Modular install
-  lmms uninstall --all --purge   # Full wipe
-
-6. Package Management
-  lmms package install runtime <x>
-  lmms package install provider <x>
-  lmms package install tool <x>
-  lmms package list/remove
-
-7. AI Shell Slash Commands
-  /fast, /deep, /code, /research # Reasoning modes
-  /vision, /image                # Visual modes
-  /memory, /task, /git, /workspace
-  /explain, /summarize, /benchmark
-
-8. Workspace Commands
-  /folder                        # Open file manager
-  lmms workspace create/list/open/close/delete/restore
-
-9. Permissions
-  /perm low/medium/full          # Agentic freedom scope
-
-10. Chat History
-  /chat                          # List workspace chats
-  /newchat                       # Fresh thread
-  /chat -r <id> / -d <id>        # Rename / Delete
-
-11. Interactive Model Swap
-  /ml <model> [-f | -d]          # Switch model mid-chat
-
-12. Pair Commands (Bundles)
-  /pair -n 1 text:qwen image:llava ...
-  /pair 1                        # Activate slot 1
-  /pair -l / -d 1                # List / Delete
-
-13. Undo / Redo
-  /undo <file> / <folder>        # Revert AI changes
-  /redo <file> / <folder>        # Reapply
-
-14. Orchestration
-  lmms task create/list/show     # Workflow
-  lmms git status/commits/explain# Git intel
-  lmms agent run <type>          # Predefined agents
-  lmms route / orchestrate       # Handoff flow
-''')
+[dim]For full help, type any command followed by --help[/dim]
+""")
             sys.exit(0)
         else:
             i += 1

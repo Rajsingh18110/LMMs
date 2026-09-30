@@ -866,51 +866,35 @@ def run_cli():
             elif base_cmd == "/cl":
                 console.print("\n[bold yellow]=== LMMs Complete Command List ===[/bold yellow]")
                 console.print("""
-[bold cyan]1) Installer / Builder[/bold cyan]
-lmms-builder detect | compatibility | doctor | benchmark | install
-[bold cyan]2) Launcher / Modes[/bold cyan]
-lmms set --gui | --cli | --engine
-lmms -g | -c | -e
-[bold cyan]3) Model Management[/bold cyan]
-lmms pull <model> | run <model> | stop <model> | ps | list | info <model> | rm <model> | search <model> | benchmark <model> | doctor [--fix]
-[bold cyan]4) Air Engine[/bold cyan]
-lmms -air run <model> | lmms --air run <m1> <m2>
-lmms air ps | cache | stats | unload | benchmark
-[bold cyan]5) Install by Component[/bold cyan]
-lmms install --gui | --cli | --engine | --air | --full
-lmms uninstall --all [--purge]
-[bold cyan]6) Packages[/bold cyan]
-lmms package install runtime <name> | provider <name> | tool <name> | list | remove
-[bold cyan]7) Slash AI Commands[/bold cyan]
-/fast | /deep | /code | /research | /agent | /router | /vision | /image | /memory | /task | /git | /workspace | /explain | /summarize | /benchmark
-[bold cyan]8) Workspace[/bold cyan]
-/folder | lmms workspace create | list | open <path> | close | delete <id> | restore <id>
-[bold cyan]9) Permissions[/bold cyan]
-/perm low | medium | full
-[bold cyan]10) Chat Commands[/bold cyan]
-/chat | /newchat | /chat -r <id> <name> | /chat -d <id>
-[bold cyan]11) Model Selection[/bold cyan]
-/ml | /ml <model> [-f | -d]
-[bold cyan]12) Pair Commands[/bold cyan]
-/pair -n <id> <config> | /pair <id> | /pair -l | /pair -d <id>
-[bold cyan]13) Undo / Redo[/bold cyan]
-/undo <file|folder> | /redo <file|folder>
-[bold cyan]14) Orchestration[/bold cyan]
-lmms task create|list|show|complete|block|timeline
-lmms git status|commits|branch|timeline|memory|summarize|explain
-lmms agent list|run|enable|disable
-lmms route | orchestrate
-[bold cyan]15) Engine/System[/bold cyan]
-lmms set --engine | --cli | --gui
-lmms stop  (or type /stop)
-lmms update
-[bold cyan]16) Coding Workflow[/bold cyan]
-/plan | /apply | /review | /status | /doctor
-/checkpoint | /checkpoints | /rollback <id>
-[bold cyan]17) Security & Authorization[/bold cyan]
-/scope init|status|validate|activate|complete|reset|export
-/tools status|list|permissions
-/report
+[bold cyan]╭──────────────────────────────────────────────────────────────╮[/bold cyan]
+[bold cyan]│[/bold cyan]                    [bold white]LMMs AI Operating System[/bold white]                  [bold cyan]│[/bold cyan]
+[bold cyan]╰──────────────────────────────────────────────────────────────╯[/bold cyan]
+
+[bold magenta]🧠 Core AI & Interaction[/bold magenta]
+  [green]/fast, /deep, /code[/green]      Switch reasoning modes
+  [green]/vision, /mic[/green]            Use vision OCR and microphone input
+  [green]/ml <model>[/green]              Swap AI models on the fly
+  [green]/chat, /newchat[/green]          Manage conversation threads
+
+[bold magenta]💻 Autonomous Coding Workflow[/bold magenta]
+  [green]/plan, /apply, /review[/green]   Plan and execute code changes
+  [green]/checkpoint, /rollback[/green]   Save states and rollback mistakes
+  [green]/undo, /redo[/green]             Instantly revert AI file edits
+  [green]/status, /doctor[/green]         System and project health checks
+
+[bold magenta]🛡️  Workspace & Security[/bold magenta]
+  [green]/scope init|status[/green]       Manage strict workspace boundaries
+  [green]/tools list[/green]              View allowed system/terminal tools
+  [green]/report[/green]                  Generate security audit of AI actions
+  [green]/workspace, /folder[/green]      Manage and open projects
+
+[bold magenta]⚙️  Engine & Local Models[/bold magenta]
+  [green]lmms pull <model>[/green]          Download a model from HuggingFace
+  [green]lmms run <model>[/green]           Start a model directly
+  [green]lmms ps, stop, rm[/green]        View active, stop, or delete models
+  [green]lmms set --gui|--cli[/green]     Change default launch mode
+
+[dim]For full help, type any command followed by --help[/dim]
 """)
                 console.print("[bold yellow]==================================[/bold yellow]\n")
 
