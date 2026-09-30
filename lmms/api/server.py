@@ -459,20 +459,38 @@ def download_model_task(model_name: str, file_name: Optional[str] = None):
         from huggingface_hub.utils import _tqdm
         original_tqdm = _tqdm.tqdm
 
+        # Use a global dictionary to track the maximum total size seen
+        # because HF hub creates multiple tqdm instances for one file
+        progress_state = {"total": 0, "n": 0}
+
         class DownloadTqdm(original_tqdm):
             def update(self, n=1):
                 super().update(n)
                 if hasattr(self, 'total') and self.total:
-                    pct = int((self.n / self.total) * 100)
-                    speed = getattr(self, 'format_dict', {}).get('rate', 0)
-                    speed_str = f"{speed / 1024 / 1024:.2f} MB/s" if speed else ""
-                    size_str = f"{self.n / 1024 / 1024 / 1024:.2f}G/{self.total / 1024 / 1024 / 1024:.2f}G"
-                    
-                    try:
-                        with open(downloads_file, "r") as file: d = json.load(file)
-                        d[model_name]["status"] = f"{pct}% ({size_str} @ {speed_str})"
-                        with open(downloads_file, "w") as file: json.dump(d, file)
-                    except Exception: pass
+                    progress_state["total"] = max(progress_state["total"], self.total)
+                
+                # If this is a progress bar that is advancing, update n
+                if self.n > 0:
+                    progress_state["n"] = max(progress_state["n"], self.n)
+                
+                total = progress_state["total"]
+                current = progress_state["n"]
+                
+                if total > 0:
+                    pct = int((current / total) * 100)
+                    size_str = f"{current / 1024 / 1024 / 1024:.2f}G/{total / 1024 / 1024 / 1024:.2f}G"
+                else:
+                    pct = 0
+                    size_str = f"{current / 1024 / 1024:.2f}M/???"
+                
+                speed = getattr(self, 'format_dict', {}).get('rate', 0)
+                speed_str = f"{speed / 1024 / 1024:.2f} MB/s" if speed else ""
+                
+                try:
+                    with open(downloads_file, "r") as file: d = json.load(file)
+                    d[model_name]["status"] = f"{pct}% ({size_str} @ {speed_str})"
+                    with open(downloads_file, "w") as file: json.dump(d, file)
+                except Exception: pass
 
         _tqdm.tqdm = DownloadTqdm
         
