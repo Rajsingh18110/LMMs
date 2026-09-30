@@ -1270,8 +1270,15 @@ def run_cli():
                                             except Exception:
                                                 pass
                                     except KeyboardInterrupt:
-                                        console.print("\n[yellow]Tracking stopped (download continues in background).[/yellow]")
-                                        pass
+                                        console.print("\n[yellow]Cancelling download...[/yellow]")
+                                        try:
+                                            with open(downloads_file, "r") as f: state = json.load(f)
+                                            if repo_id in state:
+                                                state[repo_id]["cancel"] = True
+                                                state[repo_id]["status"] = "failed (cancelled by user)"
+                                            with open(downloads_file, "w") as f: json.dump(state, f)
+                                        except Exception:
+                                            pass
                             else:
                                 console.print(r.json())
                         else:
