@@ -2253,6 +2253,9 @@ if __name__ == "__main__":
         
     try:
         run_cli()
+    except SystemExit as e:
+        import os
+        os._exit(e.code if e.code is not None else 0)
     except Exception:
         pass
     finally:
