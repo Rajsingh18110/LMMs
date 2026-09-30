@@ -11,8 +11,8 @@ def handle_cli(args):
     parser = argparse.ArgumentParser(prog="lmms", description="LMMs Local AI Operating System")
     
     # Global Air Flags
-    parser.add_argument("-air", action="store_true", help="Run single heavy model via Air Engine")
-    parser.add_argument("--air", action="store_true", help="Run multiple models via Air Scheduler")
+    parser.add_argument("-air", dest="air_engine", action="store_true", help="Run single heavy model via Air Engine")
+    parser.add_argument("--air", dest="air_scheduler", action="store_true", help="Run multiple models via Air Scheduler")
     
     # Fast aliases for modes
     parser.add_argument("-g", "--gui-alias", action="store_true", help="Launch GUI mode")
@@ -240,9 +240,9 @@ def handle_cli(args):
         backend_manager.models.pull(parsed.model, interactive=parsed.interactive)
 
     elif parsed.command == "run":
-        if parsed.air:
+        if parsed.air_scheduler:
             console.print(f"[cyan]Starting Air Scheduler (multi-model) for {parsed.model}...[/cyan]")
-        elif getattr(parsed, 'air', False): # handles -air if we added it as bool flag properly
+        elif getattr(parsed, 'air_engine', False):
             console.print(f"[cyan]Starting Air Execution (single heavy model) for {parsed.model[0]}...[/cyan]")
         else:
             console.print(f"[cyan]Starting standard execution for {parsed.model}...[/cyan]")

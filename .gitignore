@@ -6,6 +6,11 @@ venv/
 models/
 *.gguf
 test_*.py
+!tests/test_launcher.py
+!tests/test_workspace_boundaries.py
+!tests/test_workspace_rules.py
+!tests/test_diagnostics.py
+!tests/test_review.py
 patch_*.py
 build_*.py
 download_*.py

@@ -1,9 +1,11 @@
 import subprocess
 import os
+import shlex
 from typing import Dict, Any
 
 from lmms.backend.tools.core import default_registry, default_executor, ToolDefinition, Permission
 from lmms.backend.config.config import ConfigManager
+from lmms.backend.tools.boundaries import is_within_workspace
 
 BLOCKED_COMMANDS = [
     "rm -rf /",
@@ -31,12 +33,17 @@ def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]
     target_cwd = cwd if cwd else workspace_dir
     
     # Boundary enforcement
-    if not os.path.abspath(target_cwd).startswith(os.path.abspath(workspace_dir)):
+    if not is_within_workspace(target_cwd, workspace_dir):
         raise PermissionError("CWD is outside the allowed workspace boundary.")
-        
+
     try:
+        if isinstance(command, str):
+            command_args = shlex.split(command)
+        else:
+            command_args = command
+
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=120, cwd=target_cwd
+            command_args, shell=False, capture_output=True, text=True, timeout=120, cwd=target_cwd
         )
         return {
             "stdout": result.stdout,
@@ -82,8 +89,19 @@ class TerminalTool:
             })
 
         try:
+            workspace_dir = get_workspace_dir()
+            target_cwd = cwd if cwd else workspace_dir
+            if not is_within_workspace(target_cwd, workspace_dir):
+                msg = "CWD is outside the allowed workspace boundary."
+                return (-1, msg) if return_exit_code else msg
+
+            if isinstance(command, str):
+                command_args = shlex.split(command)
+            else:
+                command_args = command
+
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=120, cwd=cwd
+                command_args, shell=False, capture_output=True, text=True, timeout=120, cwd=target_cwd
             )
             output = result.stdout + result.stderr
             if not output:
