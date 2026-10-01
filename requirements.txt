@@ -16,7 +16,6 @@ textual
 huggingface_hub
 watchdog
 transformers
-airllm
 
 # =========================================
 # LMMs GUI (PyQt6) Dependencies
