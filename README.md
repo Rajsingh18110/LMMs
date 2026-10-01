@@ -27,7 +27,6 @@
 |------|------|
 | Founder | **Raj Singh** |
 | Co-Founder | **Adarsh Singh** |
-| Co-Founder | **Yash Raj** |
 
 ---
 
@@ -139,60 +138,33 @@ The GUI is a PyQt6-based graphical AI Workspace IDE. It is designed to be a visu
 
 ## 🛠️ Installation
 
-LMMs uses a unified pip-based package manager. You do not need to manually clone this repository or compile any code. The `LMMs-builder` automatically downloads the correct pre-compiled standalone binary for your OS (Windows, Mac, or Linux).
+LMMs now uses a standard Python package structure.
 
 ```bash
-# Step 1: Install the official LMMs Builder
-pip install LMMs-builder
+# Step 1: Clone the repository
+git clone https://github.com/Rajsingh18110/LMMs.git
+cd LMMs
 
-# Step 2: Check OS and hardware compatibility
-LMMs-builder -check
+# Step 2: Install dependencies
+pip install -r requirements.txt
 
-# Step 3: Install the full LMMs ecosystem
-LMMs-builder install --all
+# Step 3: Run the setup to configure LMMs
+python setup.py install
 ```
 
 ---
 
 ## 💻 Commands Reference
 
-### 1) Builder / Installer Commands
+### LMMs Core Launcher Commands
 
 | Command | Description |
 |---|---|
-| `LMMs-builder -check` | Detect OS, hardware, and installed components |
-| `LMMs-builder install --engine` | Install only the Engine |
-| `LMMs-builder install --backend` | Install only the Backend |
-| `LMMs-builder install --gui` | Install only the GUI |
-| `LMMs-builder install --all` | Install the full LMMs stack |
-| `LMMs-builder update --all` | Download and apply the latest release |
-
-### 2) Repair & Rebuild
-
-| Command | Description |
-|---|---|
-| `LMMs-repair LMMs -<component>` | Repair a component without losing saved data |
-| `LMMs-rebuild LMMs` | Factory reset — deletes everything and reinstalls |
-| `LMMs-rebuild LMMs -ds` | Data-safe reset — rebuilds code but keeps your models, chats, and persona files |
-
-### 3) Uninstall
-
-| Command | Description |
-|---|---|
-| `LMMs-uninstall --<component>` | Remove a specific component |
-| `LMMs-uninstall -all --purge` | **⚠️ Danger:** Remove all LMMs binaries and all user data |
-
-### 4) LMMs Core Launcher Commands
-
-| Command | Description |
-|---|---|
-| `LMMs` | Launch your configured default interface |
-| `LMMs --cli` | Launch the CLI directly for this session |
-| `LMMs --gui` | Launch the GUI directly for this session |
-| `LMMs --engine` | Launch the Engine directly for this session |
-| `LMMs -set --cli` | Set CLI as your permanent default |
-| `LMMs -set --gui` | Set GUI as your permanent default |
-| `LMMs-cl` | Show the full command list |
+| `lmms` | Launch your configured default interface |
+| `lmms set --cli` | Set CLI as your permanent default |
+| `lmms set --engine` | Set Engine as your permanent default |
+| `lmms stop` | Stop the LMMs background engine |
+| `lmms --help` | Show launcher help |
 
 ---
 
@@ -268,7 +240,7 @@ Every push to the `main` branch automatically triggers the LMMs build pipeline. 
    - **macOS:** `.app` bundles
 2. Produces **12 build artifacts** (one per component per platform).
 3. Publishes all artifacts directly to the **GitHub Releases** page.
-4. Your local `LMMs-builder` tool checks the Releases page on `LMMs-builder update` and downloads the latest build automatically — no Git required.
+4. You can download the latest standalone binaries directly from the Releases page — no Git required.
 
 ---
 
