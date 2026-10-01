@@ -41,19 +41,19 @@ LMMs is built around a core philosophy: **the model should never need to be modi
 The Engine is the lowest level of LMMs. It is responsible for actually loading and running the AI model on your hardware. Because AI models come in wildly different sizes and architectures — from tiny 1B models to massive 350B behemoths — LMMs uses a **Dual Engine Architecture** to handle all of them efficiently:
 
 #### 🦙 Engine A: `llama.cpp` Runtime
-- **Used for:** Older, smaller, and quantized GGUF models (typically up to ~30B on consumer hardware).
-- **Why llama.cpp?** It is a C++ inference engine that is highly optimized for CPUs and consumer GPUs. It supports 4-bit, 5-bit, and 8-bit quantization, meaning you can run a 7B model on just 4GB of VRAM or even pure CPU.
-- **Best for:** Fast responses, low hardware, and running classic model families like Llama 2/3, Mistral, Phi, Gemma (GGUF format).
+- **Core Mechanism:** Utilizes zero-copy memory mapping (`mmap`) to load model weights directly from disk into RAM/VRAM without duplication.
+- **Quantization Logic:** Converts standard 16-bit float (fp16) weights into 4-bit or 8-bit integers (GGUF format) using block-wise quantization. This reduces memory footprint by 75% while maintaining ~95% of the model's reasoning capability.
+- **KV Caching:** Employs an optimized Key-Value (KV) cache matrix to store past token attention states, allowing ultra-fast generation of subsequent tokens without re-evaluating the entire prompt.
+- **Best for:** Running highly optimized models (Llama 3, Mistral) on consumer hardware with limited VRAM.
 
 #### 🔥 Engine B: `PyTorch` Runtime
-- **Used for:** New model architectures, multimodal models (vision + text), and very large models that require full GPU clusters or advanced memory management.
-- **Why PyTorch?** Many cutting-edge models (such as advanced Qwen, DeepSeek, Gemma-3, and Mixtral variants) ship in HuggingFace format and use novel attention mechanisms or architecture quirks that llama.cpp has not yet implemented. PyTorch gives full flexibility and access to the entire HuggingFace ecosystem.
-- **Best for:** Latest frontier models, multimodal models, research models, and models >30B that need advanced memory offloading.
+- **Core Mechanism:** Natively loads standard HuggingFace `safetensors`. It utilizes dynamic graph execution and highly optimized CUDA kernels (like Flash Attention 2) to compute multi-head attention blocks faster on modern GPUs.
+- **Memory Management:** Automatically splits the model layers across available GPUs (Tensor Parallelism) or shifts non-active layers to CPU RAM (Model Offloading) to prevent Out of Memory (OOM) errors.
+- **Best for:** Multimodal models (Vision + Text), frontier models with custom attention mechanisms, and unquantized precision tasks.
 
 #### 🌬️ Engine C: `AirLLM` (Air Engine) — Distributed / Disk-Offloading
-- **Used for:** Running extremely large models (70B, 130B, 350B+) on hardware that would normally be completely unable to handle them.
-- **How it works:** AirLLM layers the model weights across disk, CPU RAM, and GPU VRAM in chunks, streaming them as needed. This lets a single consumer PC run models that normally require a server cluster.
-- **Best for:** Power users and researchers who want to run frontier-class models locally without spending tens of thousands on hardware.
+- **Core Mechanism:** Traditional engines load the *entire* model into RAM/VRAM before generating a single token. AirLLM uses a **Layer-by-Layer Streaming** logic. It keeps only a small subset of the neural network layers in GPU memory at any given millisecond. As the forward pass reaches layer N, layer N+1 is pre-fetched from the SSD, and layer N-1 is evicted.
+- **Impact:** Allows a standard 16GB RAM PC to run massive 70B parameter models by bottlenecking on disk read-speed rather than memory capacity.
 
 > **Key Insight:** You can select which engine to use at model load time using `lmms run <model> -use l` (llama.cpp) or `lmms run <model> -use p` (PyTorch). The Engine auto-detects the best runtime if you omit the flag.
 
@@ -65,39 +65,28 @@ The Backend is the most important layer. It sits between the user and the Engine
 
 Here is what the Backend injects into every session:
 
-#### 🔍 Web Search
-The model can call a live web search tool during any conversation. When the user asks something that requires current information (e.g., "What happened in the news today?"), the Backend fires a real search query, retrieves results, and injects them into the model's context before it replies.
-
-#### 🌐 API Calling
-The Backend exposes a structured API-calling tool that the model can invoke. The model can form HTTP requests (GET, POST, etc.), read the JSON responses, and chain multiple API calls together to complete tasks — all without the user needing to write any code.
-
-#### 💻 Code Execution & Autonomous Coding
-Like Claude Code or Cursor AI, the LMMs Backend gives the model the ability to:
-- Read, write, create, and delete files on your filesystem.
-- Execute code in sandboxed subprocesses and observe the output.
-- Iterate on its own code until tests pass.
-- Navigate and modify entire codebases across multiple files.
-
-This is all powered by the Backend's tool-calling engine — the model emits structured `<tool_call>` requests, the Backend intercepts and executes them, and the results are fed back as `<observation>` blocks for the next reasoning step.
+#### 💻 Autonomous Code Execution (The Tool Interceptor)
+- **Logic & Mechanics:** When the user asks for code, the Backend injects a strict "System Prompt" defining available tools. As the model streams tokens, the Backend constantly scans the stream using AST/Regex parsers for `<tool_call>` boundaries.
+- **Execution Sandbox:** If the model emits a tool call (e.g., `execute_python`), the Backend pauses model inference immediately. It extracts the code payload, spawns a heavily monitored isolated OS subprocess, captures the `stdout` and `stderr` (output and errors), and forcefully terminates runaway loops using strict timeouts.
+- **The Feedback Loop:** The captured output is wrapped in an `<observation>` block and appended to the context. The model is then resumed, allowing it to read its own output, realize if its code failed, and autonomously rewrite it until it passes.
 
 #### 🗂️ Vector DB & RAG (Retrieval-Augmented Generation)
-The Backend contains a built-in **FAISS-based Vector Database**. It can:
-- Index any documents, files, codebases, or user-provided data.
-- Perform semantic similarity search over the vector store in real time.
-- Inject the most relevant retrieved chunks into the model's context window automatically.
+- **Ingestion Pipeline:** When a user attaches a folder (`/folder src`), the Backend reads all text/code files. It uses a **Recursive Character Text Splitter** to chop the files into smaller overlapping chunks (e.g., 500 tokens).
+- **Embedding & Indexing:** Each chunk is passed through a lightweight Sentence Transformer model (e.g., `all-MiniLM-L6-v2`) which converts the text into a dense mathematical vector (an array of numbers). These vectors are stored in **FAISS (Facebook AI Similarity Search)**.
+- **Query Retrieval:** When the user asks a question, their prompt is also vectorized. The FAISS database calculates the **Cosine Similarity** between the prompt's vector and the document chunks, fetching only the Top-K most relevant chunks and injecting them into the LLM's context window. This allows the model to "know" entire codebases without overflowing its context limit.
 
-This means even a 1B model can "know" about a 100,000-line codebase — because the Backend finds and provides only the relevant parts on demand, instead of trying to fit everything in the context window at once.
+#### 🔍 Web Search & API Routing
+- **Search Mechanics:** Upon needing live data, the Backend halts inference and executes a headless query to search APIs (like DuckDuckGo or Google). It parses the raw DOM/HTML of the top 3 results, strips out the noise (ads/scripts), extracts the core text, and feeds a summarized factual snippet back to the model.
+- **Dynamic API Calling:** The Backend can parse REST API schemas dynamically. It allows the model to map natural language intents directly into structured HTTP GET/POST requests with appropriate headers and JSON payloads.
 
-#### 📋 State Tracking & Session Memory
-The Backend constantly records the session state: what the user said, what the model did, what tools were called, what files were modified, and when. This creates a persistent session log that allows:
-- Full undo/redo of AI actions.
-- Long-term memory across conversations.
-- Reproducible audit trails of everything the agent did.
+#### 📋 Sliding Window State & Session Memory
+- **Context Eviction Logic:** LLMs crash if they exceed their maximum context window (e.g., 8192 tokens). The Backend tracks every single token using a `tiktoken` tokenizer. When the session nears the limit, the Backend activates a **Sliding Window Algorithm**: it safely evicts the oldest middle-conversation pairs while permanently pinning the System Prompt and critical tool observations at the top.
+- **Undo/Redo Graph:** Every step (user input, model response, tool execution) is saved as an immutable node in a JSON state tree. Using `/undo` simply resets the pointer to the previous node and reverts associated filesystem changes.
 
 #### 🔄 Intelligent Orchestration
-For very complex tasks, the Backend's orchestrator dynamically routes work between the llama.cpp runtime (fast, lightweight) and the PyTorch runtime (deep, context-heavy) based on estimated token load vs. the model's context window size. Heavy RAG-augmented queries automatically get routed to the more capable runtime.
+- **Dynamic Routing:** For complex workflows, the Backend orchestrator monitors the token load. If a task requires massive context (e.g., summarizing 5 large files), the orchestrator dynamically routes the request to the PyTorch runtime; for rapid, short conversational bursts, it routes to the `llama.cpp` engine to save battery and compute cycles.
 
-> **The Big Picture:** Because all of this lives in the Backend — not the model — you can swap the underlying model at any time. A user can start a conversation with a 1B model for speed, switch mid-chat to a 70B model for a complex reasoning task using `/ml -s <modelname>`, and the entire agentic toolset carries over instantly. The model changes, but the agent's capabilities do not.
+> **The Big Picture:** Because all of this complex tool-calling and memory management lives in the Backend — not the model's weights — you can swap the underlying model at any time. A user can start a conversation with a 1B model for speed, switch mid-chat to a 70B model using `/ml -s <modelname>`, and the entire agentic toolset carries over instantly.
 
 ---
 
@@ -260,6 +249,44 @@ Every push to the `main` branch automatically triggers the LMMs build pipeline. 
 2. Produces **12 build artifacts** (one per component per platform).
 3. Publishes all artifacts directly to the **GitHub Releases** page.
 4. You can download the latest standalone binaries directly from the Releases page — no Git required.
+
+---
+
+## 🤝 Join the Revolution: Open Source Contributions & Learning
+
+LMMs is an **open-source AI ecosystem**, and we believe that the best software is built collaboratively. We are actively looking for passionate, serious developers, AI enthusiasts, and visionaries to join our community and contribute to the future of agentic AI. 
+
+Whether you are a seasoned software engineer or just starting your coding journey, there is a place for you here!
+
+### 🎓 Why Students Should Contribute to LMMs
+For computer science students and tech enthusiasts, contributing to LMMs is an unparalleled opportunity to bridge the gap between academic theory and real-world software engineering. 
+- **Hands-on AI Experience:** Work directly with cutting-edge Large Language Models (LLMs), RAG pipelines, autonomous agents, and vector databases (FAISS). 
+- **Build Your Portfolio:** Open-source contributions to a complex, multi-layered AI architecture like LMMs serve as a powerful resume builder that stands out to top tech recruiters.
+- **Learn Industry Best Practices:** Experience first-hand how an enterprise-grade AI architecture is designed, tested, and maintained at scale.
+- **Networking:** Collaborate with other passionate students, AI researchers, and professional developers globally.
+
+### 🌱 A Playground for Beginner Developers
+Are you a beginner looking for a welcoming open-source project to learn from? LMMs is the perfect training ground!
+- **Mentorship & Guidance:** Our community is extremely welcoming. We love guiding beginners through their first Pull Requests (PRs), code reviews, and architecture discussions.
+- **Modular Codebase:** The project is clearly separated into Engine, Backend, CLI, and GUI layers. You can pick the exact area you are most interested in—whether it's building a PyQt6 user interface or tweaking API routing in Python.
+- **"Good First Issues":** We regularly tag easy, beginner-friendly tasks that help you learn the ropes without feeling overwhelmed.
+- **AI-Powered Learning:** Using LMMs' autonomous coding and pair-programming capabilities (`/pair`, `/code`), you can actually use the AI itself to help you understand and contribute to the codebase!
+
+### 🎯 Who Can Join?
+**Anyone who is serious about learning and building can join us.** You do not need a PhD in Machine Learning to contribute. We need help in various areas:
+- **Python Developers** (Backend, CLI, Tool integration, Agentic loops)
+- **UI/UX Designers & PyQt6 Devs** (LMMs GUI IDE)
+- **Documentation Writers** (Tutorials, API references, SEO optimization, Guides)
+- **QA Testers & Bug Hunters** (Help us find edge cases and improve stability)
+- **AI Enthusiasts** (Prompt engineering, testing new GGUF/PyTorch models)
+
+### 🚀 How to Get Started?
+1. **Fork the Repository:** Click the 'Fork' button at the top of this GitHub page.
+2. **Clone & Install:** Follow the Installation guide above to get LMMs running locally.
+3. **Pick an Issue:** Check out our GitHub Issues tab, filter by `good first issue` or `help wanted`.
+4. **Submit a Pull Request:** Write your code, push to your fork, and open a PR! We will review it and guide you.
+
+*Join us today, and let's build the ultimate autonomous AI ecosystem together!*
 
 ---
 
