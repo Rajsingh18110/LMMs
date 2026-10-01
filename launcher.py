@@ -105,7 +105,11 @@ def main():
             branch = "cli"
             
         print(f"\033[96m[INFO]\033[0m Force Updating LMMs ecosystem from GitHub (branch: {branch})...")
-        subprocess.run(f"git fetch --all && git checkout {branch} && git pull origin {branch} && pip install -r requirements.txt", shell=True)
+        lmms_dir = os.path.expanduser("~/.lmms/LMMs")
+        if not os.path.exists(lmms_dir):
+            subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
+            
+        subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && pip install -r requirements.txt", shell=True)
         return
         
     if args[0] in ["--uninstall", "uninstall", "purge"]:
@@ -127,7 +131,12 @@ def main():
             config["installed_branch"] = branch
             save_config(config)
             
-            subprocess.run(f"git fetch --all && git checkout {branch} && git pull origin {branch} && {sys.executable} setup.py install", shell=True)
+            lmms_dir = os.path.expanduser("~/.lmms/LMMs")
+            if not os.path.exists(lmms_dir):
+                print("\033[96m[INFO]\033[0m Cloning repository...")
+                subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
+            
+            subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && {sys.executable} setup.py install", shell=True)
         else:
             print("Usage: LMMs install --all | --gui | --cli")
         return
