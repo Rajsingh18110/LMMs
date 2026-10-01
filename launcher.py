@@ -72,9 +72,15 @@ def uninstall_main():
     args = sys.argv[1:]
     if "-all" in args:
         if "--purge" in args:
-            print("\033[91m[WARNING]\033[0m Factory reset initiated. Please manually run: pip uninstall LMMs && rm -rf ~/.lmms")
+            print("\033[91m[WARNING]\033[0m Factory reset initiated. Deleting all data, models, and code...")
+            subprocess.run("rm -rf ~/.lmms", shell=True)
+            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
+            print("\033[92m[SUCCESS]\033[0m Total Purge complete. LMMs is fully uninstalled.")
         else:
-            print("\033[91m[WARNING]\033[0m Uninstalling LMMs (Data Safe). To proceed, run: pip uninstall LMMs")
+            print("\033[91m[WARNING]\033[0m Removing LMMs source code. User data (models, chats) is kept safe.")
+            subprocess.run("rm -rf ~/.lmms/LMMs", shell=True)
+            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
+            print("\033[92m[SUCCESS]\033[0m LMMs code uninstalled successfully.")
     else:
         print("Usage: LMMs-uninstall -all [--purge]")
 
