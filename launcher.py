@@ -44,12 +44,13 @@ def ensure_engine_running():
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
         
-        with open(log_file, "a") as f:
-            if getattr(sys, 'frozen', False):
-                p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
-            else:
-                cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
-                p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        f = open(log_file, "a")
+        if getattr(sys, 'frozen', False):
+            p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        else:
+            cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
+            p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        
         
         # Give it a moment to boot
         time.sleep(2)
@@ -97,9 +98,7 @@ def main():
 
     if args[0] in ["--update", "update"]:
         branch = config.get("installed_branch", "main")
-        if "--all" in args:
-            branch = "main"
-        elif "--gui" in args:
+        if "--gui" in args:
             branch = "gui"
         elif "--cli" in args:
             branch = "cli"
