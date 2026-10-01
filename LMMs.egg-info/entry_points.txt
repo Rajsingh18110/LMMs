@@ -1,0 +1,7 @@
+[console_scripts]
+LMMS = launcher:main
+LMMs = launcher:main
+LMMs-uninstall = launcher:uninstall_main
+lmms = launcher:main
+lmms-gui = gui:main
+lmms-uninstall = launcher:uninstall_main
