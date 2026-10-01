@@ -23,7 +23,7 @@ for cuda_path in cuda_paths:
             os.environ["LD_LIBRARY_PATH"] = f"{cuda_path}:{current_ld}" if current_ld else cuda_path
 
 def check_for_updates():
-    # Note: LMMs-builder handles updates via GitHub releases/zip now
+    # Note: LMMs handles updates natively via git pull now
     pass
 
 CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
