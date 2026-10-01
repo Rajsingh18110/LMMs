@@ -17,7 +17,7 @@ class BuildPyCommand(build_py):
 
 setup(
     name="LMMs",
-    version="2.0.1",
+    version="2.0.2",
     author="MarkanM Team (Developer: Raj Singh)",
     description="Local Multi-Model AI System — open style agent",
     long_description=open("README.md", encoding="utf-8").read(),
@@ -53,8 +53,11 @@ setup(
     entry_points={
         "console_scripts": [
             "LMMs=launcher:main",
+            "lmms=launcher:main",
+            "LMMS=launcher:main",
             "lmms-gui=gui:main",
             "LMMs-uninstall=launcher:uninstall_main",
+            "lmms-uninstall=launcher:uninstall_main",
         ],
     },
     cmdclass={
