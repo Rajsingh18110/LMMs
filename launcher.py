@@ -270,8 +270,13 @@ if __name__ == "__main__":
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] == "--internal-gui":
         sys.argv = [sys.argv[0]] + sys.argv[2:]
-        from gui import main as gui_main
-        gui_main()
+        try:
+            from gui import main as gui_main
+            gui_main()
+        except ImportError:
+            print("\n\033[91m[ERROR]\033[0m GUI component not found!")
+            print("It looks like you only installed the CLI or Engine. To use the GUI, please run:")
+            print("\033[96m  lmms install --gui\033[0m  (or \033[96mlmms install --all\033[0m for everything)\n")
         sys.exit(0)
         
     # multiprocessing support for windows exes
