@@ -149,14 +149,20 @@ python setup.py install
 
 | Command | Description |
 |---|---|
-| `lmms` | Launch your configured default interface |
-| `lmms set --cli` | Set CLI as your permanent default |
-| `lmms set --engine` | Set Engine as your permanent default |
-| `lmms stop` | Stop the LMMs background engine |
-| `lmms update` | Pull latest code and update LMMs from source |
-| `lmms install` | Rebuild and install LMMs from source |
-| `lmms uninstall` | Instructions to uninstall LMMs |
-| `lmms --help` | Show launcher help |
+| `LMMs` | Launch your configured default interface |
+| `LMMs --gui` <br> `LMMs --cli` <br> `LMMs --engine` | Directly runs the specified component |
+| `LMMs set --cli` | Set CLI as your permanent default |
+| `LMMs set --engine` | Set Engine as your permanent default |
+| `LMMs stop` | Stop the LMMs background engine |
+| `LMMs -check` | Hardware Profiler & Prerequisites check |
+| `LMMs install --all` | Install Entire Ecosystem (main branch) |
+| `LMMs install --gui` | Install GUI + Backend + Engine only (gui branch) |
+| `LMMs install --cli` | Install CLI + Backend + Engine only (cli branch) |
+| `LMMs update` | Smart update (auto-pulls from your installed branch) |
+| `LMMs update --all` | Force Update Entire Ecosystem from GitHub |
+| `LMMs-uninstall -all` | Remove Source Code (Data Safe) |
+| `LMMs-uninstall -all --purge` | Total Purge (Factory Reset) |
+| `LMMs --help` | Show launcher help |
 
 ---
 

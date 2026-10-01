@@ -67,6 +67,16 @@ def save_config(config):
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f)
 
+def uninstall_main():
+    args = sys.argv[1:]
+    if "-all" in args:
+        if "--purge" in args:
+            print("\033[91m[WARNING]\033[0m Factory reset initiated. Please manually run: pip uninstall LMMs && rm -rf ~/.lmms")
+        else:
+            print("\033[91m[WARNING]\033[0m Uninstalling LMMs (Data Safe). To proceed, run: pip uninstall LMMs")
+    else:
+        print("Usage: LMMs-uninstall -all [--purge]")
+
 def main():
     threading.Thread(target=check_for_updates, daemon=True).start()
     args = sys.argv[1:]
@@ -81,18 +91,45 @@ def main():
         launch("cli", args, ensure_engine=False)
         return
 
+    if args[0] in ["-check", "--check"]:
+        print("\033[96m[INFO]\033[0m Hardware Profiler & System Check: (Feature coming soon...)")
+        return
+
     if args[0] in ["--update", "update"]:
-        print("\033[96m[INFO]\033[0m Updating LMMs from source...")
-        subprocess.run("git pull origin main && pip install -r requirements.txt", shell=True)
+        branch = config.get("installed_branch", "main")
+        if "--all" in args:
+            branch = "main"
+        elif "--gui" in args:
+            branch = "gui"
+        elif "--cli" in args:
+            branch = "cli"
+            
+        print(f"\033[96m[INFO]\033[0m Force Updating LMMs ecosystem from GitHub (branch: {branch})...")
+        subprocess.run(f"git fetch --all && git checkout {branch} && git pull origin {branch} && pip install -r requirements.txt", shell=True)
         return
         
     if args[0] in ["--uninstall", "uninstall", "purge"]:
-        print("\033[91m[WARNING]\033[0m To completely remove LMMs, please run: pip uninstall LMMs")
+        uninstall_main()
         return
         
     if args[0] in ["--install", "install", "rebuild"]:
-        print("\033[96m[INFO]\033[0m Rebuilding LMMs from source...")
-        subprocess.run(f"{sys.executable} setup.py install", shell=True)
+        branch = None
+        if "--all" in args:
+            branch = "main"
+        elif "--gui" in args:
+            branch = "gui"
+        elif "--cli" in args:
+            branch = "cli"
+            
+        if branch:
+            print(f"\033[96m[INFO]\033[0m Installing LMMs ecosystem from source (branch: {branch})...")
+            # Save the installed branch state
+            config["installed_branch"] = branch
+            save_config(config)
+            
+            subprocess.run(f"git fetch --all && git checkout {branch} && git pull origin {branch} && {sys.executable} setup.py install", shell=True)
+        else:
+            print("Usage: LMMs install --all | --gui | --cli")
         return
         
     if args[0] in ["--stop", "stop"]:

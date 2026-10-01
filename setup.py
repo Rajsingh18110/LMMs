@@ -54,6 +54,7 @@ setup(
         "console_scripts": [
             "LMMs=launcher:main",
             "lmms-gui=gui:main",
+            "LMMs-uninstall=launcher:uninstall_main",
         ],
     },
     cmdclass={
