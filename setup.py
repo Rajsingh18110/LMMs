@@ -28,7 +28,7 @@ setup(
         "ollama", "rich", "duckduckgo-search", "playwright",
         "requests", "click", "prompt_toolkit", "openai",
         "anthropic", "pathspec", "plotext", "textual",
-        "huggingface_hub", "watchdog", "transformers", "airllm",
+        "huggingface_hub", "watchdog", "transformers",
 
         # GUI (PyQt6)
         "PyQt6", "PyQt6-Qt6", "PyQt6-sip", "qasync", "PyQt6-WebEngine", "python-lsp-server",
