@@ -462,45 +462,28 @@ class HexAgent:
             show_error(f"Cloud API error: {e}")
 
     def _run_airllm(self, prompt: str):
-        """Real AirLLM inference — layer-by-layer from disk."""
+        """Custom Air Engine inference — layer-by-layer from disk."""
         try:
-            from airllm import AutoModel
-        except ImportError:
-            show_error("airllm not installed. Run: pip install airllm")
+            from lmms.engine.air.runtime import AirRuntime
+        except ImportError as e:
+            show_error(f"Custom Air engine not found: {e}")
             return
 
-        show_info(f"⚡ AirLLM: {self.models.text_model} (layer-by-layer, low VRAM)")
+        show_info(f"⚡ Air Engine: {self.models.text_model} (Custom LMMs Air, low VRAM)")
 
-        if self.airllm_model is None or self.airllm_model_name != self.models.text_model:
-            show_info("Loading model from disk...")
-            try:
-                self.airllm_model = AutoModel.from_pretrained(self.models.text_model)
-                self.airllm_model_name = self.models.text_model
-            except Exception as e:
-                show_error(f"AirLLM load failed: {e}")
-                return
+        if not hasattr(self, 'air_runtime') or self.air_runtime is None:
+            show_info("Initializing Custom Air Engine...")
+            self.air_runtime = AirRuntime()
 
         try:
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(self.models.text_model)
             history = self.memory.get_history(self.session_id, limit=10)
-            full_prompt = self.system_prompt + "\n"
-            for m in history:
-                full_prompt += f"{m['role']}: {m['content']}\n"
-            full_prompt += f"assistant:"
-
-            input_ids = tokenizer(full_prompt, return_tensors="pt").input_ids
-            output = self.airllm_model.generate(
-                input_ids,
-                max_new_tokens=512,
-                use_cache=False,
-                do_sample=False,
-            )
-            text = tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True)
-            self.canvas.render(text, title="AirLLM")
+            messages = [{"role": "system", "content": self.system_prompt}] + history
+            
+            stream = self.air_runtime.chat(self.models.text_model, messages, stream=True)
+            text = stream_response(stream, model_name="Air Mode", mode=self.current_mode)
             self.memory.save(self.session_id, "assistant", text, "airllm")
         except Exception as e:
-            show_error(f"AirLLM inference error: {e}")
+            show_error(f"Air Engine inference error: {e}")
 
     def _run_dual(self, prompt: str):
         """Two-model debate: Qwen reasons, Gemma critiques."""

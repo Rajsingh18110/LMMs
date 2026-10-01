@@ -23,7 +23,7 @@ for cuda_path in cuda_paths:
             os.environ["LD_LIBRARY_PATH"] = f"{cuda_path}:{current_ld}" if current_ld else cuda_path
 
 def check_for_updates():
-    # Note: LMMs-builder handles updates via GitHub releases/zip now
+    # Note: LMMs handles updates natively via git pull now
     pass
 
 CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
@@ -44,12 +44,13 @@ def ensure_engine_running():
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
         
-        with open(log_file, "a") as f:
-            if getattr(sys, 'frozen', False):
-                p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
-            else:
-                cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
-                p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        f = open(log_file, "a")
+        if getattr(sys, 'frozen', False):
+            p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        else:
+            cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
+            p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
+        
         
         # Give it a moment to boot
         time.sleep(2)
@@ -67,6 +68,22 @@ def save_config(config):
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f)
 
+def uninstall_main():
+    args = sys.argv[1:]
+    if "-all" in args:
+        if "--purge" in args:
+            print("\033[91m[WARNING]\033[0m Factory reset initiated. Deleting all data, models, and code...")
+            subprocess.run("rm -rf ~/.lmms", shell=True)
+            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
+            print("\033[92m[SUCCESS]\033[0m Total Purge complete. LMMs is fully uninstalled.")
+        else:
+            print("\033[91m[WARNING]\033[0m Removing LMMs source code. User data (models, chats) is kept safe.")
+            subprocess.run("rm -rf ~/.lmms/LMMs", shell=True)
+            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
+            print("\033[92m[SUCCESS]\033[0m LMMs code uninstalled successfully.")
+    else:
+        print("Usage: LMMs-uninstall -all [--purge]")
+
 def main():
     threading.Thread(target=check_for_updates, daemon=True).start()
     args = sys.argv[1:]
@@ -81,10 +98,52 @@ def main():
         launch("cli", args, ensure_engine=False)
         return
 
+    if args[0] in ["-check", "--check"]:
+        print("\033[96m[INFO]\033[0m Hardware Profiler & System Check: (Feature coming soon...)")
+        return
+
     if args[0] in ["--update", "update"]:
-        print("\033[96m[INFO]\033[0m LMMs updates are now managed by the LMMs-builder.")
-        print("Running: LMMs-builder update --all")
-        subprocess.run(["LMMs-builder", "update", "--all"])
+        branch = config.get("installed_branch", "main")
+        if "--gui" in args:
+            branch = "gui"
+        elif "--cli" in args:
+            branch = "cli"
+            
+        print(f"\033[96m[INFO]\033[0m Force Updating LMMs ecosystem from GitHub (branch: {branch})...")
+        lmms_dir = os.path.expanduser("~/.lmms/LMMs")
+        if not os.path.exists(lmms_dir):
+            subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
+            
+        subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && pip install -r requirements.txt", shell=True)
+        return
+        
+    if args[0] in ["--uninstall", "uninstall", "purge"]:
+        uninstall_main()
+        return
+        
+    if args[0] in ["--install", "install", "rebuild"]:
+        branch = None
+        if "--all" in args:
+            branch = "main"
+        elif "--gui" in args:
+            branch = "gui"
+        elif "--cli" in args:
+            branch = "cli"
+            
+        if branch:
+            print(f"\033[96m[INFO]\033[0m Installing LMMs ecosystem from source (branch: {branch})...")
+            # Save the installed branch state
+            config["installed_branch"] = branch
+            save_config(config)
+            
+            lmms_dir = os.path.expanduser("~/.lmms/LMMs")
+            if not os.path.exists(lmms_dir):
+                print("\033[96m[INFO]\033[0m Cloning repository...")
+                subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
+            
+            subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && {sys.executable} setup.py install", shell=True)
+        else:
+            print("Usage: LMMs install --all | --gui | --cli")
         return
         
     if args[0] in ["--stop", "stop"]:
