@@ -17,7 +17,7 @@ class BuildPyCommand(build_py):
 
 setup(
     name="LMMs",
-    version="2.0.2",
+    version="2.0.4",
     author="MarkanM Team (Developer: Raj Singh)",
     description="Local Multi-Model AI System — open style agent",
     long_description=open("README.md", encoding="utf-8").read(),
