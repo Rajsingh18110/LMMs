@@ -20,6 +20,8 @@ setup(
     version="2.0.0",
     author="MarkanM Team (Developer: Raj Singh)",
     description="Local Multi-Model AI System — open style agent",
+    long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
     packages=find_packages(),
     install_requires=[
         # Core CLI & Agent

@@ -153,6 +153,9 @@ python setup.py install
 | `lmms set --cli` | Set CLI as your permanent default |
 | `lmms set --engine` | Set Engine as your permanent default |
 | `lmms stop` | Stop the LMMs background engine |
+| `lmms update` | Pull latest code and update LMMs from source |
+| `lmms install` | Rebuild and install LMMs from source |
+| `lmms uninstall` | Instructions to uninstall LMMs |
 | `lmms --help` | Show launcher help |
 
 ---

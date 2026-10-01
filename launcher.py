@@ -82,9 +82,17 @@ def main():
         return
 
     if args[0] in ["--update", "update"]:
-        print("\033[96m[INFO]\033[0m LMMs updates are now managed by the LMMs-builder.")
-        print("Running: LMMs-builder update --all")
-        subprocess.run(["LMMs-builder", "update", "--all"])
+        print("\033[96m[INFO]\033[0m Updating LMMs from source...")
+        subprocess.run("git pull origin main && pip install -r requirements.txt", shell=True)
+        return
+        
+    if args[0] in ["--uninstall", "uninstall", "purge"]:
+        print("\033[91m[WARNING]\033[0m To completely remove LMMs, please run: pip uninstall LMMs")
+        return
+        
+    if args[0] in ["--install", "install", "rebuild"]:
+        print("\033[96m[INFO]\033[0m Rebuilding LMMs from source...")
+        subprocess.run(f"{sys.executable} setup.py install", shell=True)
         return
         
     if args[0] in ["--stop", "stop"]:
