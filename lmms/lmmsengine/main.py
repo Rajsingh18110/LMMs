@@ -694,8 +694,9 @@ def main():
                         if not runtime.load_model(path):
                             sys.exit(1)
                         
-                    print(f"\033[92mWelcome on LMMs engine powerd by MarkanM\033[0m")
-                    print(f"\033[96mfor more details visit \033]8;;https://lmms.markanm.com\033\\https://lmms.markanm.com\033]8;;\033\\\033[0m\n")
+                    print(f"\033[92mWelcome to LMMs engine powered by MarkanM\033[0m")
+                    print(f"\033[96mAPI Endpoint: \033[93mhttp://lmms:11435\033[0m (Localhost)")
+                    print(f"\033[96mFor more details visit \033]8;;https://lmms.markanm.com\033\\https://lmms.markanm.com\033]8;;\033\\\033[0m\n")
                     
                     # Multimodal Auto-Detect UI
                     if modality_vc:
