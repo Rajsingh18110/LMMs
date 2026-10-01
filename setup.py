@@ -48,6 +48,9 @@ setup(
         
         # Utilities
         "keyring", "debugpy>=1.8.0",
+
+        # Voice & Audio
+        "SpeechRecognition", "PyAudio", "gTTS", "pygame",
     ],
     py_modules=["launcher"],
     entry_points={
