@@ -188,8 +188,27 @@ These commands are typed inside an active LMMs CLI chat session.
 | `/undo` | Undo the last AI action or file edit |
 | `/redo` | Redo the last undone action |
 | `/exit` | Exit the LMMs CLI session |
+| `/reboot` | Reboot the LMMs engine and exit the session |
+| `/mic` | Record audio from the microphone and transcribe it as input |
+| `/vision` (or `/image`) | Switch to VISION mode to analyze images with multimodal models |
+| `/research` | Switch to RESEARCH mode for in-depth web search and data aggregation |
+| `/read <file>` | Quickly read a file's contents into the context |
+| `/task` | Manage background tasks or subagent goals |
+| `/git` | Execute safe Git operations through the agent |
+| `/scope init\|status` | Manage strict workspace boundaries and check scope rules |
+| `/tools list` | List all available system and terminal tools for the agent |
+| `/report` | Generate a detailed security audit report of AI actions |
+| `/checkpoint` | Save a manual checkpoint of the current session state |
+| `/checkpoints` | List all saved session checkpoints |
+| `/rollback` | Rollback the session and file state to a previous checkpoint |
+| `/status` | Check the overall system health and engine status |
+| `/doctor` | Run automated diagnostics and repair engine issues |
+| `/pair` | Enter Pair Programming mode for interactive coding |
+| `/perm <level>` | Change the permission level for AI tool execution |
+| `/agent` | Spawn and manage autonomous subagents |
+| `/orchestrate` | Manage multi-agent orchestration for complex workflows |
 
-> **Note:** Only the commands listed above are currently implemented and functional. Legacy or planned commands that are not yet available have been removed from this reference to avoid confusion.
+> **Note:** Only the commands listed above are currently implemented and functional. Legacy or planned commands (e.g. `/cyber`) that are not yet fully available have been removed or are in development.
 
 ---
 
