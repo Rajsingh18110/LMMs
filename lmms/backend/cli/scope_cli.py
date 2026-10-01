@@ -22,7 +22,7 @@ def cmd_scope_init(workspace: str):
     scope = init_default_scope()
     scope["engagement_name"] = Prompt.ask("Engagement Name", default=scope["engagement_name"])
     
-    targets_str = Prompt.ask("Authorized Targets (comma separated IPs/CIDRs)", default="")
+    targets_str = Prompt.ask("Authorized Targets (comma separated IPs, CIDRs, or Domains)", default="")
     if targets_str:
         scope["authorized_targets"] = [t.strip() for t in targets_str.split(",") if t.strip()]
         

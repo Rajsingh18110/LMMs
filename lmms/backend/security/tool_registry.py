@@ -18,7 +18,7 @@ registry = ToolRegistry()
 
 def register_default_tools():
     # Filesystem
-    for t in ["cat", "head", "tail", "less", "find", "grep", "sed", "awk", "file", "stat", "du", "df", "ls", "pwd"]:
+    for t in ["cat", "head", "tail", "less", "find", "grep", "sed", "awk", "file", "stat", "du", "df", "ls", "pwd", "echo", "printf", "tee", "cut", "sort", "uniq", "wc", "xargs", "jq", "tar", "unzip", "zip", "gzip"]:
         registry.register(ToolDefinition(name=t, category="filesystem", risk_level="safe"))
         
     for t in ["cp", "mv", "mkdir", "touch", "rm"]:
@@ -60,15 +60,17 @@ def register_default_tools():
     registry.register(ToolDefinition(name="terminal.run", category="internal", risk_level="medium"))
     registry.register(ToolDefinition(name="files.write", category="internal", risk_level="medium"))
     registry.register(ToolDefinition(name="files.read", category="internal", risk_level="safe"))
+    registry.register(ToolDefinition(name="files.diagnose", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.open_url", category="internal", risk_level="medium", requires_network=True))
-    registry.register(ToolDefinition(name="browser.click_element", category="internal", risk_level="medium", requires_network=True))
-    registry.register(ToolDefinition(name="browser.fill_form", category="internal", risk_level="medium", requires_network=True))
+    registry.register(ToolDefinition(name="browser.click_element", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
+    registry.register(ToolDefinition(name="browser.fill_form", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
     registry.register(ToolDefinition(name="browser.scrape", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="browser.scroll", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.open_authenticated", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
     registry.register(ToolDefinition(name="web_search", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="vector_db.search", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="security.generate_report", category="internal", risk_level="safe"))
+    registry.register(ToolDefinition(name="memory.update_scratchpad", category="internal", risk_level="safe"))
 
 # Initialize default tools
 register_default_tools()

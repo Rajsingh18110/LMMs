@@ -1,4 +1,4 @@
-from lmms.backend.main import extract_active_model_from_stats, should_force_tool_mode
+from lmms.backend.main import extract_active_model_from_stats, scope_denial_reply, should_force_tool_mode
 
 
 def test_extract_active_model_from_engine_stats():
@@ -19,6 +19,15 @@ def test_explicit_agent_tasks_should_force_tool_mode():
     assert should_force_tool_mode("crawl4ai this URL and summarize it") is True
     assert should_force_tool_mode("search the web for latest AI news") is True
     assert should_force_tool_mode("read /etc/hosts and summarize it") is True
+
+
+def test_scope_denial_reply_requires_explicit_user_authorization():
+    reply = scope_denial_reply("[SYSTEM_DENY] Target 'readxhub.in' is NOT in authorized_targets.")
+
+    assert "will not retry" in reply
+    assert "/scope init" in reply
+    assert "/scope activate" in reply
+    assert "readxhub.in" in reply
 
 
 def test_runtime_strips_stray_reasoning_when_thinking_disabled():

@@ -101,7 +101,7 @@ class PullRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     model_name: str
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, Any]]
     stream: bool = True
     mode: Optional[str] = "deep"
     think: Optional[bool] = True

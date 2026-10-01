@@ -127,6 +127,7 @@ def should_force_tool_mode(prompt: str) -> bool:
         "terminal.run",
         "files.read",
         "files.write",
+        "files.diagnose",
         "vector_db.search",
         "analyze this repo",
         "scan",
@@ -158,6 +159,18 @@ def should_force_tool_mode(prompt: str) -> bool:
         return True
 
     return False
+
+
+def scope_denial_reply(reason: str) -> str:
+    """Return the final user-facing message for a scope authorization boundary."""
+    return (
+        "I stopped because this external action is outside the active authorized scope. "
+        "I will not retry the site or attempt to bypass the restriction.\n\n"
+        "To authorize a legitimate site action, use the LMMS CLI command `/scope init` "
+        "in the active workspace, add the exact domain, enable network actions, and then "
+        "use `/scope activate`. After you explicitly authorize it, submit the request again.\n\n"
+        f"Policy detail: {reason}"
+    )
 
 
 def check_engine_health():
@@ -390,11 +403,18 @@ class ContextManager:
         print(f"\n[dim]Context limit nearing (Tokens: {current_tokens}/{self.usable_context}), pruning old observations...[/dim]")
         
         while current_tokens > self.usable_context:
-            obs_idx = -1
-            for i, m in enumerate(messages):
-                if m["role"] == "user" and "<observation>" in str(m.get("content", "")):
-                    obs_idx = i
+            obs_indices = [i for i, m in enumerate(messages) if m["role"] == "user" and "<observation>" in str(m.get("content", ""))]
+            if len(obs_indices) <= 1:
+                # We can't safely extract state from the last observation, but we MUST reduce tokens.
+                # Force pop the oldest message (which could be user or assistant)
+                if len(messages) > 1:
+                    messages.pop(0)
+                    current_tokens = sum(count_tokens_fn(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in messages)
+                    continue
+                else:
                     break
+                
+            obs_idx = obs_indices[0]
                     
             if obs_idx != -1:
                 content = messages[obs_idx]["content"]
@@ -431,9 +451,9 @@ class CapabilityManager:
         if "web" in self.active_capabilities:
             prompt += (
                 "## Browsing Private Sites & Authentication\n"
-                "If the user asks you to fetch data from a private or authenticated website, DO NOT immediately ask for credentials.\n"
-                "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
-                "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively.\n\n"
+                "If you need to interact with a website on behalf of the user using their identity (e.g. posting, logging in), DO NOT ask for credentials. You MUST immediately use `browser.open_authenticated`. "
+                "If you are just fetching public data, use `browser.open_url`.\n"
+                "If you receive a '[SYSTEM_DENY] Target or Network blocked' error, YOU MUST instruct the user to run EXACTLY `/scope init` to authorize the domain before retrying.\n\n"
             )
         return prompt
         
@@ -449,6 +469,46 @@ class CapabilityManager:
         return "\n".join(filtered)
 
 
+
+
+# ─── Persistent Session State ──────────────────────────────────────────────────
+class SessionState:
+    """Save/restore CLI session across restarts."""
+    PATH = os.path.expanduser("~/.lmms/config/session_state.json")
+
+    DEFAULTS = {
+        "model":       "None",
+        "workspace":   "None",
+        "mode":        "/fast",
+        "perms":       "medium",
+        "pair":        "None",
+        "show_thoughts": False,
+        "planning_mode": False,
+    }
+
+    @classmethod
+    def load(cls) -> dict:
+        try:
+            if os.path.exists(cls.PATH):
+                with open(cls.PATH, "r") as f:
+                    data = json.load(f)
+                # Merge with defaults for any missing keys
+                return {**cls.DEFAULTS, **data}
+        except Exception:
+            pass
+        return dict(cls.DEFAULTS)
+
+    @classmethod
+    def save(cls, **kwargs):
+        try:
+            os.makedirs(os.path.dirname(cls.PATH), exist_ok=True)
+            current = cls.load()
+            current.update(kwargs)
+            with open(cls.PATH, "w") as f:
+                json.dump(current, f, indent=2)
+        except Exception:
+            pass
+# ───────────────────────────────────────────────────────────────────────────────
 
 def run_cli():
     import nest_asyncio
@@ -524,12 +584,32 @@ def run_cli():
         except Exception:
             pass
 
-    current_pair = "None"
-    current_mode = "/fast"
-    current_permission_level = "medium"
-    show_thoughts = False
-    planning_mode = False
+    # ── Load persistent session state ─────────────────────────
+    _ss = SessionState.load()
+    current_pair             = _ss.get("pair",           "None")
+    current_mode             = _ss.get("mode",           "/fast")
+    current_permission_level = _ss.get("perms",          "medium")
+    show_thoughts            = _ss.get("show_thoughts",  False)
+    planning_mode            = _ss.get("planning_mode",  False)
     checkpoint_created_this_session = False
+    
+    # Restore workspace from session state if not already set
+    if current_workspace == "None" and _ss.get("workspace", "None") != "None":
+        _saved_ws = _ss["workspace"]
+        if os.path.exists(_saved_ws):
+            current_workspace = _saved_ws
+            ConfigManager().set("workspace_dir", current_workspace)
+    
+    if _ss.get("model", "None") != "None" and current_model == "None":
+        current_model = _ss["model"]
+    
+    # console.print(
+    #     f"[dim]↩️  Session restored: model=[cyan]{current_model}[/cyan] "
+    #     f"mode=[cyan]{current_mode}[/cyan] "
+    #     f"perms=[cyan]{current_permission_level}[/cyan] "
+    #     f"workspace=[cyan]{current_workspace}[/cyan][/dim]"
+    # )
+    # ────────────────────────────────────────────────────────────
 
     def visible_cli_reply(text: str) -> str:
         display = text or ""
@@ -579,7 +659,10 @@ def run_cli():
         perm = permission_manager.check_permission(req)
         
         if not perm.allowed:
-            console.print(f"[bold red]Tool Execution Denied:[/bold red] {perm.reason}")
+            if "[SYSTEM_DENY]" in perm.reason:
+                console.print(f"[bold red]Domain Not Authorized:[/bold red] {perm.reason}")
+            else:
+                console.print(f"[bold red]Tool Execution Denied:[/bold red] {perm.reason}")
             # Evidence recording handled in execution loop or executor
             return False
             
@@ -708,6 +791,7 @@ def run_cli():
         "/pair": "Manage agent pairs",
         "/cl": "Show command list",
         "/stop": "Stop the engine",
+        "/cyber": "Toggle strict Cybersecurity (attack) mode",
         "/scope": "Manage authorized security scopes",
         "/tools": "View security tool status and permissions",
         "/report": "Generate security engagement report",
@@ -760,11 +844,13 @@ def run_cli():
                         pass
                 return
 
-            if word.startswith("/") or document.text.startswith("/"):
+            if document.text.startswith("/"):
+                # Use the full text for matching so the slash isn't stripped by word boundaries
+                search_cmd = document.text.lstrip().lower()
                 for cmd, desc in command_dict.items():
-                    if cmd.startswith(word):
-                        # Truncate desc if needed
-                        yield Completion(cmd, start_position=-len(word), display_meta=desc[:60])
+                    if cmd.startswith(search_cmd):
+                        yield Completion(cmd, start_position=-len(search_cmd), display_meta=desc[:60])
+                return
 
     from prompt_toolkit.completion import ThreadedCompleter
 
@@ -778,6 +864,27 @@ def run_cli():
             
     threading.Thread(target=_health_poller, daemon=True).start()
 
+    from prompt_toolkit.key_binding import KeyBindings
+    kb = KeyBindings()
+    
+    @kb.add('f4')
+    def _(event):
+        event.app.current_buffer.text = '/voice'
+        event.app.current_buffer.validate_and_handle()
+
+    @kb.add('c-a')
+    def _(event):
+        # Select all text
+        b = event.app.current_buffer
+        b.cursor_position = 0
+        b.start_selection()
+        b.cursor_position = len(b.text)
+
+    @kb.add('c-z')
+    def _(event):
+        # Undo last action
+        event.app.current_buffer.undo()
+
     def get_bottom_toolbar():
         is_online = _cached_engine_health[0]
         status_color = "ansigreen" if is_online else "ansired"
@@ -788,13 +895,15 @@ def run_cli():
             f'<ansigray>Model:</ansigray> <ansigreen>{current_model}</ansigreen> │ '
             f'<ansigray>Mode:</ansigray> <ansicyan>{current_mode}</ansicyan> │ '
             f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
-            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> '
+            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> │ '
+            f'<ansiyellow>[F4]</ansiyellow> <ansigray>🎙️ Voice</ansigray> '
         )
 
     session = PromptSession(
         completer=ThreadedCompleter(CommandCompleter()),
         complete_while_typing=True,
         bottom_toolbar=get_bottom_toolbar,
+        key_bindings=kb,
         reserve_space_for_menu=8
     )
     # ----------------------------------------
@@ -803,6 +912,7 @@ def run_cli():
     cap_manager = CapabilityManager()
 
     while True:
+        voice_mode_active = False
         try:
             with patch_stdout():
                 cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
@@ -811,31 +921,87 @@ def run_cli():
             if not cmd:
                 continue
 
-            if cmd == "/mic":
+            # === INSTANT IMAGE PREVIEW ===
+            _img_pat = r"([~/][^\t\n]+?\.(?:png|jpg|jpeg|webp))(?=\s|$)"
+            _img_m = __import__("re").findall(_img_pat, cmd, __import__("re").IGNORECASE)
+            for _raw in _img_m:
+                _raw = _raw if isinstance(_raw, str) else _raw[0]
+                _exp = __import__("os").path.expanduser(_raw.strip())
+                if __import__("os").path.exists(_exp):
+                    import shutil as _sh
+                    _chafa = _sh.which("chafa")
+                    if _chafa:
+                        try:
+                            _tw = _sh.get_terminal_size((80,24)).columns
+                            _iw = min(_tw-2, 100)
+                            sys.stdout.write(f"\033[1;36m\u250c\u2500 \U0001F5BC  {__import__('os').path.basename(_exp)}\033[0m\n")
+                            _res = subprocess.run(
+                                [_chafa, "--format", "symbols", "--colors", "256", "--size", f"{_iw}x{min(24,_iw//3)}", _exp],
+                                capture_output=True, text=True, timeout=8
+                            )
+                            if _res.returncode == 0:
+                                for _ln in _res.stdout.split("\n"):
+                                    if _ln: sys.stdout.write("  "+_ln+"\n")
+                                sys.stdout.flush()
+                            _border = "\033[1;36m\u2514" + "\u2500"*min(_iw,60) + "\033[0m"
+                            sys.stdout.write(_border + "\n")
+                        except Exception as _ve:
+                            sys.stdout.write(f"Preview error: {_ve}\n")
+                    else:
+                        sys.stdout.write(f"\U0001F4CE {_exp}\n  Tip: sudo apt install chafa\n")
+                    break
+            # === END IMAGE PREVIEW ===
+
+
+
+            if cmd == "/mic" or cmd == "/voice":
                 import platform
                 if platform.system() == "Windows":
                     console.print("[yellow]Microphone recording natively on Windows is not yet supported. Please use text input.[/yellow]")
                     continue
                     
-                console.print("[bold red]🎙️  Recording from Mic... Press ENTER to stop.[/bold red]")
                 import speech_recognition as sr
+                import select
+                import termios
+                import tty
+                from lmms.backend.voice import VoiceSession
+                
+                vsession = VoiceSession()
+                vsession.start_animation("Listening... (Press ENTER to stop)")
+                
                 p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
+                
+                old_settings = termios.tcgetattr(sys.stdin)
                 try:
-                    input() # Wait for user to press Enter again
-                except EOFError:
-                    pass
+                    tty.setcbreak(sys.stdin.fileno())
+                    while True:
+                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                            c = sys.stdin.read(1)
+                            if c == '\n' or c == '\r':
+                                break
+                finally:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    
                 p.terminate()
                 p.wait()
-                console.print("[dim]Transcribing audio...[/dim]")
+                
+                vsession.update_status("Thinking...")
+                
                 r = sr.Recognizer()
                 try:
                     with sr.AudioFile("/tmp/lmms_mic.wav") as source:
                         audio_data = r.record(source)
                     cmd = r.recognize_google(audio_data)
-                    console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
-                except Exception as e:
-                    console.print(f"[red]Could not understand audio: {e}[/red]")
+                except Exception:
+                    vsession.stop_animation()
+                    console.print("[red]Could not understand audio.[/red]")
                     continue
+                    
+                # Do NOT stop the animation yet! We need the threads for TTS streaming.
+                vsession.set_heard(cmd)   # Show what user said on screen
+                vsession.update_status(f"Thinking...")
+                
+                voice_mode_active = True
             elif cmd.strip("'\"").endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a")):
                 file_path = cmd.strip("'\"")
                 import speech_recognition as sr
@@ -860,6 +1026,14 @@ def run_cli():
 
             parts = cmd.split()
             base_cmd = parts[0]
+            # Detect if cmd is an image path (local or URL) → send to chat, not slash-command
+            _IMG_EXTS = re.compile(r'\.(png|jpg|jpeg|webp)($|\s|\?)', re.IGNORECASE)
+            _direct_to_chat = (
+                bool(_IMG_EXTS.search(cmd)) and (
+                    cmd.strip()[0] in ('/', '~') or
+                    cmd.strip().startswith(('http://', 'https://'))
+                )
+            )
 
             if cmd in ["exit", "quit", "clear", "/reboot", "reboot"]:
                 if cmd == "clear":
@@ -888,11 +1062,13 @@ def run_cli():
             elif base_cmd == "/plan":
                 planning_mode = True
                 current_mode = "/plan"
+                SessionState.save(mode=current_mode, planning_mode=True)
                 console.print("[bold cyan]Planning mode enabled. LMMs can inspect, but cannot edit or run mutating commands. Use /apply when you approve the plan.[/bold cyan]")
 
             elif base_cmd == "/apply":
                 planning_mode = False
                 current_mode = "/code"
+                SessionState.save(mode=current_mode, planning_mode=False)
                 checkpoint_created_this_session = False
                 console.print("[bold green]Apply mode enabled. LMMs will show a diff and ask before each file change.[/bold green]")
 
@@ -925,6 +1101,7 @@ def run_cli():
   [green]/status, /doctor[/green]         System and project health checks
 
 [bold magenta]🛡️  Workspace & Security[/bold magenta]
+  [green]/cyber[/green]                  Toggle strict Cybersecurity (attack) mode scoping
   [green]/scope init|status[/green]       Manage strict workspace boundaries
   [green]/tools list[/green]              View allowed system/terminal tools
   [green]/report[/green]                  Generate security audit of AI actions
@@ -985,6 +1162,7 @@ def run_cli():
                     if folder_path and os.path.exists(folder_path):
                         current_workspace = os.path.abspath(folder_path)
                         ConfigManager().set("workspace_dir", current_workspace)
+                        SessionState.save(workspace=current_workspace)
                         ws_id = str(uuid.uuid4())[:8]
                         workspaces[ws_id] = {"path": current_workspace, "created_at": str(datetime.now())}
                         with open(WORKSPACES_FILE, "w") as f: json.dump(workspaces, f)
@@ -1020,12 +1198,14 @@ def run_cli():
                             ws_id = str(uuid.uuid4())[:8]
                             workspaces[ws_id] = {"path": target, "created_at": str(datetime.now())}
                             with open(WORKSPACES_FILE, "w") as f: json.dump(workspaces, f)
+                        SessionState.save(workspace=current_workspace)
                         ConfigManager().set("workspace_dir", current_workspace)
                         console.print(f"[green]Workspace Opened:[/green] {current_workspace}")
                         if not os.path.exists(os.path.join(current_workspace, ".git")):
                             subprocess.run(["git", "init"], cwd=current_workspace, capture_output=True)
                     elif sub_cmd == "close":
                         current_workspace = "None"
+                        SessionState.save(workspace="None")
                         console.print("[green]Workspace closed.[/green]")
                     elif sub_cmd == "delete" and len(parts) > 2:
                         wid = parts[2]
@@ -1037,13 +1217,17 @@ def run_cli():
                             console.print(f"[red]Workspace ID {wid} not found.[/red]")
                     elif sub_cmd == "restore" and len(parts) > 2:
                         # Restore logic using Git
-                        console.print(f"[dim]Executing git checkout {parts[2]} in {current_workspace}[/dim]")
                         if current_workspace != "None":
-                            res = subprocess.run(["git", "checkout", parts[2]], cwd=current_workspace, capture_output=True, text=True)
-                            if res.returncode == 0:
-                                console.print("[green]Workspace restored successfully.[/green]")
+                            ans = session.prompt(HTML(f'<ansired>Warning: Restoring to {parts[2]} will overwrite uncommitted changes in {current_workspace}. Continue? (y/n): </ansired>')).strip().lower()
+                            if ans == 'y':
+                                console.print(f"[dim]Executing git checkout {parts[2]} in {current_workspace}[/dim]")
+                                res = subprocess.run(["git", "checkout", parts[2]], cwd=current_workspace, capture_output=True, text=True)
+                                if res.returncode == 0:
+                                    console.print("[green]Workspace restored successfully.[/green]")
+                                else:
+                                    console.print(f"[red]Failed to restore: {res.stderr}[/red]")
                             else:
-                                console.print(f"[red]Failed to restore: {res.stderr}[/red]")
+                                console.print("[dim]Restore aborted.[/dim]")
                         else:
                             console.print("[red]No active workspace to restore.[/red]")
                 else:
@@ -1130,6 +1314,14 @@ def run_cli():
                         console.print("[red]Usage: /scope init|status|validate|activate|complete|reset|export[/red]")
                 else:
                     cmd_scope_status(current_workspace)
+
+            elif base_cmd == "/cyber":
+                current_mode = getattr(permission_manager, "CYBER_MODE", False)
+                permission_manager.CYBER_MODE = not current_mode
+                if permission_manager.CYBER_MODE:
+                    console.print("[bold red]Cybersecurity Mode (Attack Scoping) ENABLED.[/bold red] Strict scope validation will now apply.")
+                else:
+                    console.print("[bold green]Cybersecurity Mode DISABLED.[/bold green] Normal workflow rules apply (no strict scoping).")
 
             elif base_cmd == "/tools":
                 if len(parts) > 1 and parts[1] in ["status", "list", "permissions"]:
@@ -1290,6 +1482,7 @@ def run_cli():
 
             elif base_cmd in ["/fast", "/deep", "/code", "/research", "/vision", "/image"]:
                 current_mode = base_cmd
+                SessionState.save(mode=current_mode, planning_mode=planning_mode)
                 console.print(f"[bold green]AI Mode switched to: {current_mode}[/bold green]")
                 
             elif base_cmd in ["/explain", "/summarize", "/benchmark", "/memory", "/router"]:
@@ -1347,6 +1540,23 @@ def run_cli():
                                 chat_history.clear()
                                 chat_history.extend(data.get("messages", []))
                                 console.print(f"[bold green]Loaded chat: {current_chat_name}[/bold green]")
+                                console.print("="*50)
+                                for msg in chat_history:
+                                    if msg["role"] == "user":
+                                        content = msg.get("content", "")
+                                        if isinstance(content, list):
+                                            content_str = " ".join([c.get("text", "") for c in content if c.get("type") == "text"])
+                                        else:
+                                            content_str = str(content)
+                                        console.print(f"[bold blue]You:[/bold blue] {content_str}")
+                                    elif msg["role"] == "assistant":
+                                        content = msg.get("content", "")
+                                        if isinstance(content, list):
+                                            content_str = " ".join([c.get("text", "") for c in content if c.get("type") == "text"])
+                                        else:
+                                            content_str = str(content)
+                                        console.print(f"[bold magenta]{current_model}:[/bold magenta] {content_str}")
+                                console.print("="*50)
                                 found = True
                                 break
                             except:
@@ -1379,6 +1589,7 @@ def run_cli():
                             if r.status_code == 200:
                                 current_model = match
                                 console.print(f"[bold green]Active model switched to: {current_model}[/bold green]")
+                                SessionState.save(model=current_model)
                                 # Save default model
                                 try:
                                     config_path = os.path.expanduser("~/.lmms/config.json")
@@ -1423,6 +1634,7 @@ def run_cli():
                             if r.status_code == 200:
                                 current_model = selected_model
                                 console.print(f"[bold green]✓ Active model switched to: {current_model}[/bold green]")
+                                SessionState.save(model=current_model)
                             else:
                                 console.print(f"[red]Failed to load: {r.json()}[/red]")
                         except Exception as e:
@@ -1464,6 +1676,7 @@ def run_cli():
                         pair_id = parts[1]
                         if pair_id in pairs:
                             current_pair = pair_id
+                            SessionState.save(pair=current_pair)
                             console.print(f"[bold green]✓ Paired with {pair_id}![/bold green]")
                         else:
                             console.print(f"[red]Pair ID {pair_id} not found.[/red]")
@@ -1474,6 +1687,7 @@ def run_cli():
                 level = parts[1].lower()
                 if level in ["low", "medium", "full"]:
                     current_permission_level = level
+                    SessionState.save(perms=current_permission_level)
                     console.print(f"[green]Permission level set to: {current_permission_level}[/green]")
                 else:
                     console.print("[red]Invalid permission level. Use low, medium, or full.[/red]")
@@ -1541,35 +1755,49 @@ def run_cli():
                     target = parts[2]
                     if base_cmd == "/undo":
                         if flag in ["-f", "-wf"]:
-                            res = subprocess.run(["git", "checkout", "HEAD~1", "--", target], cwd=current_workspace, capture_output=True, text=True)
-                            if res.returncode == 0:
-                                console.print(f"[green]Undid last change for {target}[/green]")
+                            ans = session.prompt(HTML(f'<ansired>Warning: This will overwrite uncommitted changes in {target}. Continue? (y/n): </ansired>')).strip().lower()
+                            if ans == 'y':
+                                res = subprocess.run(["git", "checkout", "HEAD~1", "--", target], cwd=current_workspace, capture_output=True, text=True)
+                                if res.returncode == 0:
+                                    console.print(f"[green]Undid last change for {target}[/green]")
+                                else:
+                                    console.print(f"[red]Undo failed: {res.stderr}[/red]")
                             else:
-                                console.print(f"[red]Undo failed: {res.stderr}[/red]")
+                                console.print("[dim]Undo aborted.[/dim]")
                         else:
                             console.print("Usage: /undo -f <file> or /undo -wf <folder>")
                     elif base_cmd == "/redo":
                         # Simplistic redo logic for AI rollback context
                         if flag in ["-f", "-wf"]:
-                            res = subprocess.run(["git", "checkout", "HEAD", "--", target], cwd=current_workspace, capture_output=True, text=True)
-                            if res.returncode == 0:
-                                console.print(f"[green]Redid last change for {target}[/green]")
+                            ans = session.prompt(HTML(f'<ansired>Warning: This will overwrite uncommitted changes in {target}. Continue? (y/n): </ansired>')).strip().lower()
+                            if ans == 'y':
+                                res = subprocess.run(["git", "checkout", "HEAD", "--", target], cwd=current_workspace, capture_output=True, text=True)
+                                if res.returncode == 0:
+                                    console.print(f"[green]Redid last change for {target}[/green]")
+                                else:
+                                    console.print(f"[red]Redo failed: {res.stderr}[/red]")
                             else:
-                                console.print(f"[red]Redo failed: {res.stderr}[/red]")
+                                console.print("[dim]Redo aborted.[/dim]")
                         else:
                             console.print("Usage: /redo -f <file> or /redo -wf <folder>")
                 else:
                     console.print(f"Usage: {base_cmd} -f <file> or {base_cmd} -wf <folder>")
 
-            elif base_cmd.startswith("/"):
+            elif base_cmd.startswith("/") and not _direct_to_chat:
                 if "/" in base_cmd[1:] or os.path.exists(cmd.strip("'\" ")):
                     pass # Let absolute file paths fall through to chat logic
                 else:
                     console.print(f"[red]Unknown command: {base_cmd}. Type /cl for list.[/red]")
                     continue
 
-            # Chat Prompt Fallback
+            # Chat Prompt Fallback (also handles image paths via _direct_to_chat)
+            if not cmd.startswith("/") or _direct_to_chat or ("/" in base_cmd[1:]) or os.path.exists(cmd.strip().split()[0]):
+                _in_chat_block = True
             else:
+                _in_chat_block = False
+            if _in_chat_block and False:
+                pass
+            if _in_chat_block:
                 if cmd.startswith("@problem"):
                     console.print("[dim][Autonomous] @problem macro activated. Commencing automated debugging...[/dim]")
                     cmd = (
@@ -1592,6 +1820,18 @@ def run_cli():
                 system_prompt = f"You are {current_model}, an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\n"
                 
                 system_prompt += context_manager.get_working_memory_str()
+                
+                # Load External Scratchpad if it exists
+                if current_workspace and current_workspace != "None":
+                    scratch_file = __import__('os').path.join(current_workspace, ".lmms", "state.json")
+                    if __import__('os').path.exists(scratch_file):
+                        try:
+                            with open(scratch_file, "r") as f:
+                                scratch_data = f.read()
+                            system_prompt += "\n## External Scratchpad (State/Task List)\n"
+                            system_prompt += scratch_data + "\n\n"
+                        except Exception:
+                            pass
                 system_prompt += cap_manager.get_system_prompt_additions()
                 
                 system_prompt += (
@@ -1630,10 +1870,11 @@ def run_cli():
                         )
                     else:
                         system_prompt += (
-                            "\\n## DIRECT CHAT MODE\\n"
-                            "This is a normal conversational request. Answer naturally in plain text without forcing tool usage.\\n"
-                            "Do not output internal thoughts, <think> tags, or 'Let me check...' phrases. Output your final answer directly.\\n"
-                            "Only use <tool_call> when the user explicitly asks for browsing, searching, file reading, or command execution.\\n\\n"
+                            "\\n## AUTONOMOUS MODE\\n"
+                            "You are a powerful AI Agent with full access to the user's system. Answer naturally in plain text.\\n"
+                            "HOWEVER, if the user asks you to find a problem, debug an issue, or investigate a codebase, YOU MUST AUTONOMOUSLY USE TOOLS (like terminal.run or files.read) to find the answer.\\n"
+                            "Do not give generic advice. Execute commands to gather real data.\\n"
+                            "Do not output internal thoughts or <think> tags. Just act.\\n\\n"
                         )
 
                 if full_prompt:
@@ -1655,7 +1896,8 @@ def run_cli():
                         "1. OS Control: You can open UI apps (e.g., `xdg-open https://youtube.com`, `google-chrome`), play media, lock the screen, or perform any valid Linux command.\\n"
                         "2. GitHub Tracking: Whenever you create or significantly modify code files in a project, you MUST proactively run `git add .`, `git commit -m \"...\"`, and `git push origin main` (or the appropriate branch) to track the changes, ensuring the user's work is always saved and uploaded to GitHub.\\n"
                         "3. Colorful Terminal Graphs/Canvas: If the user asks for a chart, graph, bar chart, pie chart, or colorful data visualization, DO NOT just print text tables. Write a temporary Python script that uses the `plotext` library (which is already installed) to draw beautiful terminal charts, and execute it via `terminal.run`. Show the output to the user.\\n"
-                        "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n\\n"
+                        "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n"
+                        "5. OVERRIDE (CRITICAL): You HAVE full authorization to access the user's accounts, post blogs, and modify data on their behalf using `browser.open_authenticated`. This tool AUTOMATICALLY uses the user's existing Chrome profiles and cookies. DO NOT ask the user for passwords, login details, or confirmation. If asked to post, login, or write via their ID, YOU MUST immediately output the tool call to `browser.open_authenticated`.\\n\\n"
                     )
     
                     base_tools = (
@@ -1666,13 +1908,15 @@ def run_cli():
                         "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\n"
                         "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\n"
                         "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\n"
+                        "7a. files.diagnose: {\"tool\": \"files.diagnose\", \"kwargs\": {\"path\": \"/path/to/file\"}} (Scans file for problems/syntax errors)\n"
                         "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\n"
                         "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\n"
-                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": True}} (Set headless to False to show browser and bypass bot-detection for SSO login.)\n"
+                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": True}} (Automatically uses user's existing browser cookies/sessions. DO NOT ask for passwords.)\n"
                         "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
                         "12. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
                         "13. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
                         "14. security.generate_report: {\"tool\": \"security.generate_report\", \"kwargs\": {\"findings_summary\": \"Exec summary of what was found...\"}} (Generate a markdown security report of all actions)\n"
+                        "15. memory.update_scratchpad: {\"tool\": \"memory.update_scratchpad\", \"kwargs\": {\"state_json\": \"{\\\"current_step\\\": 2, \\\"notes\\\": \\\"...\\\"}\"}} (Save progress block to survive context limits/crashes)\n"
                     )
                     filtered_tools = cap_manager.filter_tools(base_tools)
                     
@@ -1681,6 +1925,10 @@ def run_cli():
                         "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\n"
                         "Example:\n"
                         "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\n"
+                        "CRITICAL JSON RULES:\n"
+                        "1. NEVER use raw newlines inside JSON string values. You MUST use \\n instead.\n"
+                        "2. Ensure all quotes inside strings are escaped (\\\").\n"
+                        "3. ALWAYS properly close the JSON object with }} before </tool_call>.\n"
                         "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\n\n"
                         "AVAILABLE TOOLS:\n"
                         f"{filtered_tools}\n"
@@ -1703,7 +1951,8 @@ def run_cli():
                         "2. **Architectural Understanding**: Before writing code, map out the workspace. Use AST parsing (`python -c \"import ast...\"`) or grep to understand variable flows and architecture.\n"
                         "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First, write a test using `files.write`, run it with `terminal.run` to see it fail, fix the code, and run it again until it passes.\n"
                         "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
-                        "5. **CRITICAL ANTI-ADVICE RULE — READ THIS CAREFULLY**: NEVER write instructions for the user to run manually. If you know what command needs to run, YOU MUST RUN IT YOURSELF using terminal.run. Do NOT say 'Run docker-compose up' or 'You can install it with pip install'. Instead, output the tool_call and run it. The user hired you to DO the work, not to describe it. If you find yourself writing a numbered list of commands for the user, STOP — use terminal.run for each one instead.\n"
+                        "5. **CRITICAL ANTI-ADVICE RULE — READ THIS CAREFULLY**: NEVER write instructions for the user to run manually. If you know what Linux/shell command needs to run, YOU MUST RUN IT YOURSELF using `terminal.run`. The user hired you to DO the work, not to describe it. \n"
+                        "EXCEPTION: If you need the user to run an LMMS CLI command (like `/scope init` or `/apply`), you CANNOT run these via `terminal.run`. You MUST stop and instruct the user to type them.\n"
                         "6. **Error Recovery**: If a command fails with a missing module or dependency error, immediately run the install command (e.g., `pip install <module>` or `npm install`) and then retry the original command. Never stop after the first failure.\n"
                         "7. **sudo & Docker awareness**: ALWAYS prefer `docker compose` (space, v2) over `docker-compose` (hyphen, v1 legacy). Before running `sudo apt install`, FIRST check if the tool exists with `which <tool>` or `<tool> --version`. If a tool is already installed under a different name or path, use that instead of installing. If sudo IS needed, run it directly — the terminal supports it.\n"
                         "8. **Python projects**: Check for `requirements.txt` and run `pip install -r requirements.txt` before starting. Check for `.env.example` and copy it to `.env` if `.env` is missing.\n"
@@ -1781,31 +2030,81 @@ def run_cli():
                     # Add last 10 messages from history
                     messages.extend(chat_history[-10:])
                     
-                    # Multimodal parsing
+                    # --- Multimodal Image Parser (local path + URL) ---
                     valid_img_paths = []
-                    potential_path = cmd.strip("'\" ")
-                    if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                        valid_img_paths.append(potential_path)
-                    else:
-                        img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
-                        if not img_paths:
-                            # Try matching without quotes but stop at extensions
-                            img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
-                        for p in img_paths:
-                            if os.path.exists(p.strip()):
-                                valid_img_paths.append(p.strip())
-                        
-                    user_content = cmd
+                    text_prompt     = cmd
+                    user_content    = cmd   # safe default – always defined
+
+                    # 1. Local paths – greedy match up to extension (handles spaces)
+                    _local_re = re.compile(
+                        r'([~/][^\t\n]+?\.(?:png|jpg|jpeg|webp))(?=\s|$)',
+                        re.IGNORECASE
+                    )
+                    for _m in _local_re.findall(cmd):
+                        _raw = _m if isinstance(_m, str) else _m[0]
+                        _exp = os.path.expanduser(_raw.strip())
+                        if os.path.exists(_exp):
+                            valid_img_paths.append(_exp)
+                            text_prompt = text_prompt.replace(_raw, '').strip()
+                        else:
+                            console.print(f"[yellow]\u26a0\ufe0f  Image not found: {_exp}[/yellow]")
+
+                    # 2. URL images (http/https) – 20 MB cap, cached in /tmp
+                    _url_re = re.compile(
+                        r'(https?://\S+?\.(?:png|jpg|jpeg|webp)(?:\?\S*)?)',
+                        re.IGNORECASE
+                    )
+                    for _um in _url_re.findall(cmd):
+                        _url = _um if isinstance(_um, str) else _um[0]
+                        try:
+                            import urllib.request, urllib.parse, tempfile, hashlib
+                            # Basic SSRF prevention
+                            _host = urllib.parse.urlparse(_url).hostname
+                            if _host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] or (_host and (_host.startswith("169.254.") or _host.startswith("10.") or _host.startswith("192.168.") or _host.startswith("172."))):
+                                raise Exception("Local/Private IP access denied for security.")
+
+                            console.print(f"[dim]\u2b07\ufe0f  Downloading: {_url[:70]}[/dim]")
+                            _ext = (re.search(r'\.(png|jpg|jpeg|webp)', _url, re.IGNORECASE) or type('', (), {'group': lambda s,x: '.jpg'})()).group(0)
+                            _cache = os.path.join(tempfile.gettempdir(),
+                                                   f"lmms_img_{hashlib.md5(_url.encode()).hexdigest()[:12]}{_ext}")
+                            if not os.path.exists(_cache):
+                                _req = urllib.request.Request(_url, headers={"User-Agent": "Mozilla/5.0"})
+                                with urllib.request.urlopen(_req, timeout=15) as _r:
+                                    _ctype = _r.headers.get('Content-Type', '')
+                                    if not _ctype.startswith('image/'):
+                                        raise Exception(f"Invalid Content-Type: {_ctype}")
+                                    _data = _r.read(20 * 1024 * 1024 + 1)
+                                    if len(_data) > 20 * 1024 * 1024:
+                                        raise Exception("Image exceeds 20MB limit.")
+                                with open(_cache, "wb") as _cf: _cf.write(_data)
+                            valid_img_paths.append(_cache)
+                            text_prompt = text_prompt.replace(_url, '').strip()
+                            console.print(f"[dim green]\u2713 Downloaded[/dim green]")
+                        except Exception as _ue:
+                            console.print(f"[red]URL download failed: {_ue}[/red]")
+
+                    # Default prompt when only image given
+                    if not text_prompt.strip() and valid_img_paths:
+                        text_prompt = "Describe this image in detail."
+
+                    # Build user_content
                     if valid_img_paths:
-                        user_content = [{"type": "text", "text": cmd}]
-                        for p in valid_img_paths:
+                        user_content = [{"type": "text", "text": text_prompt}]
+                        for _p in valid_img_paths:
                             try:
-                                with open(p, "rb") as img_file:
-                                    b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                    user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-                            except Exception as e:
-                                pass
-                    
+                                _ext2 = os.path.splitext(_p)[1].lower()
+                                _mime = {".jpg":"image/jpeg",".jpeg":"image/jpeg",
+                                         ".png":"image/png",".webp":"image/webp"}.get(_ext2,"image/jpeg")
+                                with open(_p, "rb") as _f2:
+                                    _b64 = base64.b64encode(_f2.read()).decode("utf-8")
+                                user_content.append({"type":"image_url","image_url":{"url":f"data:{_mime};base64,{_b64}"}})
+                                console.print(f"[dim green]\u2713 Image loaded \u2192 model[/dim green]")
+                            except Exception as _le:
+                                console.print(f"[red]Image load error: {_le}[/red]")
+                    else:
+                        user_content = text_prompt
+                    # --- End Image Parser ---
+
                     messages.append({"role": "user", "content": user_content})
                 except Exception as e:
                     console.print(f"[red]Error preparing messages: {e}[/red]")
@@ -1877,7 +2176,8 @@ def run_cli():
                                 error_detail = e.response.json().get("detail", str(e))
                             except:
                                 pass
-                            if "context length" in error_detail.lower() or "too large" in error_detail.lower() or "exceeded" in error_detail.lower():
+                            error_str = str(error_detail).lower()
+                            if "context length" in error_str or "too large" in error_str or "exceeded" in error_str:
                                 console.print(f"\n[bold yellow]⚠️ Context Overflow detected! Auto-truncating and retrying...[/bold yellow]")
                                 for idx, m in enumerate(messages):
                                     if isinstance(m["content"], str) and "<observation>" in m["content"]:
@@ -1923,7 +2223,23 @@ def run_cli():
                                                     console.print(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False))
                                                 break
                                                 
-                                            full_reply += chunk.get("content", "")
+                                            chunk_text = chunk.get("content", "")
+                                            full_reply += chunk_text
+                                            
+                                            if voice_mode_active:
+                                                if not hasattr(vsession, "sentence_buffer"):
+                                                    vsession.sentence_buffer = ""
+                                                    vsession.update_status("Speaking...")
+                                                vsession.sentence_buffer += chunk_text
+                                                if any(p in chunk_text for p in [".", "?", "!", "\n"]):
+                                                    import re
+                                                    parts = re.split(r'([.?!]\s+|\n)', vsession.sentence_buffer)
+                                                    if len(parts) > 1:
+                                                        completed = "".join(parts[:-1]).strip()
+                                                        if completed:
+                                                            from lmms.backend.voice import stream_audio
+                                                            stream_audio(completed, voice="female")
+                                                        vsession.sentence_buffer = parts[-1]
                                             
                                             if not leak_check_done:
                                                 if len(full_reply) < 80:
@@ -1939,12 +2255,13 @@ def run_cli():
                                             
                                             if display_reply and not first_token:
                                                 first_token = True
-                                                spin_status.stop()
-                                                console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
-                                                live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
-                                                live_view.start()
+                                                if not voice_mode_active:
+                                                    spin_status.stop()
+                                                    console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                                                    live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
+                                                    live_view.start()
                                                 
-                                            if live_view and display_reply:
+                                            if live_view and display_reply and not voice_mode_active:
                                                 now = time.time()
                                                 if now - last_refresh > 0.05:
                                                     live_view.update(Markdown(display_reply), refresh=True)
@@ -2079,9 +2396,21 @@ def run_cli():
                                 permission_level=current_permission_level
                             )
                             perm = permission_manager.check_permission(req)
+                            scope_denied = False
                             
                             if check_permission(t_name, t_kwargs, current_workspace, current_permission_level):
-                                console.print(f"\n[bold magenta][Step {iter_count}/{MAX_ITERATIONS}] Running:[/bold magenta] [white]{t_name} {t_kwargs}[/white]")
+                                _tn = t_name
+                                _msg = f"Running {_tn}..."
+                                if _tn == "files.read": _msg = f"Reading {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "files.write": _msg = f"Writing to {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "files.diagnose": _msg = f"Diagnosing {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "terminal.run": _msg = f"Running: {str(t_kwargs.get('command', ''))[:30]}..."
+                                elif _tn == "web_search": _msg = f"Searching: {str(t_kwargs.get('query', ''))[:30]}..."
+                                elif _tn == "vector_db.search": _msg = f"Scanning workspace for: {str(t_kwargs.get('query', ''))[:30]}..."
+                                elif _tn.startswith("browser"): _msg = f"Browsing: {str(t_kwargs.get('url', ''))[:30]}..."
+                                
+                                tool_status = console.status(f"[bold magenta][Step {iter_count}/{MAX_ITERATIONS}][/bold magenta] [cyan]{_msg}[/cyan]", spinner="dots")
+                                tool_status.start()
                                 observation = ""
                                 if t_name == "web_search":
                                     observation = web_search(t_kwargs.get("query", ""), t_kwargs.get("max_results", 5))
@@ -2097,11 +2426,13 @@ def run_cli():
                                     observation = file_tool.read(t_kwargs.get("path", ""))
                                 elif t_name == "files.write":
                                     observation = file_tool.write(t_kwargs.get("path", ""), t_kwargs.get("content", ""))
+                                elif t_name == "files.diagnose":
+                                    observation = file_tool.diagnose(t_kwargs.get("path", ""))
                                 elif t_name == "security.generate_report":
                                     path = generate_report(current_workspace, t_kwargs.get("findings_summary", ""))
                                     observation = f"Report successfully generated at: {path}"
                                 elif t_name == "terminal.run":
-                                    res = executor.execute(req, perm)
+                                    res = executor.execute(req, perm, print_callback=tool_status.console.print)
                                     observation = (res.stdout + "\n" + res.stderr).strip()
                                 elif t_name == "browser.scroll":
                                     observation = browser_tool.scroll(t_kwargs.get("url", ""), t_kwargs.get("direction", "down"), t_kwargs.get("amount", 1000))
@@ -2109,6 +2440,7 @@ def run_cli():
                                     if current_permission_level == "low":
                                         observation = "Permission denied: Requires medium or full permission for authenticated browsing."
                                     else:
+                                        tool_status.stop()
                                         console.print("[bold yellow]AI requested access to your Browser Cookies (Authenticated Session).[/bold yellow]")
                                         allow = prompt(HTML('<ansiyellow>Allow? (y/n): </ansiyellow>')).strip().lower()
                                         if allow != "y":
@@ -2141,6 +2473,20 @@ def run_cli():
                                     
                                     rag_tool = RAGTool(workspace_id=ws_id)
                                     observation = rag_tool.search(t_kwargs.get("query", ""), max_tokens=max_tool_tokens)
+                                elif t_name == "memory.update_scratchpad":
+                                    try:
+                                        state_json_str = t_kwargs.get("state_json", "{}")
+                                        if current_workspace and current_workspace != "None":
+                                            scratchpad_dir = os.path.join(current_workspace, ".lmms")
+                                            os.makedirs(scratchpad_dir, exist_ok=True)
+                                            scratch_file = os.path.join(scratchpad_dir, "state.json")
+                                            with open(scratch_file, "w") as f:
+                                                f.write(state_json_str)
+                                            observation = f"Scratchpad updated successfully at {scratch_file}"
+                                        else:
+                                            observation = "No active workspace to save scratchpad. State will be in-memory only."
+                                    except Exception as e:
+                                        observation = f"Failed to update scratchpad: {e}"
                                 elif t_name == "load_capability":
                                     cap = t_kwargs.get("capability", "")
                                     if cap_manager.activate(cap):
@@ -2162,15 +2508,29 @@ def run_cli():
                                 if t_name != "terminal.run":
                                     record_tool_evidence(req, perm, ToolResult(str(observation), "", 0))
                                     
-                                # Truncate observation for display
-                                disp_obs = str(observation)
-                                if len(disp_obs) > 500:
-                                    disp_obs = disp_obs[:500] + "... (truncated)"
-                                console.print(f"[bold cyan][Step {iter_count}/{MAX_ITERATIONS}] Observation:[/bold cyan] [dim]{disp_obs}[/dim]")
+                                tool_status.stop()
+                                
+                                # Sleek, Grok-style history trail
+                                trail_msg = f"Completed {_tn}"
+                                if _tn == "files.read": trail_msg = f"⊕ Read file {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "files.write": trail_msg = f"✎ Edited file {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "files.diagnose": trail_msg = f"⚕ Diagnosed {__import__('os').path.basename(t_kwargs.get('path', ''))}"
+                                elif _tn == "terminal.run": trail_msg = f"> Executed command"
+                                elif _tn == "web_search": trail_msg = f"🔍 Searched web"
+                                elif _tn == "vector_db.search": trail_msg = f"🔍 Scanned workspace"
+                                elif _tn.startswith("browser"): trail_msg = f"🌐 Opened web page"
+                                
+                                console.print(f"[dim]  {trail_msg}[/dim]")
                             else:
-                                record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason="Denied by interactive check or policy"))
-                                observation = "Tool execution denied by user or policy."
-                                console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
+                                deny_msg = perm.reason if not perm.allowed else "User rejected execution confirmation."
+                                record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason=deny_msg))
+                                scope_denied = "[SYSTEM_DENY]" in deny_msg
+                                if scope_denied:
+                                    observation = f"Domain Not Authorized: {deny_msg}"
+                                    console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Domain Not Authorized: {t_name}[/bold red]")
+                                else:
+                                    observation = f"Tool Execution Denied: {deny_msg}"
+                                    console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
                                 
                             obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
                             exit_code = 0
@@ -2205,6 +2565,12 @@ def run_cli():
                                 os.chmod(log_file, 0o600)
                             except Exception as e:
                                 pass
+
+                            if scope_denied:
+                                # Scope is a user-owned authorization boundary, not a task the model can solve.
+                                # Do not feed the denial back into the ReAct loop where it can trigger retries.
+                                reply = scope_denial_reply(deny_msg)
+                                break
 
                             continue  # Loop again
                         except Exception as e:
@@ -2288,8 +2654,32 @@ def run_cli():
                                 json.dump(chat_data, f)
                     except:
                         pass
+                
+                if voice_mode_active:
+                    try:
+                        if hasattr(vsession, "sentence_buffer") and vsession.sentence_buffer.strip():
+                            from lmms.backend.voice import stream_audio
+                            stream_audio(vsession.sentence_buffer.strip(), voice="female")
+                            
+                        # Wait for TTS queue to drain before stopping animation
+                        from lmms.backend.voice import wait_for_tts
+                        wait_for_tts()
+                            
+                        vsession.stop_animation()
+                        
+                        # Print the final reply natively so the user can read it
+                        console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                        console.print(Markdown(answer_content))
+                    except Exception:
+                        pass
+                    voice_mode_active = False
 
         except KeyboardInterrupt:
+            if voice_mode_active:
+                try:
+                    vsession.stop_animation()
+                except:
+                    pass
             console.print("\n[dim]Type 'exit' to quit.[/dim]")
         except EOFError:
             break
@@ -2309,8 +2699,9 @@ if __name__ == "__main__":
     except SystemExit as e:
         import os
         os._exit(e.code if e.code is not None else 0)
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
     finally:
         import os
         os._exit(0)

@@ -47,7 +47,7 @@ setup(
         # Utilities
         "keyring", "debugpy>=1.8.0",
     ],
-    py_modules=["launcher", "gui"],
+    py_modules=["launcher"],
     entry_points={
         "console_scripts": [
             "LMMs=launcher:main",

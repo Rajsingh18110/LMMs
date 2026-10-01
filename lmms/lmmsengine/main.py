@@ -811,11 +811,30 @@ def main():
                         img_path = None
                         text_prompt = ""
                         
+                        # Robust image path detection (handles spaces in filenames)
+                        _img_re = re.compile(r'([~/][^\t\n]+?\.(?:png|jpg|jpeg|webp))', re.IGNORECASE)
+                        _img_matches = _img_re.findall(user_input)
+                        
                         if user_input.lower().startswith("/image "):
                             is_image_input = True
-                            if len(parsed) >= 2:
+                            # Try regex first for paths with spaces
+                            if _img_matches:
+                                img_path = os.path.expanduser(_img_matches[0].strip())
+                                text_prompt = user_input[user_input.lower().index(_img_matches[0].lower()) + len(_img_matches[0]):].strip()
+                            elif len(parsed) >= 2:
                                 img_path = parsed[1]
                                 text_prompt = " ".join(parsed[2:]) if len(parsed) > 2 else "Describe this image."
+                        elif _img_matches:
+                            # Auto-detect image path anywhere in input
+                            for _raw in _img_matches:
+                                _exp = os.path.expanduser(_raw.strip())
+                                if os.path.exists(_exp):
+                                    is_image_input = True
+                                    img_path = _exp
+                                    text_prompt = user_input.replace(_raw, "").strip()
+                                    if not text_prompt:
+                                        text_prompt = "Describe this image."
+                                    break
                         elif parsed and len(parsed) >= 1:
                             potential_path = parsed[0]
                             if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):

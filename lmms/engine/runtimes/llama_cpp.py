@@ -106,6 +106,60 @@ class LlamaCppRuntime(RuntimeContract):
         first_try = True
         attempt = 1
         import time
+        
+        # ── Vision/Multimodal: detect matching mmproj file ──────────────────
+        chat_handler = None
+        vision_status = "TEXT ONLY"  # default
+        models_dir_for_mmproj = os.path.dirname(full_path)
+        model_basename = os.path.basename(full_path).lower()
+        model_stem = os.path.splitext(model_basename)[0]  # e.g. "gemma-4-e4b_q4_0-it"
+        
+        # Remove quant suffix for matching: gemma-4-e4b_q4_0-it → gemma-4-e4b
+        # Pattern: strip trailing _q4_0-it / -Q4_K_M / etc.
+        _stem_base = re.sub(r'[_-](q[0-9]|Q[0-9]|f[0-9]|bf|int)[^/]*$', '', model_stem, flags=re.IGNORECASE)
+        
+        all_mmproj = [
+            f for f in os.listdir(models_dir_for_mmproj)
+            if 'mmproj' in f.lower() and f.endswith('.gguf')
+        ]
+        
+        # Prefer exact model-family match, fallback to any mmproj
+        def _mmproj_score(fname):
+            fl = fname.lower()
+            # Exact family match (e.g. "gemma-4-e4b" in mmproj filename)
+            if _stem_base in fl: return 3
+            # Architecture family match (e.g. "gemma" in both)
+            arch = model_stem.split('-')[0]  # "gemma", "qwen", "llama"...
+            if arch in fl: return 2
+            return 1  # any mmproj
+        
+        mmproj_candidates = sorted(all_mmproj, key=_mmproj_score, reverse=True)
+        
+        if mmproj_candidates:
+            mmproj_path = os.path.join(models_dir_for_mmproj, mmproj_candidates[0])
+            print(f"[Vision] Found mmproj: {mmproj_candidates[0]} (score={_mmproj_score(mmproj_candidates[0])})")
+            try:
+                if 'gemma' in model_basename:
+                    from llama_cpp.llama_chat_format import Gemma4ChatHandler
+                    chat_handler = Gemma4ChatHandler(clip_model_path=mmproj_path, verbose=False)
+                    vision_status = "READY"
+                    print("[Vision] ✅ Gemma4ChatHandler — Vision READY")
+                else:
+                    from llama_cpp.llama_chat_format import Llava16ChatHandler
+                    chat_handler = Llava16ChatHandler(clip_model_path=mmproj_path, verbose=False)
+                    vision_status = "READY"
+                    print("[Vision] ✅ LLaVA ChatHandler — Vision READY")
+            except Exception as vh_err:
+                print(f"[Vision] ⚠️ Handler failed: {vh_err}")
+                vision_status = "HANDLER ERROR"
+                chat_handler = None
+        else:
+            print(f"[Vision] ℹ️  Vision unavailable: no mmproj found for '{model_stem}'")
+            print(f"[Vision]    Download a matching mmproj .gguf and place it in: {models_dir_for_mmproj}")
+        
+        # Expose vision status for status bar
+        self._vision_status = vision_status
+        
         while current_ctx >= 512 or first_try:
             try:
                 kwargs = {
@@ -115,6 +169,8 @@ class LlamaCppRuntime(RuntimeContract):
                     "flash_attn": True,
                     "verbose": False
                 }
+                if chat_handler is not None:
+                    kwargs["chat_handler"] = chat_handler
                 # Let llama-cpp-python handle chat format natively from GGUF metadata
                 
                 print(f"[TIMING LOG] Attempt {attempt}: Loading Llama with n_ctx={current_ctx}, n_gpu_layers=-1...")

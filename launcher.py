@@ -104,17 +104,17 @@ def main():
             config["default_mode"] = "engine"
             print("Default mode set to Engine")
         else:
-            print("Usage: lmms set --gui | --cli | --engine")
+            print("Usage: lmms set --cli | --engine")
         save_config(config)
         return
 
     # Direct launch overrides
-    if args[0] in ["gui", "cli", "engine"]:
+    if args[0] in ["cli", "engine"]:
         launch(args[0], args[1:])
         return
         
-    if args[0] in ["gui", "cli", "engine", "-g", "-c", "-e", "--gui", "--cli", "--engine"]:
-        mode_map = {"gui": "gui", "cli": "cli", "engine": "engine", "-g": "gui", "-c": "cli", "-e": "engine", "--gui": "gui", "--cli": "cli", "--engine": "engine"}
+    if args[0] in ["cli", "engine", "-c", "-e", "--cli", "--engine"]:
+        mode_map = {"cli": "cli", "engine": "engine", "-c": "cli", "-e": "engine", "--cli": "cli", "--engine": "engine"}
         launch(mode_map[args[0]], args[1:])
         return
 
@@ -139,24 +139,17 @@ def launch(mode, forward_args=None, ensure_engine=True):
     # For now, we call the python scripts.
     while True:
         engine_proc = None
-        if mode in ["cli", "gui"]:
+        if mode == "cli":
             if ensure_engine:
                 engine_proc = ensure_engine_running()
                 env["LMMS_ENGINE_MANAGED"] = "1"
             
-            # If gui mode, we could pass an argument to backend to start API + Electron
-            if mode == "gui":
-                if getattr(sys, 'frozen', False):
-                    cmd = [sys.executable, "--internal-gui"]
-                else:
-                    cmd = [sys.executable, os.path.abspath(__file__), "--internal-gui"]
+            if getattr(sys, 'frozen', False):
+                cmd = [sys.executable, "--internal-backend"]
             else:
-                if getattr(sys, 'frozen', False):
-                    cmd = [sys.executable, "--internal-backend"]
-                else:
-                    cmd = [sys.executable, "-m", "lmms.backend.main"]
-                    
-            if mode in ["cli", "gui"] and forward_args:
+                cmd = [sys.executable, "-m", "lmms.backend.main"]
+                
+            if forward_args:
                 cmd.extend(forward_args)
         elif mode == "engine":
             if getattr(sys, 'frozen', False):
@@ -208,11 +201,6 @@ if __name__ == "__main__":
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         from lmms.lmmsengine.main import main as engine_main
         engine_main()
-        sys.exit(0)
-    elif len(sys.argv) > 1 and sys.argv[1] == "--internal-gui":
-        sys.argv = [sys.argv[0]] + sys.argv[2:]
-        from gui import main as gui_main
-        gui_main()
         sys.exit(0)
         
     # multiprocessing support for windows exes

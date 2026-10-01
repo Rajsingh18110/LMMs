@@ -94,34 +94,10 @@ class BrowserTool:
             self.load_cookies()
 
     def load_cookies(self):
-        if os.path.exists(self.cookie_file) and self.browser:
-            try:
-                import json
-                with open(self.cookie_file, "r") as f:
-                    cookies = json.load(f)
-                if hasattr(self.browser, "add_cookies"):
-                    self.browser.add_cookies(cookies)
-                elif hasattr(self.browser, "contexts") and len(self.browser.contexts) > 0:
-                    self.browser.contexts[0].add_cookies(cookies)
-            except Exception as e:
-                print(f"Warning: Failed to load cookies: {e}")
+        pass
 
     def save_cookies(self):
-        if self.browser:
-            try:
-                import json
-                cookies = []
-                if hasattr(self.browser, "cookies"):
-                    cookies = self.browser.cookies()
-                elif hasattr(self.browser, "contexts") and len(self.browser.contexts) > 0:
-                    cookies = self.browser.contexts[0].cookies()
-                
-                if cookies:
-                    os.makedirs(os.path.dirname(self.cookie_file), exist_ok=True)
-                    with open(self.cookie_file, "w") as f:
-                        json.dump(cookies, f)
-            except Exception as e:
-                print(f"Warning: Failed to save cookies: {e}")
+        pass
 
     def _goto_if_needed(self, url: str):
         if not url: return
@@ -217,10 +193,20 @@ class BrowserTool:
             self._goto_if_needed(url)
             self.page.wait_for_timeout(2000)
             content = self.page.evaluate("document.body.innerText")
+            
+            # Extract interactive elements so AI knows what it can click/fill
+            interactives = self.page.evaluate('''() => {
+                const inputs = Array.from(document.querySelectorAll('input, textarea')).map(i => `[Input] name="${i.name || i.id || ''}" type="${i.type || ''}" placeholder="${i.placeholder || ''}"`);
+                const links = Array.from(document.querySelectorAll('a, button')).map(b => `[Clickable] "${b.innerText.trim()}"`);
+                return inputs.concat(links).filter(x => x.length > 10).join('\\n');
+            }''')
+            
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
-            return f"[AUTHENTICATED SESSION STARTED (Headless={headless})]\n{content[:2000]}"
+                
+            full_output = f"[AUTHENTICATED SESSION STARTED (Headless={headless})]\n\n--- PAGE TEXT ---\n{content[:1000]}\n\n--- INTERACTIVE ELEMENTS ---\n{interactives[:800]}"
+            return full_output
         except Exception as e:
             return f"Failed to open authenticated URL: {str(e)}"
 
@@ -258,10 +244,17 @@ class BrowserTool:
                     return f"[CAPTCHA_FAILED] {msg}"
                 return f"[CAPTCHA_SOLVED] {msg}"
                 
+            interactives = self.page.evaluate('''() => {
+                const inputs = Array.from(document.querySelectorAll('input, textarea')).map(i => `[Input] name="${i.name || i.id || ''}" type="${i.type || ''}" placeholder="${i.placeholder || ''}"`);
+                const buttons = Array.from(document.querySelectorAll('button, a.button, a.btn')).map(b => `[Button] "${b.innerText.trim()}"`);
+                return inputs.concat(buttons).filter(x => x.length > 10).join('\\n');
+            }''')
+            
             if content:
                 content = re.sub(r'\n+', '\n', content)
                 content = re.sub(r' +', ' ', content)
-            return content[:2000]
+                
+            return f"--- PAGE TEXT ---\n{content[:1000]}\n\n--- INTERACTIVE ELEMENTS ---\n{interactives[:800]}"
         except Exception as e:
             return f"Failed to open URL: {str(e)}"
 

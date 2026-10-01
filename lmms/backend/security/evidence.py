@@ -31,11 +31,25 @@ def record_tool_evidence(request: ToolRequest, perm: PermissionResult, result: T
     # We log kwargs as strings but remove obvious secrets if they existed?
     # Simple JSON dump for now, assuming arguments are command args
     
+    safe_kwargs = {}
+    for k, v in request.kwargs.items():
+        if k == "fields" and isinstance(v, dict):
+            safe_fields = {}
+            for fk, fv in v.items():
+                if any(sec in fk.lower() for sec in ["password", "pass", "token", "key", "auth"]):
+                    safe_fields[fk] = "***REDACTED***"
+                else:
+                    safe_fields[fk] = fv
+            safe_kwargs[k] = safe_fields
+        elif any(sec in k.lower() for sec in ["password", "token", "secret", "key", "auth"]):
+            safe_kwargs[k] = "***REDACTED***"
+        else:
+            safe_kwargs[k] = v
+            
     log_entry = {
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "tool": request.tool_name,
-        "arguments": request.kwargs,
-        "target": request.kwargs.get("command", "") if request.tool_name == "terminal.run" else request.kwargs.get("url", ""),
+        "arguments": safe_kwargs,
         "decision": "allowed" if perm.allowed else "denied",
         "reason": perm.reason,
         "risk_level": perm.risk_level,

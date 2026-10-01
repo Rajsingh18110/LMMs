@@ -3,6 +3,8 @@ import json
 import ipaddress
 from typing import Dict, Any, Optional
 
+from lmms.backend.security.target_validator import is_target_authorized
+
 def get_scope_file(workspace: str) -> str:
     return os.path.join(workspace, ".lmms", "scope.json")
 
@@ -48,4 +50,8 @@ def is_scope_active(scope: Dict[str, Any]) -> bool:
         return False
     return scope.get("status") == "active"
 
+
+def validate_target(target: str, authorized_targets: list) -> bool:
+    """Backward-compatible strict target validation for scope consumers."""
+    return is_target_authorized(target, authorized_targets)
 

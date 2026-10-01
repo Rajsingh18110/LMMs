@@ -1,1 +1,0 @@
-export * from 'vscode/workers/editor.worker'
