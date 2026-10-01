@@ -167,6 +167,13 @@ def main():
         save_config(config)
         return
 
+    # Intercept missing GUI
+    if args[0] in ["gui", "-g", "--gui"]:
+        print("\n\033[91m[ERROR]\033[0m GUI component not found!")
+        print("It looks like you only installed the CLI or Engine. To use the GUI, please run:")
+        print("\033[96m  lmms install --gui\033[0m  (or \033[96mlmms install --all\033[0m for everything)\n")
+        return
+
     # Direct launch overrides
     if args[0] in ["cli", "engine"]:
         launch(args[0], args[1:])
