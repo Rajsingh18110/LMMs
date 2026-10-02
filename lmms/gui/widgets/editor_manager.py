@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QFileInfo
 from PyQt6.QtGui import QIcon
-from lmms.gui.utils.icon_provider import CustomIconProvider
+from qt_vscode_icons import VscodeIconProvider
 
 from lmms.gui.widgets.code_editor import CodeEditor
 from lmms.gui.widgets.ai_tabs import CanvasTab, MarkdownTab, ReviewTab
@@ -244,7 +244,7 @@ class EditorManager(QWidget):
                 self.open_files[file_path] = scroll
                 file_name = os.path.basename(file_path)
                 
-                provider = CustomIconProvider()
+                provider = VscodeIconProvider()
                 icon = provider.icon(QFileInfo(file_path))
                 
                 idx = self.tabs.addTab(scroll, icon, file_name)
@@ -271,7 +271,7 @@ class EditorManager(QWidget):
         self.open_files[file_path] = editor
         file_name = os.path.basename(file_path)
         
-        provider = CustomIconProvider()
+        provider = VscodeIconProvider()
         icon = provider.icon(QFileInfo(file_path))
         
         idx = self.tabs.addTab(editor, icon, file_name)
