@@ -143,7 +143,9 @@ class MainWindow(QMainWindow):
         explorer_layout.setContentsMargins(0, 0, 0, 0)
         
         if QFileSystemModel is not None:
+            from PyQt6.QtCore import QDir
             self.file_model = QFileSystemModel()
+            self.file_model.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.Hidden)
             self.file_model.setReadOnly(False)
             self.file_model.setIconProvider(VscodeIconProvider())
             self.file_model.fileRenamed.connect(self.on_file_renamed)
@@ -313,6 +315,15 @@ class MainWindow(QMainWindow):
                 }}
                 QTreeView::item:hover:!selected {{
                     background-color: #2a2d2e;
+                }}
+                QTreeView::branch:has-siblings:!adjoins-item {{
+                    border-left: 1px solid #404040;
+                }}
+                QTreeView::branch:has-siblings:adjoins-item {{
+                    border-left: 1px solid #404040;
+                }}
+                QTreeView::branch:!has-children:!has-siblings:adjoins-item {{
+                    border-left: 1px solid #404040;
                 }}
                 QTreeView::branch:has-children:!has-siblings:closed,
                 QTreeView::branch:closed:has-children:has-siblings {{
@@ -771,37 +782,83 @@ class MainWindow(QMainWindow):
             return
         index = self.tree_view.indexAt(position)
         
-        menu = QMenu()
-        menu.setStyleSheet("QMenu { background-color: #161b22; color: #c9d1d9; border: 1px solid #30363d; } QMenu::item:selected { background-color: #1f6feb; }")
-        
-        action_refresh = menu.addAction("Refresh Explorer")
-        action_collapse = menu.addAction("Collapse All")
-        
         if index.isValid():
-            menu.addSeparator()
-            action_expand_selected = menu.addAction("Expand Selected")
-            if not self.file_model.isDir(index):
-                action_open_containing = menu.addAction("Open Containing Folder")
+            file_path = self.file_model.filePath(index)
+            is_dir = self.file_model.isDir(index)
+        else:
+            file_path = self.file_model.rootPath()
+            is_dir = True
+
+        menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu { background-color: #252526; color: #cccccc; border: 1px solid #454545; padding: 4px; font-family: 'Segoe UI', 'San Francisco', sans-serif; font-size: 13px; }
+            QMenu::item { padding: 4px 24px 4px 24px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #04395e; color: #ffffff; }
+            QMenu::separator { height: 1px; background-color: #454545; margin: 4px 0px; }
+        """)
+
+        action_new_file = menu.addAction("New File...")
+        action_new_folder = menu.addAction("New Folder...")
+        menu.addSeparator()
+
+        action_open_side = None
+        if index.isValid() and not is_dir:
+            action_open_side = menu.addAction("Open to the Side")
+
+        action_open_containing = menu.addAction("Reveal in File Explorer")
+        action_open_terminal = menu.addAction("Open in Integrated Terminal")
+        
+        menu.addSeparator()
+        action_cut = menu.addAction("Cut")
+        action_copy = menu.addAction("Copy")
+        action_paste = menu.addAction("Paste")
+        menu.addSeparator()
+        action_copy_path = menu.addAction("Copy Path")
+        action_copy_rel = menu.addAction("Copy Relative Path")
+        menu.addSeparator()
+        action_rename = menu.addAction("Rename...")
+        action_delete = menu.addAction("Delete")
         
         action = menu.exec(self.tree_view.viewport().mapToGlobal(position))
         
-        if action == action_refresh:
-            self.file_model.setRootPath(self.file_model.rootPath()) # triggers refresh
-        elif action == action_collapse:
-            self.tree_view.collapseAll()
-        elif index.isValid() and action == action_expand_selected:
-            self.tree_view.expandRecursively(index)
-        elif index.isValid() and not self.file_model.isDir(index) and action == action_open_containing:
-            file_path = self.file_model.filePath(index)
-            import subprocess
-            folder = os.path.dirname(file_path)
-            import sys
+        if not action:
+            return
+
+        import os
+        import subprocess
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        
+        clipboard = QApplication.clipboard()
+
+        if action == action_new_file:
+            self.create_new_file()
+        elif action == action_new_folder:
+            self.create_new_folder()
+        elif action == action_open_side:
+            if hasattr(self, 'editor_manager'):
+                self.editor_manager.open_file(file_path)
+        elif action == action_open_containing:
+            target = file_path if is_dir else os.path.dirname(file_path)
             if sys.platform == "win32":
-                os.startfile(folder)
+                os.startfile(target)
             elif sys.platform == "darwin":
-                subprocess.Popen(['open', folder])
+                subprocess.Popen(['open', target])
             else:
-                subprocess.Popen(['xdg-open', folder])
+                subprocess.Popen(['xdg-open', target])
+        elif action == action_open_terminal:
+            if hasattr(self, 'terminal_panel') and self.terminal_panel:
+                self.terminal_panel.setFocus()
+        elif action == action_copy_path:
+            clipboard.setText(file_path)
+        elif action == action_copy_rel:
+            rel = os.path.relpath(file_path, self.file_model.rootPath())
+            clipboard.setText(rel)
+        elif action == action_rename and index.isValid():
+            self.tree_view.setCurrentIndex(index)
+            self.tree_view.edit(index)
+        elif action == action_delete and index.isValid():
+            self.file_model.remove(index)
 
     def on_search_result_clicked(self, path, line, col):
         # Open file
