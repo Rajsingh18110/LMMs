@@ -15,6 +15,7 @@ class EditorManager(QWidget):
     cursor_position_changed = pyqtSignal(int, int) # line, col
     file_context_changed = pyqtSignal(str, int, str, str) # language, indent, encoding, eol
     outline_updated = pyqtSignal(str, str) # file_path, json_data
+    run_action_requested = pyqtSignal(str, str) # action_type, file_path
     
     def __init__(self):
         super().__init__()
@@ -75,6 +76,42 @@ class EditorManager(QWidget):
         """)
         self.btn_terminal.clicked.connect(self.open_terminal_tab)
         breadcrumb_layout.addWidget(self.btn_terminal)
+        
+        # Run Button
+        from PyQt6.QtWidgets import QToolButton, QMenu
+        self.btn_run = QToolButton()
+        self.btn_run.setText("▶")
+        self.btn_run.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.btn_run.setStyleSheet("""
+            QToolButton {
+                background-color: transparent; color: #58a6ff;
+                border: none; border-radius: 4px; padding: 4px 8px; font-size: 14px;
+            }
+            QToolButton:hover { background-color: #30363d; }
+            QToolButton::menu-indicator { image: none; }
+        """)
+        
+        self.run_menu = QMenu()
+        self.run_menu.setStyleSheet("""
+            QMenu { background-color: #252526; color: #cccccc; border: 1px solid #454545; padding: 4px; font-family: 'Segoe UI', sans-serif; font-size: 13px; }
+            QMenu::item { padding: 4px 24px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #04395e; color: #ffffff; }
+        """)
+        
+        self.action_run_terminal = self.run_menu.addAction("Run File in Integrated Terminal")
+        self.action_run_dedicated = self.run_menu.addAction("Run File in Dedicated Terminal")
+        self.action_run_task = self.run_menu.addAction("Run as Task")
+        self.run_menu.addSeparator()
+        self.action_debug = self.run_menu.addAction("Debugger: Debug File")
+        
+        self.btn_run.setMenu(self.run_menu)
+        self.btn_run.clicked.connect(lambda: self.execute_run_action(self.action_run_terminal))
+        self.action_run_terminal.triggered.connect(lambda: self.execute_run_action(self.action_run_terminal))
+        self.action_run_dedicated.triggered.connect(lambda: self.execute_run_action(self.action_run_dedicated))
+        self.action_run_task.triggered.connect(lambda: self.execute_run_action(self.action_run_task))
+        self.action_debug.triggered.connect(lambda: self.execute_run_action(self.action_debug))
+        
+        breadcrumb_layout.addWidget(self.btn_run)
         
         layout.addWidget(self.breadcrumb_container)
         
@@ -288,6 +325,28 @@ class EditorManager(QWidget):
             if not widget.property("is_custom"):
                 return widget
         return None
+
+    def get_current_file_path(self):
+        editor = self.get_active_editor()
+        if editor:
+            for path, widget in self.open_files.items():
+                if widget == editor:
+                    return path
+        return None
+
+    def execute_run_action(self, action):
+        path = self.get_current_file_path()
+        if not path:
+            return
+            
+        if action == self.action_run_terminal:
+            self.run_action_requested.emit("integrated", path)
+        elif action == self.action_run_dedicated:
+            self.run_action_requested.emit("dedicated", path)
+        elif action == self.action_run_task:
+            self.run_action_requested.emit("task", path)
+        elif action == self.action_debug:
+            self.run_action_requested.emit("debug", path)
 
     def open_custom_tab(self, widget: QWidget, title: str, identifier: str = None):
         # Open a generic widget as a tab

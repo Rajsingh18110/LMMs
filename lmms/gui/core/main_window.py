@@ -281,6 +281,7 @@ class MainWindow(QMainWindow):
             self.editor_manager.file_dirty.connect(
                 lambda p: self.diagnostic_model.layoutChanged.emit()
             )
+            self.editor_manager.run_action_requested.connect(self.on_run_action_requested)
             
             self.tree_view.setModel(self.diagnostic_model)
             self.tree_view.setHeaderHidden(True)
@@ -608,6 +609,56 @@ class MainWindow(QMainWindow):
                 self.nav_buttons["Chats"].setChecked(True)
 
     def on_editor_tab_changed(self, index):
+        editor = self.editor_manager.get_active_editor()
+        if editor and hasattr(editor, "file_path"):
+            self.status_bar.update_file_status(editor.file_path)
+
+    def on_run_action_requested(self, action_type, file_path):
+        import os
+        import subprocess
+        ext = os.path.splitext(file_path)[1].lower()
+        cmd = ""
+        
+        if ext == ".py":
+            cmd = f'python "{file_path}"'
+        elif ext == ".dart":
+            cmd = f'dart run "{file_path}"'
+        elif ext == ".js":
+            cmd = f'node "{file_path}"'
+        elif ext == ".html":
+            cmd = f'xdg-open "{file_path}"' if os.name == 'posix' else f'start "" "{file_path}"'
+        else:
+            # Fallback based on shebang or just execute
+            cmd = f'./"{file_path}"'
+            
+        if action_type == "integrated":
+            self.bottom_panel.setVisible(True)
+            self.terminal_panel.setFocus()
+            self.terminal_panel.send_command(cmd)
+        elif action_type == "dedicated":
+            import sys
+            # Open OS terminal
+            if sys.platform == "win32":
+                subprocess.Popen(['start', 'cmd', '/k', cmd], shell=True)
+            elif sys.platform == "darwin":
+                subprocess.Popen(['open', '-a', 'Terminal.app', file_path])
+            else:
+                # Basic gnome-terminal, fallback to xterm
+                try:
+                    subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'{cmd}; exec bash'])
+                except:
+                    subprocess.Popen(['xterm', '-e', f'{cmd}; bash'])
+        elif action_type == "debug":
+            # For now, start with Python pdb
+            if ext == ".py":
+                self.bottom_panel.setVisible(True)
+                self.terminal_panel.setFocus()
+                self.terminal_panel.send_command(f'python -m pdb "{file_path}"')
+        elif action_type == "task":
+            # Placeholder for task runner
+            self.bottom_panel.setVisible(True)
+            self.terminal_panel.setFocus()
+            self.terminal_panel.send_command(f'echo "Running task for {os.path.basename(file_path)}"')
         if index < 0:
             if "Chats" in self.docks and not self.docks["Chats"].isVisible():
                 self.docks["Chats"].show()
