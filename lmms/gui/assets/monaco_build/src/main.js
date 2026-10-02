@@ -101,7 +101,7 @@ await initialize({
 
 function startMonacoWhenReady() {
   const editorEl = document.getElementById('editor');
-  if (document.body.clientWidth === 0 || document.body.clientHeight === 0) {
+  if (editorEl.clientWidth === 0 || editorEl.clientHeight === 0) {
     setTimeout(startMonacoWhenReady, 50);
     return;
   }
