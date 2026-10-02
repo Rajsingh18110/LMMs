@@ -311,9 +311,11 @@ class MainWindow(QMainWindow):
                     color: #cccccc;
                     border: none;
                     outline: none;
+                    font-family: 'Segoe UI', 'San Francisco', sans-serif;
+                    font-size: 13px;
                 }}
                 QTreeView::item {{
-                    padding: 4px 0px;
+                    padding: 2px 0px;
                 }}
                 QTreeView::item:selected {{
                     background-color: #37373d;
@@ -340,7 +342,51 @@ class MainWindow(QMainWindow):
             self.tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.tree_view.customContextMenuRequested.connect(self.show_explorer_context_menu)
             
-            explorer_layout.addWidget(self.tree_view)
+            # Explorer Splitter
+            self.explorer_splitter = QSplitter(Qt.Orientation.Vertical)
+            self.explorer_splitter.setChildrenCollapsible(False)
+            
+            # File Tree wrapper to give it a title
+            file_tree_wrapper = QWidget()
+            file_tree_layout = QVBoxLayout(file_tree_wrapper)
+            file_tree_layout.setContentsMargins(0, 0, 0, 0)
+            file_tree_layout.setSpacing(0)
+            file_title = QLabel("FILES")
+            file_title.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; padding: 4px 10px; background: #252526;")
+            file_tree_layout.addWidget(file_title)
+            file_tree_layout.addWidget(self.tree_view)
+            
+            self.explorer_splitter.addWidget(file_tree_wrapper)
+            
+            # Outline Tree
+            self.outline_tree_view = QTreeView()
+            self.outline_tree_view.setObjectName("outlineTree")
+            self.outline_tree_view.setHeaderHidden(True)
+            self.outline_tree_view.setIndentation(15)
+            self.outline_tree_view.setStyleSheet(self.tree_view.styleSheet())
+            
+            from PyQt6.QtGui import QStandardItemModel, QStandardItem
+            self.outline_model = QStandardItemModel()
+            self.outline_tree_view.setModel(self.outline_model)
+            self.outline_tree_view.doubleClicked.connect(self.on_outline_item_double_clicked)
+            
+            outline_wrapper = QWidget()
+            outline_layout = QVBoxLayout(outline_wrapper)
+            outline_layout.setContentsMargins(0, 0, 0, 0)
+            outline_layout.setSpacing(0)
+            outline_title = QLabel("OUTLINE")
+            outline_title.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px; padding: 4px 10px; background: #252526;")
+            outline_layout.addWidget(outline_title)
+            outline_layout.addWidget(self.outline_tree_view)
+            
+            self.explorer_splitter.addWidget(outline_wrapper)
+            self.explorer_splitter.setSizes([600, 400])
+            
+            explorer_layout.addWidget(self.explorer_splitter)
+            
+            # Connect EditorManager's outline updates
+            self.editor_manager.outline_updated.connect(self.on_outline_updated)
+            self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed_outline)
             
             self.inline_input = InlineInput(self.tree_view)
             self.inline_input.returnPressed.connect(self.commit_inline_input)
@@ -526,6 +572,16 @@ class MainWindow(QMainWindow):
         
         # Auto-manage Chat visibility based on tab context
         self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed)
+        
+        # Command Palette Shortcut
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        self.cmd_palette_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
+        self.cmd_palette_shortcut.activated.connect(self.open_command_palette)
+
+    def open_command_palette(self):
+        editor = self.editor_manager.get_active_editor()
+        if editor and hasattr(editor, 'open_command_palette'):
+            editor.open_command_palette()
 
     def toggle_left_panel(self):
         if self.explorer_dock.isVisible():
@@ -801,6 +857,68 @@ class MainWindow(QMainWindow):
         file_path = self.file_model.filePath(index)
         if not self.file_model.isDir(index):
             self.editor_manager.open_file(file_path)
+
+    def on_outline_item_double_clicked(self, index):
+        item = self.outline_model.itemFromIndex(index)
+        if item:
+            line = item.data(Qt.ItemDataRole.UserRole + 1)
+            col = item.data(Qt.ItemDataRole.UserRole + 2)
+            if line is not None and col is not None:
+                editor = self.editor_manager.get_active_editor()
+                if editor and hasattr(editor, 'jump_to'):
+                    # Monaco jump_to expects 0-indexed line/col
+                    editor.jump_to(line - 1, col - 1)
+
+    def on_editor_tab_changed_outline(self, index):
+        # Request outline for new tab
+        editor = self.editor_manager.get_active_editor()
+        if editor and hasattr(editor, 'request_outline'):
+            editor.request_outline()
+        else:
+            from PyQt6.QtGui import QStandardItem
+            self.outline_model.clear()
+            item = QStandardItem("No outline available")
+            self.outline_model.appendRow(item)
+
+    def on_outline_updated(self, file_path, json_data):
+        # Make sure this outline is for the currently active editor
+        editor = self.editor_manager.get_active_editor()
+        if not editor or editor.property("file_path") != file_path:
+            return
+            
+        import json
+        from PyQt6.QtGui import QStandardItem
+        try:
+            symbols = json.loads(json_data)
+            self.outline_model.clear()
+            
+            def add_symbols(parent_item, syms):
+                for s in syms:
+                    name = s.get("name", "Unknown")
+                    kind = s.get("kind", 0) # Could map kind to icon
+                    
+                    item = QStandardItem(name)
+                    item.setToolTip(s.get("detail", ""))
+                    
+                    # Store 1-indexed position
+                    rng = s.get("range", {})
+                    item.setData(rng.get("startLineNumber", 1), Qt.ItemDataRole.UserRole + 1)
+                    item.setData(rng.get("startColumn", 1), Qt.ItemDataRole.UserRole + 2)
+                    
+                    parent_item.appendRow(item)
+                    
+                    if s.get("children"):
+                        add_symbols(item, s["children"])
+            
+            if not symbols:
+                item = QStandardItem("No symbols found")
+                self.outline_model.appendRow(item)
+            else:
+                add_symbols(self.outline_model, symbols)
+                self.outline_tree_view.expandAll()
+                
+        except Exception as e:
+            print("Failed to parse outline:", e)
 
 
     def prompt_open_folder(self):

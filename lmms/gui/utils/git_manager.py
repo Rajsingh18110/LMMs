@@ -87,6 +87,68 @@ class GitManager(QObject):
             print("Decorations error:", e)
             return []
 
+    def get_blame(self, file_path):
+        """Returns line-by-line blame info."""
+        if not self.is_valid():
+            return {}
+        try:
+            import time
+            import datetime
+            rel_path = os.path.relpath(file_path, self.repo_path)
+            blame_out = self.repo.git.blame(rel_path, "--line-porcelain")
+            
+            blame_data = {}
+            current_commit = None
+            current_line = None
+            
+            commits = {} # hash -> info
+            
+            for line in blame_out.splitlines():
+                if not line:
+                    continue
+                if not current_commit:
+                    parts = line.split(" ")
+                    current_commit = parts[0]
+                    # original line, final line, group lines
+                    current_line = int(parts[2])
+                    if current_commit not in commits:
+                        commits[current_commit] = {"hash": current_commit}
+                elif line.startswith("author "):
+                    commits[current_commit]["author"] = line[7:]
+                elif line.startswith("author-time "):
+                    timestamp = int(line[12:])
+                    # convert to relative time
+                    dt = datetime.datetime.fromtimestamp(timestamp)
+                    now = datetime.datetime.now()
+                    diff = now - dt
+                    if diff.days > 365:
+                        commits[current_commit]["time"] = f"{diff.days // 365} years ago"
+                    elif diff.days > 30:
+                        commits[current_commit]["time"] = f"{diff.days // 30} months ago"
+                    elif diff.days > 0:
+                        commits[current_commit]["time"] = f"{diff.days} days ago"
+                    else:
+                        commits[current_commit]["time"] = "today"
+                elif line.startswith("summary "):
+                    commits[current_commit]["summary"] = line[8:]
+                elif line.startswith("\t"): # file content line
+                    blame_data[current_line] = commits[current_commit]
+                    current_commit = None
+                    current_line = None
+            
+            # Now we only want to return strings for each line to display in the editor
+            # E.g. {1: "markanm, 3 days ago • Initial commit", ...}
+            # Or if it's the 000000 commit (uncommitted), return "Not Committed Yet"
+            result = {}
+            for line_no, info in blame_data.items():
+                if info["hash"].startswith("000000"):
+                    result[line_no] = "Not Committed Yet"
+                else:
+                    result[line_no] = f"{info.get('author', 'Unknown')}, {info.get('time', '')} • {info.get('summary', '')}"
+            return result
+        except Exception as e:
+            return {}
+
     def stage_file(self, file_path):
         if not self.is_valid(): return
         try:

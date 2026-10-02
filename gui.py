@@ -75,10 +75,26 @@ def main():
         
     theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "dark.qss")
     try:
+        from lmms.gui.themes.theme_manager import ThemeManager
+        # Default VS Code theme we downloaded
+        vscode_theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "vscode", "dark_vs.json")
+        theme_mgr = ThemeManager(vscode_theme_path)
+        
+        # Load base QSS
         with open(theme_path, "r") as f:
-            app.setStyleSheet(f.read())
-    except Exception:
-        pass
+            base_qss = f.read()
+            
+        # Get overrides and monaco JSON
+        overrides = theme_mgr.generate_qss_overrides()
+        monaco_theme_json = theme_mgr.get_monaco_theme_json()
+        
+        # Store for CodeEditor
+        os.environ["LMMS_MONACO_THEME"] = monaco_theme_json or ""
+        
+        # Apply combined QSS
+        app.setStyleSheet(base_qss + "\n" + overrides)
+    except Exception as e:
+        print(f"[Theme] Failed to load theme: {e}")
 
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)

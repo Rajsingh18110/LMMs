@@ -14,12 +14,39 @@ class EditorManager(QWidget):
     file_dirty = pyqtSignal(str) # file_path
     cursor_position_changed = pyqtSignal(int, int) # line, col
     file_context_changed = pyqtSignal(str, int, str, str) # language, indent, encoding, eol
+    outline_updated = pyqtSignal(str, str) # file_path, json_data
     
     def __init__(self):
         super().__init__()
-        self.open_files = {} # path -> CodeEditor
+        self.open_files = {} # path -> widget
         self.terminal_tab_index = -1
+        self.editor_pool = []
         self.init_ui()
+        self.replenish_pool()
+        
+    def replenish_pool(self):
+        # Keep 1 editor ready in the pool to mask the 1s load time
+        if len(self.editor_pool) < 1:
+            from PyQt6.QtCore import QTimer
+            editor = CodeEditor()
+            editor.resize(800, 600)
+            editor.hide()
+            self.editor_pool.append(editor)
+            
+    def get_editor_from_pool(self):
+        if self.editor_pool:
+            editor = self.editor_pool.pop()
+            # Replenish asynchronously
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self.replenish_pool)
+            return editor
+        else:
+            # Fallback
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self.replenish_pool)
+            editor = CodeEditor()
+            editor.resize(800, 600)
+            return editor
         
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -198,19 +225,48 @@ class EditorManager(QWidget):
             if size_mb > 5:
                 disable_highlighting = True
                 
+            
+            # Check for binary/image files
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp']:
+                from PyQt6.QtWidgets import QLabel, QScrollArea
+                from PyQt6.QtGui import QPixmap
+                
+                scroll = QScrollArea()
+                label = QLabel()
+                pixmap = QPixmap(file_path)
+                label.setPixmap(pixmap)
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                scroll.setWidget(label)
+                scroll.setWidgetResizable(True)
+                scroll.setProperty("file_path", file_path)
+                
+                self.open_files[file_path] = scroll
+                file_name = os.path.basename(file_path)
+                
+                provider = CustomIconProvider()
+                icon = provider.icon(QFileInfo(file_path))
+                
+                idx = self.tabs.addTab(scroll, icon, file_name)
+                self.tabs.setCurrentIndex(idx)
+                self.update_breadcrumbs(file_path)
+                return
+                
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
             content = f"Error opening file: {e}"
             disable_highlighting = True
             
-        editor = CodeEditor()
+        editor = self.get_editor_from_pool()
         editor.load_file(file_path, content, disable_highlighting=disable_highlighting)
         editor.setProperty("file_path", file_path)
         
         # Track changes
         editor.textChanged.connect(lambda e=editor: self.mark_unsaved(e))
         editor.bridge.cursorPositionChanged.connect(self.cursor_position_changed.emit)
+        if hasattr(editor, "outline_updated"):
+            editor.outline_updated.connect(self.outline_updated.emit)
         
         self.open_files[file_path] = editor
         file_name = os.path.basename(file_path)
@@ -224,6 +280,14 @@ class EditorManager(QWidget):
         
         if hasattr(editor, "jump_to"):
             editor.jump_to(line, col)
+
+    def get_active_editor(self):
+        idx = self.tabs.currentIndex()
+        if idx >= 0:
+            widget = self.tabs.widget(idx)
+            if not widget.property("is_custom"):
+                return widget
+        return None
 
     def open_custom_tab(self, widget: QWidget, title: str, identifier: str = None):
         # Open a generic widget as a tab

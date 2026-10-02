@@ -66,13 +66,17 @@ def _find_repo_root(file_path: str) -> str | None:
 class PythonBridge(QObject):
     contentChanged      = pyqtSignal(str)
     editorReady         = pyqtSignal()
-    setContent          = pyqtSignal(str, str)   # content, language
+    setContent          = pyqtSignal(str, str, str)   # content, language, filePath
     sendLspMessage      = pyqtSignal(str)         # LSP response → JS
     lspMessageFromJs    = pyqtSignal(str)         # LSP request ← JS
     updateGitDecorations = pyqtSignal(str)        # git gutter data → JS
+    updateGitBlame      = pyqtSignal(str)         # git blame data -> JS
     registerExtension   = pyqtSignal(str)         # manifest string → JS
     jumpTo              = pyqtSignal(int, int)    # line, col -> JS
     cursorPositionChanged = pyqtSignal(int, int)  # line, col <- JS
+    setTheme            = pyqtSignal(str)         # theme JSON string -> JS
+    requestOutline      = pyqtSignal()            # trigger outline -> JS
+    outlineReceived     = pyqtSignal(str)         # outline JSON <- JS
 
     @pyqtSlot(str)
     def onContentChanged(self, content: str):
@@ -85,12 +89,17 @@ class PythonBridge(QObject):
     @pyqtSlot(str)
     def onLspMessage(self, message: str):
         self.lspMessageFromJs.emit(message)
+        
+    @pyqtSlot(str)
+    def onOutlineReceived(self, json_data: str):
+        self.outlineReceived.emit(json_data)
 
 
 # ── Monaco-based CodeEditor ────────────────────────────────────────────────────
 
 class CodeEditor(QWebEngineView):
     textChanged = pyqtSignal()
+    outline_updated = pyqtSignal(str, str) # file_path, json_data
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -113,10 +122,12 @@ class CodeEditor(QWebEngineView):
         # Bridge signals
         self.bridge.contentChanged.connect(self._on_content_changed)
         self.bridge.editorReady.connect(self._on_editor_ready)
+        self.bridge.outlineReceived.connect(self._on_outline_received)
 
         self._current_content = ""
         self._pending_content = ""
         self._pending_language = ""
+        self._pending_theme = os.environ.get("LMMS_MONACO_THEME", "")
         self._is_ready = False
         self._pending_jump = None
 
@@ -153,9 +164,31 @@ class CodeEditor(QWebEngineView):
         if self._pending_jump:
             self.bridge.jumpTo.emit(*self._pending_jump)
             self._pending_jump = None
+            
+        if self._pending_theme:
+            self.bridge.setTheme.emit(self._pending_theme)
+            self._pending_theme = ""
+            
+        # Initial outline request
+        QTimer.singleShot(1500, self.request_outline)
+
+    def request_outline(self):
+        if self._is_ready:
+            self.bridge.requestOutline.emit()
+            
+    def _on_outline_received(self, json_data: str):
+        file_path = self.property("file_path") or ""
+        self.outline_updated.emit(file_path, json_data)
+
+    def set_theme(self, theme_json: str):
+        if self._is_ready:
+            self.bridge.setTheme.emit(theme_json)
+        else:
+            self._pending_theme = theme_json
 
     def _push_content(self, content: str, language: str):
-        self.bridge.setContent.emit(content, language)
+        file_path = self.property("file_path") or ""
+        self.bridge.setContent.emit(content, language, file_path)
 
     def _on_content_changed(self, content: str):
         self._current_content = content
@@ -163,10 +196,24 @@ class CodeEditor(QWebEngineView):
         # Restart the debounce timer
         self._git_timer.start()
         
+        # Debounce outline request
+        if hasattr(self, '_outline_timer'):
+            self._outline_timer.stop()
+        else:
+            self._outline_timer = QTimer(self)
+            self._outline_timer.setSingleShot(True)
+            self._outline_timer.setInterval(2000)
+            self._outline_timer.timeout.connect(self.request_outline)
+        self._outline_timer.start()
+        
     def jump_to(self, line: int, col: int):
         self._pending_jump = (line, col)
         if self._is_ready:
             self.bridge.jumpTo.emit(line, col)
+            
+    def open_command_palette(self):
+        if self._is_ready:
+            self.page().runJavaScript("if (window.editor) { window.editor.trigger('', 'editor.action.quickCommand'); }")
             
     @pyqtSlot(int)
     def toggleBreakpoint(self, line: int):
@@ -231,6 +278,10 @@ class CodeEditor(QWebEngineView):
             decs = manager.compute_decorations(file_path, self._current_content)
             if decs is not None:
                 self.bridge.updateGitDecorations.emit(json.dumps(decs))
+            
+            blame = manager.get_blame(file_path)
+            if blame:
+                self.bridge.updateGitBlame.emit(json.dumps(blame))
         except Exception as e:
             pass  # Silently ignore — not critical
 
