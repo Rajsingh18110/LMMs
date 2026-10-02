@@ -16,19 +16,19 @@ class CustomIconProvider(QFileIconProvider):
             if info.isDir():
                 name = info.fileName().lower()
                 if name == "src" or name == "source":
-                    return self.get_icon("folder_src.png")
-                return self.get_icon("folder_closed.png")
+                    return self.get_icon("folder_src.svg")
+                return self.get_icon("folder_closed.svg")
             else:
                 ext = info.suffix().lower()
                 name = info.fileName().lower()
                 
                 # Exact file name matches
                 if name == ".gitignore":
-                    return self.get_icon("file_git.png")
+                    return self.get_icon("file_git.svg")
                 if "dockerfile" in name or name == ".dockerignore":
-                    return self.get_icon("file_docker.png")
+                    return self.get_icon("file_docker.svg")
                 if name == "package.json" or name == "package-lock.json":
-                    return self.get_icon("file_npm.png")
+                    return self.get_icon("file_npm.svg")
                 
                 # Extension matches
                 ext_map = {
@@ -59,8 +59,8 @@ class CustomIconProvider(QFileIconProvider):
                 }
                 
                 if ext in ext_map:
-                    return self.get_icon(ext_map[ext] + ".png")
-                return self.get_icon("file_document.png")
+                    return self.get_icon(ext_map[ext] + ".svg")
+                return self.get_icon("file_document.svg")
                 
         return super().icon(icon_type_or_info)
 

@@ -299,7 +299,7 @@ class MainWindow(QMainWindow):
             
             self.tree_view.setModel(self.diagnostic_model)
             self.tree_view.setHeaderHidden(True)
-            self.tree_view.setIndentation(20)
+            self.tree_view.setIndentation(14)
             
             assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
             closed_icon = os.path.join(assets_dir, "branch_closed.svg").replace("\\", "/")
@@ -315,7 +315,7 @@ class MainWindow(QMainWindow):
                     font-size: 13px;
                 }}
                 QTreeView::item {{
-                    padding: 2px 0px;
+                    padding: 3px 0px;
                 }}
                 QTreeView::item:selected {{
                     background-color: #37373d;
@@ -326,10 +326,12 @@ class MainWindow(QMainWindow):
                 }}
                 QTreeView::branch:has-children:!has-siblings:closed,
                 QTreeView::branch:closed:has-children:has-siblings {{
+                    border-image: none;
                     image: url("{closed_icon}");
                 }}
                 QTreeView::branch:open:has-children:!has-siblings,
                 QTreeView::branch:open:has-children:has-siblings {{
+                    border-image: none;
                     image: url("{open_icon}");
                 }}
             """)

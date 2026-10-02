@@ -213,7 +213,8 @@ class CodeEditor(QWebEngineView):
             
     def open_command_palette(self):
         if self._is_ready:
-            self.page().runJavaScript("if (window.editor) { window.editor.trigger('', 'editor.action.quickCommand'); }")
+            self.setFocus()
+            self.page().runJavaScript("if (window.editor) { window.editor.focus(); window.editor.trigger('keyboard', 'editor.action.quickCommand'); }")
             
     @pyqtSlot(int)
     def toggleBreakpoint(self, line: int):
