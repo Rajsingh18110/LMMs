@@ -21,7 +21,7 @@ from lmms.gui.pages.chat_page import ChatPage
 from lmms.gui.widgets.editor_manager import EditorManager
 from lmms.gui.panels.terminal_panel import TerminalPanel
 from lmms.backend.core.commands import CommandRegistry, CommandContext
-from lmms.gui.utils.icon_provider import CustomIconProvider
+from qt_vscode_icons import VscodeIconProvider
 from lmms.gui.panels.search_panel import SearchPanel
 from lmms.gui.widgets.model_browser import ModelBrowser, ModelDetailsTab
 from lmms.gui.panels.terminal_panel import TerminalPanel
@@ -35,26 +35,7 @@ from lmms.backend.logic.manager import BackendManager
 from lmms.gui.state.manager import GUIStateManager
 from lmms.gui.notifications.manager import NotificationManager
 
-class InlineInput(QLineEdit):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet("""
-            QLineEdit {
-                background-color: #252526;
-                color: #cccccc;
-                border: 1px solid #007fd4;
-                padding: 2px 4px;
-                font-size: 13px;
-                selection-background-color: #062f4a;
-            }
-        """)
-        self.hide()
-        self.is_folder = False
-        self.target_path = ""
-
-    def focusOutEvent(self, event):
-        self.hide()
-        super().focusOutEvent(event)
+# Removed InlineInput class
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -163,7 +144,9 @@ class MainWindow(QMainWindow):
         
         if QFileSystemModel is not None:
             self.file_model = QFileSystemModel()
-            self.file_model.setIconProvider(CustomIconProvider())
+            self.file_model.setReadOnly(False)
+            self.file_model.setIconProvider(VscodeIconProvider())
+            self.file_model.fileRenamed.connect(self.on_file_renamed)
             cwd = ConfigManager().get("workspace_dir", os.getcwd())
             if not os.path.exists(cwd):
                 cwd = os.getcwd()
@@ -314,6 +297,13 @@ class MainWindow(QMainWindow):
                     font-family: 'Segoe UI', 'San Francisco', sans-serif;
                     font-size: 13px;
                 }}
+                QTreeView QLineEdit {{
+                    background-color: #252526;
+                    color: #cccccc;
+                    border: 1px solid #007fd4;
+                    padding: 0px 2px;
+                    selection-background-color: #062f4a;
+                }}
                 QTreeView::item {{
                     padding: 3px 0px;
                 }}
@@ -390,8 +380,7 @@ class MainWindow(QMainWindow):
             self.editor_manager.outline_updated.connect(self.on_outline_updated)
             self.editor_manager.tabs.currentChanged.connect(self.on_editor_tab_changed_outline)
             
-            self.inline_input = InlineInput(self.tree_view)
-            self.inline_input.returnPressed.connect(self.commit_inline_input)
+            # Removed inline input connection
             
             if self.is_empty_workspace:
                 self.tree_view.hide()
@@ -1010,55 +999,55 @@ class MainWindow(QMainWindow):
             return self.file_model.rootPath()
         return os.getcwd()
 
-    def _show_inline_input(self, is_folder):
+    def _create_native_inline(self, is_folder):
         path = self.get_selected_explorer_path()
         if os.path.isfile(path): path = os.path.dirname(path)
         
-        idx = self.tree_view.currentIndex()
-        if not idx.isValid():
-            idx = self.file_model.index(self.file_model.rootPath())
+        prefix = "New Folder" if is_folder else "Untitled"
+        ext = "" if is_folder else ".txt"
+        target_path = os.path.join(path, f"{prefix}{ext}")
         
-        # Position inline input over the tree view
-        rect = self.tree_view.visualRect(idx)
-        x = rect.x() + 20
-        y = rect.bottom()
-        
-        # If y is outside the tree view, clamp it
-        if y > self.tree_view.height() - 24:
-            y = self.tree_view.height() - 24
-        
-        self.inline_input.setGeometry(x, y, self.tree_view.width() - x - 10, 24)
-        self.inline_input.target_path = path
-        self.inline_input.is_folder = is_folder
-        self.inline_input.setText("")
-        self.inline_input.setPlaceholderText("New Folder" if is_folder else "New File")
-        self.inline_input.show()
-        self.inline_input.setFocus()
-
-    def commit_inline_input(self):
-        name = self.inline_input.text().strip()
-        path = self.inline_input.target_path
-        is_folder = self.inline_input.is_folder
-        self.inline_input.hide()
-        
-        if not name: return
-        
-        target_file = os.path.join(path, name)
+        i = 1
+        while os.path.exists(target_path):
+            target_path = os.path.join(path, f"{prefix} ({i}){ext}")
+            i += 1
+            
         try:
             if is_folder:
-                os.makedirs(target_file, exist_ok=True)
+                os.makedirs(target_path, exist_ok=True)
             else:
-                open(target_file, 'a').close()
-                self.editor_manager.open_file(target_file)
+                open(target_path, 'a').close()
         except Exception as e:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Error", f"Could not create item: {e}")
+            return
+            
+        # Wait for file system model to detect the new file
+        def edit_when_ready(retries=10):
+            source_idx = self.file_model.index(target_path)
+            if source_idx.isValid():
+                if hasattr(self, 'diagnostic_model') and self.diagnostic_model:
+                    proxy_idx = self.diagnostic_model.mapFromSource(source_idx)
+                    idx_to_edit = proxy_idx
+                else:
+                    idx_to_edit = source_idx
+                self.tree_view.setCurrentIndex(idx_to_edit)
+                self.tree_view.edit(idx_to_edit)
+            elif retries > 0:
+                QTimer.singleShot(50, lambda: edit_when_ready(retries - 1))
+                
+        QTimer.singleShot(50, edit_when_ready)
+
+    def on_file_renamed(self, path, old_name, new_name):
+        target_path = os.path.join(path, new_name)
+        if os.path.isfile(target_path):
+            self.editor_manager.open_file(target_path)
 
     def create_new_file(self):
-        self._show_inline_input(is_folder=False)
+        self._create_native_inline(is_folder=False)
                 
     def create_new_folder(self):
-        self._show_inline_input(is_folder=True)
+        self._create_native_inline(is_folder=True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
