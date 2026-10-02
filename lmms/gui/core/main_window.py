@@ -608,11 +608,6 @@ class MainWindow(QMainWindow):
             if "Chats" in self.nav_buttons:
                 self.nav_buttons["Chats"].setChecked(True)
 
-    def on_editor_tab_changed(self, index):
-        editor = self.editor_manager.get_active_editor()
-        if editor and hasattr(editor, "file_path"):
-            self.status_bar.update_file_status(editor.file_path)
-
     def on_run_action_requested(self, action_type, file_path):
         import os
         import subprocess
@@ -659,6 +654,11 @@ class MainWindow(QMainWindow):
             self.bottom_panel.setVisible(True)
             self.terminal_panel.setFocus()
             self.terminal_panel.send_command(f'echo "Running task for {os.path.basename(file_path)}"')
+
+    def on_editor_tab_changed(self, index):
+        editor = self.editor_manager.get_active_editor()
+        if editor and hasattr(editor, "file_path"):
+            self.status_bar.update_file_status(editor.file_path)
         if index < 0:
             if "Chats" in self.docks and not self.docks["Chats"].isVisible():
                 self.docks["Chats"].show()
