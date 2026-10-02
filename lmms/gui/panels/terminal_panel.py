@@ -8,109 +8,162 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QProcess, pyqtSlot, Qt, QProcessEnvironment
 from PyQt6.QtGui import QTextCursor, QColor, QTextCharFormat, QFont
 
-ANSI_COLORS = {
-    '30': '#000000', '31': '#ff7b72', '32': '#3fb950', '33': '#d29922',
-    '34': '#58a6ff', '35': '#bc8cff', '36': '#39c5cf', '37': '#c9d1d9',
-    '90': '#8b949e', '91': '#ff7b72', '92': '#56d364', '93': '#e3b341',
-    '94': '#79c0ff', '95': '#d2a8ff', '96': '#56d4dd', '97': '#f0f6fc',
-}
+import pty
+import fcntl
+import termios
+import struct
+import select
+import json
+from PyQt6.QtCore import QThread, pyqtSignal, QObject, pyqtSlot, QUrl
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebChannel import QWebChannel
 
-class TerminalEdit(QTextEdit):
+XTERM_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #1e1e1e; overflow: hidden; }
+        #terminal { height: 100%; width: 100%; padding: 4px 10px; box-sizing: border-box; }
+        .xterm .xterm-viewport { overflow-y: auto !important; }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    <script>
+        var term = new Terminal({
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#cccccc',
+                cursor: '#ffffff',
+                selectionBackground: '#264f78'
+            },
+            fontFamily: 'monospace',
+            fontSize: 13,
+            cursorBlink: true
+        });
+        var fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        
+        var backend;
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+            backend = channel.objects.backend;
+            
+            term.onData(e => {
+                backend.write_data(e);
+            });
+            
+            term.onResize(size => {
+                backend.resize_pty(size.cols, size.rows);
+            });
+            
+            fitAddon.fit();
+            backend.resize_pty(term.cols, term.rows);
+            
+            window.addEventListener('resize', () => {
+                fitAddon.fit();
+            });
+        });
+        
+        window.write_to_term = function(data) {
+            term.write(data);
+        };
+    </script>
+</body>
+</html>
+"""
+
+class PtyReaderThread(QThread):
+    data_ready = pyqtSignal(str)
+    
+    def __init__(self, fd):
+        super().__init__()
+        self.fd = fd
+        self.running = True
+        
+    def run(self):
+        while self.running:
+            r, _, _ = select.select([self.fd], [], [], 0.1)
+            if self.fd in r:
+                try:
+                    data = os.read(self.fd, 4096)
+                    if data:
+                        text = data.decode('utf-8', errors='replace')
+                        self.data_ready.emit(text)
+                    else:
+                        break
+                except Exception:
+                    break
+
+class TerminalBackend(QObject):
+    def __init__(self, fd):
+        super().__init__()
+        self.fd = fd
+        
+    @pyqtSlot(str)
+    def write_data(self, data):
+        try:
+            os.write(self.fd, data.encode('utf-8'))
+        except Exception:
+            pass
+            
+    @pyqtSlot(int, int)
+    def resize_pty(self, cols, rows):
+        try:
+            winsize = struct.pack("HHHH", rows, cols, 0, 0)
+            fcntl.ioctl(self.fd, termios.TIOCSWINSZ, winsize)
+        except Exception:
+            pass
+
+class TerminalWebEngine(QWebEngineView):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("background-color: #1e1e1e; color: #c9d1d9; border: none; font-family: monospace;")
-        self.setFont(QFont("monospace", 10))
-        self.process = QProcess(self)
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self.on_ready_read)
+        # Enable QWebChannel support
+        self.page().settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         
-        # Environment variables for colorful output
-        env = QProcessEnvironment.systemEnvironment()
-        env.insert("TERM", "xterm-256color")
-        env.insert("CLICOLOR", "1")
-        env.insert("LSCOLORS", "ExFxBxDxCxegedabagacad")
-        self.process.setProcessEnvironment(env)
+        # Fork PTY
+        self.pid, self.fd = pty.fork()
+        if self.pid == 0:
+            env = os.environ.copy()
+            env["TERM"] = "xterm-256color"
+            shell = env.get("SHELL", "bash")
+            os.execvpe(shell, [shell], env)
+            
+        self.shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
+            
+        self.channel = QWebChannel(self)
+        self.backend = TerminalBackend(self.fd)
+        self.channel.registerObject("backend", self.backend)
+        self.page().setWebChannel(self.channel)
         
-        self.process.setWorkingDirectory(os.getcwd())
+        self.setHtml(XTERM_HTML, QUrl("qrc:///"))
         
-        shell_path = os.environ.get("SHELL", "bash")
-        self.shell_name = os.path.basename(shell_path)
-        self.process.start(shell_path, ["-i"])
-        
-        self.readonly_pos = 0
+        self.reader = PtyReaderThread(self.fd)
+        self.reader.data_ready.connect(self.on_pty_data)
+        self.reader.start()
+
+    def on_pty_data(self, text):
+        js = f"if (window.write_to_term) window.write_to_term({json.dumps(text)});"
+        self.page().runJavaScript(js)
 
     def close_process(self):
-        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
-            self.process.kill()
-            self.process.waitForFinished(100)
-
-    def on_ready_read(self):
-        data = self.process.readAllStandardOutput().data()
+        self.reader.running = False
+        self.reader.wait(100)
         try:
-            text = data.decode('utf-8', errors='replace')
+            os.close(self.fd)
         except:
-            text = data.decode('latin1', errors='replace')
-            
-        self.append_ansi_text(text)
-
-    def append_ansi_text(self, text):
-        cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.setTextCursor(cursor)
-        
-        # Remove OSC (Operating System Command) sequences like window title
-        text = re.sub(r'\x1b\].*?(?:\x07|\x1b\\)', '', text)
-        
-        # Extremely basic ANSI color parser
-        parts = re.split(r'\x1b\[([0-9;]*)m', text)
-        
-        format = QTextCharFormat()
-        format.setForeground(QColor("#c9d1d9")) # Default color
-        
-        for i, part in enumerate(parts):
-            if i % 2 == 1:
-                codes = part.split(';')
-                for code in codes:
-                    if code in ANSI_COLORS:
-                        format.setForeground(QColor(ANSI_COLORS[code]))
-                    elif code == '0' or code == '':
-                        format.setForeground(QColor("#c9d1d9"))
-                        format.setFontWeight(QFont.Weight.Normal)
-                    elif code == '1':
-                        format.setFontWeight(QFont.Weight.Bold)
-            else:
-                if part:
-                    clean_part = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', part)
-                    cursor.insertText(clean_part, format)
-                    
-        self.readonly_pos = self.document().characterCount() - 1
-        self.ensureCursorVisible()
-
-    def keyPressEvent(self, event):
-        cursor = self.textCursor()
-        
-        # Prevent editing before readonly_pos
-        if cursor.position() < self.readonly_pos and event.key() not in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Copy):
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.setTextCursor(cursor)
-            
-        if event.key() == Qt.Key.Key_Backspace and cursor.position() <= self.readonly_pos:
-            return
-            
-        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.setTextCursor(cursor)
-            
-            cursor.setPosition(self.readonly_pos, QTextCursor.MoveMode.KeepAnchor)
-            cmd = cursor.selectedText().replace('\u2029', '\n').replace('\u00a0', ' ')
-            
-            cursor.removeSelectedText()
-            self.setTextCursor(cursor)
-            
-            self.process.write((cmd + "\n").encode('utf-8'))
-            return
-
-        super().keyPressEvent(event)
+            pass
+        # Kill the child process gracefully
+        try:
+            os.kill(self.pid, 9)
+        except:
+            pass
 
 
 class TerminalPanel(QWidget):
@@ -166,13 +219,24 @@ class TerminalPanel(QWidget):
         self.tabs.addTab(self.debug_console_tab, "Debug Console")
         
         # Terminal Tab
-        self.terminal_container = QWidget()
-        terminal_layout = QVBoxLayout(self.terminal_container)
-        terminal_layout.setContentsMargins(0,0,0,0)
-        terminal_layout.setSpacing(0)
+        from PyQt6.QtWidgets import QSplitter, QListWidget
+        self.terminal_container = QSplitter(Qt.Orientation.Horizontal)
+        self.terminal_container.setHandleWidth(1)
+        self.terminal_container.setStyleSheet("QSplitter::handle { background: #30363d; }")
         
         self.terminal_stack = QStackedWidget()
-        terminal_layout.addWidget(self.terminal_stack)
+        self.terminal_list = QListWidget()
+        self.terminal_list.setFixedWidth(200)
+        self.terminal_list.setStyleSheet("""
+            QListWidget { background-color: #1e1e1e; color: #c9d1d9; border: none; border-left: 1px solid #30363d; outline: none; }
+            QListWidget::item { padding: 6px 10px; border: none; font-size: 12px; }
+            QListWidget::item:selected { background-color: #37373d; }
+            QListWidget::item:hover { background-color: #2a2d2e; }
+        """)
+        self.terminal_list.currentRowChanged.connect(self.switch_terminal)
+        
+        self.terminal_container.addWidget(self.terminal_stack)
+        self.terminal_container.addWidget(self.terminal_list)
         self.tabs.addTab(self.terminal_container, "Terminal")
         
         # Ports Tab — full Phase 5 widget with psutil
@@ -211,23 +275,38 @@ class TerminalPanel(QWidget):
         t_layout.setContentsMargins(0, 0, 15, 0)
         t_layout.setSpacing(4)
         
-        self.term_selector = QComboBox()
-        self.term_selector.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.term_selector.setStyleSheet("""
-            QComboBox { background: transparent; color: #c9d1d9; border: none; font-size: 11px; padding: 2px 5px; }
-            QComboBox::drop-down { border: none; }
-            QComboBox:hover { background: #30363d; border-radius: 4px; }
-        """)
-        self.term_selector.currentIndexChanged.connect(self.switch_terminal)
-        t_layout.addWidget(self.term_selector)
+        # Load VS Code Codicon Font
+        from PyQt6.QtGui import QFontDatabase, QFont
+        font_id = QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(__file__), "..", "assets", "monaco_build", "node_modules", "monaco-editor", "esm", "vs", "base", "browser", "ui", "codicons", "codicon", "codicon.ttf"))
+        codicon_family = QFontDatabase.applicationFontFamilies(font_id)[0] if font_id != -1 else "sans-serif"
         
-        self.btn_new_term = QToolButton(); self.btn_new_term.setText("＋"); self.btn_new_term.setStyleSheet(btn_style); self.btn_new_term.setToolTip("New Terminal"); self.btn_new_term.setCursor(Qt.CursorShape.PointingHandCursor)
+        icon_font = QFont(codicon_family, 12)
+        
+        self.btn_new_term = QToolButton()
+        self.btn_new_term.setText("\uea60") # Plus
+        self.btn_new_term.setFont(icon_font)
+        self.btn_new_term.setStyleSheet(btn_style)
+        self.btn_new_term.setToolTip("New Terminal")
+        self.btn_new_term.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_new_term.clicked.connect(self.add_new_terminal)
         
-        self.btn_kill_term = QToolButton(); self.btn_kill_term.setText("🗑"); self.btn_kill_term.setStyleSheet(btn_style); self.btn_kill_term.setToolTip("Kill Terminal"); self.btn_kill_term.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_split_term = QToolButton()
+        self.btn_split_term.setText("\uea38") # Split
+        self.btn_split_term.setFont(icon_font)
+        self.btn_split_term.setStyleSheet(btn_style)
+        self.btn_split_term.setToolTip("Split Terminal")
+        self.btn_split_term.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        self.btn_kill_term = QToolButton()
+        self.btn_kill_term.setText("\uea81") # Trash
+        self.btn_kill_term.setFont(icon_font)
+        self.btn_kill_term.setStyleSheet(btn_style)
+        self.btn_kill_term.setToolTip("Kill Terminal")
+        self.btn_kill_term.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_kill_term.clicked.connect(self.kill_current_terminal)
         
         t_layout.addWidget(self.btn_new_term)
+        t_layout.addWidget(self.btn_split_term)
         t_layout.addWidget(self.btn_kill_term)
         
         div = QFrame(); div.setFrameShape(QFrame.Shape.VLine); div.setStyleSheet("color: #30363d; margin: 4px 6px;")
@@ -254,10 +333,26 @@ class TerminalPanel(QWidget):
         self.on_tab_changed(3)
         
     def add_window_controls(self, layout, btn_style):
-        btn_max = QToolButton(); btn_max.setText("⛶"); btn_max.setStyleSheet(btn_style); btn_max.setToolTip("Maximize Panel"); btn_max.setCursor(Qt.CursorShape.PointingHandCursor)
+        from PyQt6.QtGui import QFontDatabase, QFont
+        import os
+        font_id = QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(__file__), "..", "assets", "monaco_build", "node_modules", "monaco-editor", "esm", "vs", "base", "browser", "ui", "codicons", "codicon", "codicon.ttf"))
+        codicon_family = QFontDatabase.applicationFontFamilies(font_id)[0] if font_id != -1 else "sans-serif"
+        icon_font = QFont(codicon_family, 12)
+        
+        btn_max = QToolButton()
+        btn_max.setText("\ueb2c") # Maximize/Chevron Up
+        btn_max.setFont(icon_font)
+        btn_max.setStyleSheet(btn_style)
+        btn_max.setToolTip("Maximize Panel")
+        btn_max.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_max.clicked.connect(self.maximize_panel)
         
-        btn_close = QToolButton(); btn_close.setText("✕"); btn_close.setStyleSheet(btn_style); btn_close.setToolTip("Close Panel"); btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close = QToolButton()
+        btn_close.setText("\uea76") # Close
+        btn_close.setFont(icon_font)
+        btn_close.setStyleSheet(btn_style)
+        btn_close.setToolTip("Close Panel")
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.clicked.connect(self.close_panel)
         
         layout.addWidget(btn_max)
@@ -270,27 +365,29 @@ class TerminalPanel(QWidget):
                 pass
 
     def add_new_terminal(self):
-        term = TerminalEdit()
+        term = TerminalWebEngine()
         self.terminals.append(term)
         self.terminal_stack.addWidget(term)
         
-        idx = len(self.terminals)
         name = term.shell_name
-        self.term_selector.addItem(f">_  {name}")
-        self.term_selector.setCurrentIndex(idx - 1)
+        self.terminal_list.addItem(f">_  {name}")
+        self.terminal_list.setCurrentRow(len(self.terminals) - 1)
         
     def switch_terminal(self, index):
         if 0 <= index < len(self.terminals):
             self.terminal_stack.setCurrentIndex(index)
             
     def kill_current_terminal(self):
-        idx = self.term_selector.currentIndex()
+        idx = self.terminal_list.currentRow()
         if 0 <= idx < len(self.terminals):
             term = self.terminals.pop(idx)
             term.close_process()
             self.terminal_stack.removeWidget(term)
             term.deleteLater()
-            self.term_selector.removeItem(idx)
+            
+            item = self.terminal_list.takeItem(idx)
+            if item:
+                del item
             
             if not self.terminals:
                 self.add_new_terminal()

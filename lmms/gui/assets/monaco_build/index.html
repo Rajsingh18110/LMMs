@@ -10,10 +10,14 @@
         padding: 0;
         overflow: hidden;
         background-color: #1e1e1e;
+        min-width: 100px;
+        min-height: 100px;
       }
       #editor {
         width: 100vw;
         height: 100vh;
+        min-width: 10px;
+        min-height: 10px;
       }
       .git-gutter-added { border-left: 3px solid #3fb950; margin-left: 2px; }
       .git-gutter-modified { border-left: 3px solid #e3b341; margin-left: 2px; }
@@ -26,6 +30,13 @@
         height: 10px !important;
         margin-top: 4px;
         margin-left: 4px;
+      }
+      
+      .git-blame-inline {
+        color: #6e7681;
+        font-style: italic;
+        font-size: 12px;
+        white-space: pre;
       }
     </style>
   </head>

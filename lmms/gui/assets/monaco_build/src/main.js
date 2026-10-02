@@ -12,6 +12,21 @@ import getModelServiceOverride from '@codingame/monaco-vscode-model-service-over
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
 import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
 import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
+
+import * as vscode from 'vscode';
+import prettier from 'prettier/standalone';
+import * as prettierPluginBabel from 'prettier/plugins/babel';
+import * as prettierPluginEstree from 'prettier/plugins/estree';
+import * as prettierPluginHtml from 'prettier/plugins/html';
+import * as prettierPluginCss from 'prettier/plugins/postcss';
+import * as prettierPluginMarkdown from 'prettier/plugins/markdown';
+
+import Typo from 'typo-js';
+import affData from './en.aff?raw';
+import dicData from './en.dic?raw';
+
+const dictionary = new Typo("en_US", affData, dicData);
+
 // Basic Monaco setup
 self.MonacoEnvironment = {
   getWorkerUrl: function (_moduleId, label) {
@@ -63,6 +78,7 @@ monaco.editor.defineTheme('lmms-dark', {
 
 import 'vscode/localExtensionHost';
 import { registerExtension, ExtensionHostKind } from 'vscode/extensions';
+import { MonacoLanguageClient } from 'monaco-languageclient';
 
 // Call initialize before creating the editor
 await initialize({
@@ -83,24 +99,64 @@ await initialize({
   })
 });
 
-// Since we are using layout service override with editorPart,
-// we might not need to manually create the editor.
-// Wait, actually `editorPart` only gives us a standard editor frame.
-// We can still create our editor instance manually or retrieve it.
-// Let's create it manually anyway for simplicity, though the DOM might conflict.
-// If it conflicts, we should not use editorPart container.
-const editor = monaco.editor.create(document.getElementById('editor'), {
-  value: '# Welcome to LMMs Editor\n',
-  language: 'python',
-  theme: 'lmms-dark',
-  automaticLayout: true,
-  glyphMargin: true,
-  minimap: {
-    enabled: true
+function startMonacoWhenReady() {
+  const editorEl = document.getElementById('editor');
+  if (document.body.clientWidth === 0 || document.body.clientHeight === 0) {
+    setTimeout(startMonacoWhenReady, 50);
+    return;
   }
-});
+  
+  window.editor = monaco.editor.create(editorEl, {
+    value: '# Welcome to LMMs Editor\n',
+    language: 'python',
+    theme: 'lmms-dark',
+    automaticLayout: true,
+    glyphMargin: true,
+    minimap: {
+      enabled: true
+    }
+  });
 
-import { MonacoLanguageClient } from 'monaco-languageclient';
+  const editor = window.editor;
+
+// Register Prettier for supported languages
+const prettierLanguages = ['javascript', 'typescript', 'html', 'css', 'json', 'markdown'];
+prettierLanguages.forEach(lang => {
+  monaco.languages.registerDocumentFormattingEditProvider(lang, {
+    async provideDocumentFormattingEdits(model, options, token) {
+      const text = model.getValue();
+      let parser = 'babel';
+      if (lang === 'html') parser = 'html';
+      else if (lang === 'css') parser = 'css';
+      else if (lang === 'json') parser = 'json';
+      else if (lang === 'markdown') parser = 'markdown';
+
+      try {
+        const formatted = await prettier.format(text, {
+          parser: parser,
+          plugins: [
+            prettierPluginBabel,
+            prettierPluginEstree,
+            prettierPluginHtml,
+            prettierPluginCss,
+            prettierPluginMarkdown
+          ],
+          singleQuote: true,
+          tabWidth: options.tabSize,
+          useTabs: !options.insertSpaces
+        });
+
+        return [{
+          range: model.getFullModelRange(),
+          text: formatted
+        }];
+      } catch (err) {
+        console.error(`Prettier format error for ${lang}:`, err);
+        return [];
+      }
+    }
+  });
+});
 
 class BridgeMessageReader {
     constructor(bridge) {
@@ -164,17 +220,106 @@ if (typeof QWebChannel !== 'undefined') {
         console.error("Failed to start LSP Client", err);
     });
 
+    // Handle Outline requests from Python
+    window.pythonBridge.requestOutline.connect(async function () {
+        if (!editor) return;
+        const model = editor.getModel();
+        if (!model) return;
+        
+        try {
+            // Wait for LSP to have computed symbols (we can just execute the command)
+            const symbols = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', model.uri);
+            if (symbols && window.pythonBridge.onOutlineReceived) {
+                // Simplify to just what we need to minimize JSON serialization cost
+                const cleanSymbols = function(syms) {
+                    return syms.map(s => ({
+                        name: s.name,
+                        detail: s.detail,
+                        kind: s.kind,
+                        // Convert Position/Range objects to plain objects
+                        range: { 
+                            startLineNumber: s.range.start.line + 1, 
+                            startColumn: s.range.start.character + 1,
+                            endLineNumber: s.range.end.line + 1,
+                            endColumn: s.range.end.character + 1
+                        },
+                        children: s.children ? cleanSymbols(s.children) : []
+                    }));
+                };
+                window.pythonBridge.onOutlineReceived(JSON.stringify(cleanSymbols(symbols)));
+            } else if (!symbols && window.pythonBridge.onOutlineReceived) {
+                window.pythonBridge.onOutlineReceived("[]");
+            }
+        } catch (e) {
+            console.error("Failed to get document symbols:", e);
+        }
+    });
+
     // Subscribe to content changes from Python
-    window.pythonBridge.setContent.connect(function (content, language) {
-      if (language) {
-        monaco.editor.setModelLanguage(editor.getModel(), language);
+    window.pythonBridge.setContent.connect(function (content, language, filePath) {
+      if (!filePath) {
+          filePath = "/unnamed";
       }
-      editor.setValue(content);
+      // Ensure we use the proper local file URI for LSP
+      let uri = monaco.Uri.file(filePath);
+      let model = monaco.editor.getModel(uri);
+      
+      if (!model) {
+          model = monaco.editor.createModel(content, language, uri);
+      } else {
+          model.setValue(content);
+          if (language) {
+              monaco.editor.setModelLanguage(model, language);
+          }
+      }
+      
+      if (editor.getModel() !== model) {
+          editor.setModel(model);
+      }
     });
     
     // Send content changes to Python
+    let spellCheckTimeout = null;
     editor.onDidChangeModelContent(() => {
       window.pythonBridge.onContentChanged(editor.getValue());
+      
+      // Spell checker debounce
+      if (spellCheckTimeout) clearTimeout(spellCheckTimeout);
+      spellCheckTimeout = setTimeout(() => {
+        const model = editor.getModel();
+        if (!model) return;
+        
+        const lines = model.getLinesContent();
+        const markers = [];
+        const regex = /\b[a-zA-Z]{4,}\b/g; // 4 letters minimum
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            let match;
+            while ((match = regex.exec(line)) !== null) {
+                const word = match[0];
+                
+                // Heuristics to skip code constructs
+                if (word === word.toUpperCase()) continue;
+                if (/[a-z][A-Z]/.test(word)) continue; // camelCase
+                if (word.includes('_')) continue;      // snake_case
+                
+                // Only check if it's a valid word according to dict
+                if (!dictionary.check(word)) {
+                    markers.push({
+                        message: `Unknown word: '${word}'`,
+                        severity: monaco.MarkerSeverity.Info,
+                        startLineNumber: i + 1,
+                        startColumn: match.index + 1,
+                        endLineNumber: i + 1,
+                        endColumn: match.index + 1 + word.length
+                    });
+                }
+            }
+        }
+        
+        monaco.editor.setModelMarkers(model, 'spellchecker', markers);
+      }, 1000);
     });
     
     // Send cursor position changes
@@ -189,6 +334,17 @@ if (typeof QWebChannel !== 'undefined') {
       editor.setPosition({ lineNumber: line + 1, column: col + 1 });
       editor.revealLineInCenter(line + 1);
       editor.focus();
+    });
+    
+    // Listen for setTheme
+    window.pythonBridge.setTheme.connect(function (themeJsonStr) {
+      try {
+        const themeData = JSON.parse(themeJsonStr);
+        monaco.editor.defineTheme('lmms-dynamic-theme', themeData);
+        monaco.editor.setTheme('lmms-dynamic-theme');
+      } catch (err) {
+        console.error("Failed to parse/set theme", err);
+      }
     });
     
     // Listen for Breakpoint clicks
@@ -250,6 +406,49 @@ if (typeof QWebChannel !== 'undefined') {
       }
     });
 
+    // Receive Git Blame
+    let gitBlameDecorations = editor.createDecorationsCollection();
+    let lastBlameData = null;
+    
+    function renderBlame() {
+      if (!lastBlameData) return;
+      const activeLine = editor.getPosition() ? editor.getPosition().lineNumber : -1;
+      
+      const mappedDecs = [];
+      for (const lineStr in lastBlameData) {
+        const lineNum = parseInt(lineStr, 10);
+        if (lineNum !== activeLine) continue;
+        
+        const blameText = lastBlameData[lineStr];
+        mappedDecs.push({
+          range: new monaco.Range(lineNum, 1, lineNum, 1),
+          options: {
+            isWholeLine: false,
+            after: {
+              content: '    ' + blameText,
+              inlineClassName: 'git-blame-inline'
+            }
+          }
+        });
+      }
+      gitBlameDecorations.set(mappedDecs);
+    }
+    
+    if (window.pythonBridge.updateGitBlame) {
+      window.pythonBridge.updateGitBlame.connect(function (blameJson) {
+        try {
+          lastBlameData = JSON.parse(blameJson);
+          renderBlame();
+        } catch (e) {
+          console.error("Failed to parse git blame", e);
+        }
+      });
+      
+      editor.onDidChangeCursorPosition((e) => {
+         renderBlame();
+      });
+    }
+
     // Let Python know we are ready
     window.pythonBridge.onEditorReady();
     
@@ -297,5 +496,7 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
-// Global accessor for debug/testing
-window.editor = editor;
+}
+
+// Start polling for visibility
+startMonacoWhenReady();
