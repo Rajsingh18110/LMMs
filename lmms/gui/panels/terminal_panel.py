@@ -190,16 +190,15 @@ class TerminalPanel(QWidget):
                 color: #8b949e;
                 padding: 6px 15px;
                 border: none;
-                font-size: 11px;
-                text-transform: uppercase;
+                font-size: 12px;
                 border-bottom: 1px solid transparent;
             }
             QTabBar::tab:selected {
-                color: #c9d1d9;
-                border-bottom: 1px solid #58a6ff;
+                color: #e5e7eb;
+                border-bottom: 1px solid #e5e7eb;
             }
             QTabBar::tab:hover {
-                color: #c9d1d9;
+                color: #e5e7eb;
             }
         """)
         
@@ -245,19 +244,25 @@ class TerminalPanel(QWidget):
         self.tabs.addTab(self.ports_tab, "Ports")
         
         # --- Corner Widget Toolbars ---
+        # Load VS Code Codicon Font
+        from PyQt6.QtGui import QFontDatabase, QFont
+        font_id = QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(__file__), "..", "assets", "monaco_build", "node_modules", "monaco-editor", "esm", "vs", "base", "browser", "ui", "codicons", "codicon", "codicon.ttf"))
+        codicon_family = QFontDatabase.applicationFontFamilies(font_id)[0] if font_id != -1 else "sans-serif"
+        
+        icon_font = QFont(codicon_family, 12)
+        
         self.corner_widget = QStackedWidget()
         self.tabs.setCornerWidget(self.corner_widget)
         
-        btn_style = """
-            QToolButton { background: transparent; color: #c9d1d9; border: none; font-size: 14px; padding: 4px 6px; }
-            QToolButton:hover { background: #30363d; border-radius: 4px; }
+        btn_style = f"""
+            QToolButton {{ background: transparent; color: #c9d1d9; border: none; font-size: 14px; font-family: '{codicon_family}'; padding: 4px 6px; }}
+            QToolButton:hover {{ background: #30363d; border-radius: 4px; }}
         """
         
         # 1. Problems Toolbar
-        problems_tb = QWidget()
-        p_layout = QHBoxLayout(problems_tb)
-        p_layout.setContentsMargins(0, 0, 15, 0)
-        p_layout.setSpacing(10)
+        problems_tb = self.problems_tab.toolbar_widget
+        p_layout = self.problems_tab.toolbar_layout
+        
         self.btn_send_ai = QPushButton("✨ Send all problems to AI")
         self.btn_send_ai.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send_ai.setStyleSheet("""
@@ -275,13 +280,6 @@ class TerminalPanel(QWidget):
         t_layout.setContentsMargins(0, 0, 15, 0)
         t_layout.setSpacing(4)
         
-        # Load VS Code Codicon Font
-        from PyQt6.QtGui import QFontDatabase, QFont
-        font_id = QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(__file__), "..", "assets", "monaco_build", "node_modules", "monaco-editor", "esm", "vs", "base", "browser", "ui", "codicons", "codicon", "codicon.ttf"))
-        codicon_family = QFontDatabase.applicationFontFamilies(font_id)[0] if font_id != -1 else "sans-serif"
-        
-        icon_font = QFont(codicon_family, 12)
-        
         self.btn_new_term = QToolButton()
         self.btn_new_term.setText("\uea60") # Plus
         self.btn_new_term.setFont(icon_font)
@@ -291,7 +289,7 @@ class TerminalPanel(QWidget):
         self.btn_new_term.clicked.connect(self.add_new_terminal)
         
         self.btn_split_term = QToolButton()
-        self.btn_split_term.setText("\uea38") # Split
+        self.btn_split_term.setText("\ueb56") # Split Horizontal
         self.btn_split_term.setFont(icon_font)
         self.btn_split_term.setStyleSheet(btn_style)
         self.btn_split_term.setToolTip("Split Terminal")
@@ -315,7 +313,13 @@ class TerminalPanel(QWidget):
         self.add_window_controls(t_layout, btn_style)
         self.corner_widget.addWidget(terminal_tb)
         
-        # 3. Default Toolbar (for Output, Debug Console, Ports, Extension Logs)
+        # 3. Output Toolbar
+        output_tb = self.output_tab.toolbar_widget
+        o_layout = self.output_tab.toolbar_layout
+        self.add_window_controls(o_layout, btn_style)
+        self.corner_widget.addWidget(output_tb)
+        
+        # 4. Default Toolbar (for Debug Console, Ports, Extension Logs)
         default_tb = QWidget()
         d_layout = QHBoxLayout(default_tb)
         d_layout.setContentsMargins(0, 0, 15, 0)
@@ -340,7 +344,7 @@ class TerminalPanel(QWidget):
         icon_font = QFont(codicon_family, 12)
         
         btn_max = QToolButton()
-        btn_max.setText("\ueb2c") # Maximize/Chevron Up
+        btn_max.setText("\ueab7") # Maximize/Chevron Up
         btn_max.setFont(icon_font)
         btn_max.setStyleSheet(btn_style)
         btn_max.setToolTip("Maximize Panel")
@@ -404,8 +408,10 @@ class TerminalPanel(QWidget):
             self.corner_widget.setCurrentIndex(0)
         elif title == "Terminal":
             self.corner_widget.setCurrentIndex(1)
-        else:
+        elif title == "Output":
             self.corner_widget.setCurrentIndex(2)
+        else:
+            self.corner_widget.setCurrentIndex(3)
             
     def maximize_panel(self):
         if self.main_window and hasattr(self.main_window, 'central_splitter'):

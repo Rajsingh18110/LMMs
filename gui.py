@@ -57,7 +57,7 @@ def main():
             
     os.environ["QT_NO_DBUS"] = "1"
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.core.qobject.*=false"
-    os.environ["XCOMPOSEFILE"] = "/dev/null"
+    os.environ["LC_ALL"] = "C.UTF-8"
 
     try:
         from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -106,20 +106,8 @@ def main():
     except Exception as e:
         print(f"Warning: Failed to auto-start engine: {e}")
     
-    # Escape hatch: env var to skip splash entirely
-    if os.environ.get("LMMS_SKIP_SPLASH") == "1":
-        launch_main_window(icon_path)
-    else:
-        try:
-            from lmms.gui.widgets.splash_screen import CinematicSplashScreen
-            # Global reference to prevent garbage collection while async loop starts
-            global _splash
-            _splash = CinematicSplashScreen()
-            _splash.finished.connect(lambda: launch_main_window(icon_path))
-            _splash.show()
-        except Exception as e:
-            print(f"[Splash Error - skipping animation]: {e}")
-            launch_main_window(icon_path)
+    # Launch immediately without splash screen
+    launch_main_window(icon_path)
     
     with loop:
         sys.exit(loop.run_forever())

@@ -8,23 +8,28 @@ class OutputTab(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10, 10, 10, 10)
         
-        # Toolbar
-        self.toolbar = QHBoxLayout()
-        self.toolbar.setContentsMargins(0, 0, 0, 5)
+        # Toolbar for corner widget
+        self.toolbar_widget = QWidget()
+        self.toolbar_layout = QHBoxLayout(self.toolbar_widget)
+        self.toolbar_layout.setContentsMargins(0, 0, 15, 0)
+        self.toolbar_layout.setSpacing(4)
         
         self.channel_combo = QComboBox()
         self.channel_combo.setMinimumWidth(150)
+        self.channel_combo.setStyleSheet("""
+            QComboBox { background: transparent; color: #e5e7eb; border: 1px solid transparent; font-size: 12px; }
+            QComboBox:hover { background: #30363d; border-radius: 4px; }
+            QComboBox::drop-down { border: none; }
+        """)
         self.channel_combo.currentIndexChanged.connect(self.on_channel_changed)
         
-        self.toolbar.addWidget(QLabel("Tasks")) # VS Code style label
-        self.toolbar.addStretch()
-        self.toolbar.addWidget(self.channel_combo)
+        self.toolbar_layout.addWidget(QLabel("Tasks"))
+        self.toolbar_layout.addWidget(self.channel_combo)
         
         self.text_area = QPlainTextEdit()
         self.text_area.setReadOnly(True)
-        self.text_area.setStyleSheet("background-color: #1e1e1e; color: #c9d1d9; border: none; font-family: monospace;")
+        self.text_area.setStyleSheet("background-color: #1e1e1e; color: #c9d1d9; border: none; font-family: monospace; font-size: 12px;")
         
-        self.layout.addLayout(self.toolbar)
         self.layout.addWidget(self.text_area)
         
         # Initial wireup

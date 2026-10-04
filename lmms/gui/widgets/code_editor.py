@@ -95,6 +95,14 @@ class PythonBridge(QObject):
         self.outlineReceived.emit(json_data)
 
 
+class EditorWebPage(QWebEnginePage):
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        # Suppress annoying monaco-vscode-api / web worker fallback warnings
+        if "Could not create web worker" in message: return
+        if "Failed to get document symbols" in message: return
+        if "unsupported" in message: return
+        super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
+
 # ── Monaco-based CodeEditor ────────────────────────────────────────────────────
 
 class CodeEditor(QWebEngineView):
@@ -103,6 +111,7 @@ class CodeEditor(QWebEngineView):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setPage(EditorWebPage(self))
 
         # Bridge + WebChannel
         self.bridge = PythonBridge()
