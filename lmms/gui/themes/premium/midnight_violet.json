@@ -1,0 +1,81 @@
+{
+    "name": "Midnight Violet",
+    "type": "dark",
+    "colors": {
+        "editor.background": "#0A0910",
+        "editor.foreground": "#E2E8F0",
+        "sideBar.background": "#12111A",
+        "sideBar.foreground": "#94A3B8",
+        "sideBar.border": "#2D2A3E",
+        "panel.background": "#12111A",
+        "panel.border": "#2D2A3E",
+        "tab.activeBackground": "#1B1926",
+        "tab.inactiveBackground": "#0A0910",
+        "tab.activeForeground": "#E2E8F0",
+        "tab.inactiveForeground": "#64748B",
+        "button.background": "#8B5CF6",
+        "button.foreground": "#FFFFFF",
+        "button.hoverBackground": "#7C3AED",
+        "focusBorder": "#8B5CF6",
+        "list.activeSelectionBackground": "#8B5CF640",
+        "list.hoverBackground": "#FFFFFF10",
+        "editorLineNumber.foreground": "#475569",
+        "editorLineNumber.activeForeground": "#94A3B8",
+        "editorCursor.foreground": "#06B6D4",
+        "editorIndentGuide.background": "#2D2A3E",
+        "editorIndentGuide.activeBackground": "#4C4666",
+        "editorWidget.background": "#1B1926",
+        "editorWidget.border": "#4C4666"
+    },
+    "tokenColors": [
+        {
+            "scope": ["comment", "punctuation.definition.comment"],
+            "settings": {
+                "foreground": "#64748B",
+                "fontStyle": "italic"
+            }
+        },
+        {
+            "scope": ["keyword", "storage.type", "storage.modifier"],
+            "settings": {
+                "foreground": "#8B5CF6"
+            }
+        },
+        {
+            "scope": ["entity.name.function", "meta.function-call", "support.function"],
+            "settings": {
+                "foreground": "#06B6D4"
+            }
+        },
+        {
+            "scope": ["variable", "variable.parameter", "variable.other"],
+            "settings": {
+                "foreground": "#E2E8F0"
+            }
+        },
+        {
+            "scope": ["string", "string.quoted", "string.template"],
+            "settings": {
+                "foreground": "#34D399"
+            }
+        },
+        {
+            "scope": ["constant.numeric", "constant.language"],
+            "settings": {
+                "foreground": "#F472B6"
+            }
+        },
+        {
+            "scope": ["entity.name.type", "entity.name.class", "support.type"],
+            "settings": {
+                "foreground": "#FBBF24"
+            }
+        },
+        {
+            "scope": ["entity.other.attribute-name", "meta.attribute"],
+            "settings": {
+                "foreground": "#A78BFA"
+            }
+        }
+    ]
+}
