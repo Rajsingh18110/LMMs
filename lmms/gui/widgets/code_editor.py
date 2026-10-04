@@ -223,10 +223,24 @@ class CodeEditor(QWebEngineView):
     @pyqtSlot(int)
     def toggleBreakpoint(self, line: int):
         from lmms.gui.utils.output_channel import OutputChannelRegistry
-        OutputChannelRegistry.get_instance().append("DAP", f"[DAP] Breakpoint toggled on line {line + 1}")
-        # In a real implementation, this would send setBreakpoints to DAPManager
-        pass
+        from lmms.gui.utils.dap_manager import DAPManager
         
+        # line from JS is 0-indexed, DAP expects 1-indexed
+        dap_line = line + 1
+        
+        file_path = self.property("file_path")
+        if not file_path:
+            OutputChannelRegistry.get_instance().append("DAP", "[DAP] Cannot set breakpoint: no file path")
+            return
+            
+        OutputChannelRegistry.get_instance().append("DAP", f"[DAP] Breakpoint toggled on line {dap_line} in {file_path}")
+        
+        dap = DAPManager.instance()
+        if not dap.is_running:
+            dap.start()
+            
+        dap.toggle_breakpoint(file_path, dap_line)
+
     @pyqtSlot(int, int)
     def onCursorPositionChanged(self, line: int, col: int):
         self.cursorPositionChanged.emit(line, col)

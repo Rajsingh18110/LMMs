@@ -6,6 +6,14 @@ from lmms.gui.utils.output_channel import OutputChannelRegistry
 class DAPManager(QObject):
     # DAP server response/event → JS or Python (forwarded as needed)
     messageReceived = pyqtSignal(str)
+    
+    _instance = None
+    
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = DAPManager(["python3", "-m", "debugpy.adapter"])
+        return cls._instance
 
     def __init__(self, command: list, parent=None):
         super().__init__(parent)
@@ -14,6 +22,9 @@ class DAPManager(QObject):
         self._thread    = None
         self.is_running = False
         self.seq        = 1
+        
+        # Breakpoints state: file_path -> list of line numbers (1-indexed)
+        self.breakpoints = {}
 
     class ReadThread(QThread):
         def __init__(self, dap_manager):
@@ -112,3 +123,22 @@ class DAPManager(QObject):
                 if self.is_running:
                     OutputChannelRegistry.get_instance().append("DAP", f"[DAP] Read error: {e}")
                 break
+
+    def toggle_breakpoint(self, file_path: str, line: int):
+        """Toggle a breakpoint for the given file and line (1-indexed)."""
+        if file_path not in self.breakpoints:
+            self.breakpoints[file_path] = []
+            
+        lines = self.breakpoints[file_path]
+        if line in lines:
+            lines.remove(line)
+        else:
+            lines.append(line)
+            
+        # Send setBreakpoints request to DAP server
+        bps = [{"line": l} for l in lines]
+        self.send_request("setBreakpoints", {
+            "source": {"path": file_path},
+            "breakpoints": bps
+        })
+        OutputChannelRegistry.get_instance().append("DAP", f"[DAP] Breakpoints in {file_path}: {lines}")
