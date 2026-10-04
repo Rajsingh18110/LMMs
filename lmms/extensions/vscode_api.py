@@ -32,6 +32,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QInputDialog, QApplication
 )
 
+from lmms.extensions.mcp.server import AgentExecutionAdapter
+
 
 class VScodeApiBridge(QObject):
     """
@@ -57,9 +59,11 @@ class VScodeApiBridge(QObject):
         super().__init__(parent)
         self._workspace_root: str | None = None
         self._hosts: dict = {}   # ext_id → ExtensionHost
+        self._agent_adapter: AgentExecutionAdapter | None = None
 
     def set_workspace_root(self, root: str | None):
         self._workspace_root = root
+        self._agent_adapter = AgentExecutionAdapter(root or os.getcwd())
 
     def register_host(self, ext_id: str, host):
         self._hosts[ext_id] = host
@@ -151,6 +155,45 @@ class VScodeApiBridge(QObject):
                                                "fsPath": self._workspace_root},
                          "index": 0}]
             return []
+
+        if method == "workspace.readFile":
+            if not self._agent_adapter:
+                return None
+            path_ = params[0] if params else ""
+            return self._agent_adapter.read_file(path_)
+
+        if method == "workspace.writeFile":
+            if not self._agent_adapter:
+                return None
+            path_ = params[0] if params else ""
+            content = params[1] if len(params) > 1 else ""
+            return self._agent_adapter.write_file(path_, content)
+
+        if method == "workspace.listFiles":
+            if not self._agent_adapter:
+                return []
+            path_ = params[0] if params else "."
+            return self._agent_adapter.list_dir(path_)
+
+        if method == "workspace.searchFiles":
+            if not self._agent_adapter:
+                return []
+            path_ = params[0] if params else "."
+            pattern = params[1] if len(params) > 1 else "**/*"
+            max_results = int(params[2]) if len(params) > 2 else 100
+            return self._agent_adapter.search_files(path_, pattern, max_results)
+
+        if method == "workspace.runCommand":
+            if not self._agent_adapter:
+                return ""
+            command = params[0] if params else ""
+            timeout = int(params[1]) if len(params) > 1 else 120000
+            return self._agent_adapter.run_command(command, timeout)
+
+        if method == "workspace.gitStatus":
+            if not self._agent_adapter:
+                return ""
+            return self._agent_adapter.git_status()
 
         if method == "workspace.openTextDocument":
             path_ = params[0] if params else ""

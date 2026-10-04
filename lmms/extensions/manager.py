@@ -162,6 +162,11 @@ class ExtensionManager(QObject):
                 except Exception as e:
                     self._emit_log(ext_id, "error", f"Failed to parse package.json: {e}")
 
+        rec.manifest = manifest
+        if manifest:
+            from lmms.extensions.models import detect_runtime
+            rec.runtime = detect_runtime(manifest)
+
         contributes = manifest.get("contributes", {})
         if contributes.get("viewsContainers") or contributes.get("views"):
             self.extension_ui_registered.emit(ext_id, contributes)
@@ -169,11 +174,17 @@ class ExtensionManager(QObject):
         if manifest:
             self.extension_js_activation.emit(ext_id, json.dumps(manifest))
 
-        from lmms.extensions.host import ExtensionHost
         from lmms.extensions.vscode_api import VScodeApiBridge
         from lmms.extensions.commands import CommandRegistry
+        from lmms.extensions.models import ExtensionRuntime
 
-        host = ExtensionHost(rec, self._workspace_root)
+        if rec.runtime == ExtensionRuntime.PYTHON:
+            from lmms.extensions.python_host import PythonExtensionHost
+            host = PythonExtensionHost(rec, self._workspace_root)
+        else:
+            from lmms.extensions.host import ExtensionHost
+            host = ExtensionHost(rec, self._workspace_root)
+
         host.log_line.connect(self.log_emitted)
         host.activated.connect(self._on_activated)
         host.activation_failed.connect(self._on_activation_failed)
