@@ -473,11 +473,11 @@ class MainWindow(QMainWindow):
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
         
-        # Set default width for docks — match Antigravity IDE proportions
-        # Explorer ~18-20%, Chat ~22-25%, Bottom panel ~28% height
+        # Set default width for docks — match VS Code proportions
+        # Explorer ~18-20%, Chat ~26%, Bottom panel ~28% height
         screen_w = 1280 # assume 1280px default window
         explorer_w = int(screen_w * 0.19) # ~242px
-        chat_w = int(screen_w * 0.24)     # ~307px
+        chat_w = int(screen_w * 0.26)     # ~333px
         self.inner_window.resizeDocks(
             [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock],
             [explorer_w, explorer_w, explorer_w, explorer_w, explorer_w],
