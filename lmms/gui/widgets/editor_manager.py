@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QFileInfo
 from PyQt6.QtGui import QIcon
-from qt_vscode_icons import VscodeIconProvider
+from lmms.packages.qt_vscode_icons import VscodeIconProvider
 
 from lmms.gui.widgets.code_editor import CodeEditor
 from lmms.gui.widgets.ai_tabs import CanvasTab, MarkdownTab, ReviewTab

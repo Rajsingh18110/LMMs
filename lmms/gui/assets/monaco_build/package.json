@@ -17,6 +17,7 @@
     "@codingame/monaco-vscode-languages-service-override": "~8.0.4",
     "@codingame/monaco-vscode-layout-service-override": "~8.0.4",
     "@codingame/monaco-vscode-localization-service-override": "~8.0.4",
+    "@codingame/monaco-vscode-markers-service-override": "~8.0.4",
     "@codingame/monaco-vscode-model-service-override": "~8.0.4",
     "@codingame/monaco-vscode-quickaccess-service-override": "~8.0.4",
     "@codingame/monaco-vscode-views-service-override": "~8.0.4",
