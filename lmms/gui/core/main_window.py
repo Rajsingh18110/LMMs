@@ -21,7 +21,7 @@ from lmms.gui.pages.chat_page import ChatPage
 from lmms.gui.widgets.editor_manager import EditorManager
 from lmms.gui.panels.terminal_panel import TerminalPanel
 from lmms.backend.core.commands import CommandRegistry, CommandContext
-from qt_vscode_icons import VscodeIconProvider
+from lmms.packages.qt_vscode_icons import VscodeIconProvider  # type: ignore[import]
 from lmms.gui.panels.search_panel import SearchPanel
 from lmms.gui.widgets.model_browser import ModelBrowser, ModelDetailsTab
 from lmms.gui.panels.terminal_panel import TerminalPanel
@@ -991,13 +991,45 @@ class MainWindow(QMainWindow):
             symbols = json.loads(json_data)
             self.outline_model.clear()
             
+            def get_symbol_icon(kind):
+                from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+                from PyQt6.QtCore import Qt
+                
+                # Map kind to (character, color) based on VS Code defaults
+                mapping = {
+                    1: ('F', '#cccccc'), 2: ('{}', '#cccccc'), 3: ('{}', '#cccccc'), 4: ('P', '#cccccc'),
+                    5: ('C', '#007acc'), 6: ('M', '#b180d7'), 7: ('P', '#cccccc'), 8: ('f', '#007acc'),
+                    9: ('C', '#b180d7'), 10: ('E', '#ee9d28'), 11: ('I', '#007acc'), 12: ('f', '#b180d7'),
+                    13: ('v', '#007acc'), 14: ('c', '#cccccc'), 22: ('e', '#ee9d28'), 23: ('S', '#cccccc'),
+                    24: ('E', '#ee9d28')
+                }
+                char, color = mapping.get(kind, ('?', '#cccccc'))
+                
+                pixmap = QPixmap(16, 16)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                
+                painter.setPen(QColor(color))
+                font = QFont("Arial", 9, QFont.Weight.Bold)
+                painter.setFont(font)
+                painter.drawText(0, 0, 16, 16, Qt.AlignmentFlag.AlignCenter, char)
+                painter.end()
+                
+                return QIcon(pixmap)
+            
             def add_symbols(parent_item, syms):
                 for s in syms:
                     name = s.get("name", "Unknown")
-                    kind = s.get("kind", 0) # Could map kind to icon
+                    kind = s.get("kind", 0)
                     
+                    # Filter out spammy flat variables (often standard imports sent by pylsp)
+                    if kind == 13 and not s.get("children") and name in ("sys", "os", "json", "urllib", "typing", "subprocess"):
+                        continue
+                        
                     item = QStandardItem(name)
                     item.setToolTip(s.get("detail", ""))
+                    item.setIcon(get_symbol_icon(kind))
                     
                     # Store 1-indexed position
                     rng = s.get("range", {})

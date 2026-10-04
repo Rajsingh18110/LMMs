@@ -12,6 +12,7 @@ import getModelServiceOverride from '@codingame/monaco-vscode-model-service-over
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override';
 import getChatServiceOverride from '@codingame/monaco-vscode-chat-service-override';
 import getViewsServiceOverride from '@codingame/monaco-vscode-views-service-override';
+import getMarkersServiceOverride from '@codingame/monaco-vscode-markers-service-override';
 
 import * as vscode from 'vscode';
 import prettier from 'prettier/standalone';
@@ -93,6 +94,7 @@ await initialize({
   ...getModelServiceOverride(),
   ...getChatServiceOverride(),
   ...getViewsServiceOverride(),
+  ...getMarkersServiceOverride(),
   ...getQuickAccessServiceOverride({
     isKeybindingConfigurationVisible: () => true,
     shouldUseGlobalPicker: () => true
@@ -225,35 +227,71 @@ if (typeof QWebChannel !== 'undefined') {
         if (!editor) return;
         const model = editor.getModel();
         if (!model) return;
-        
-        try {
-            // Wait for LSP to have computed symbols (we can just execute the command)
-            const symbols = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', model.uri);
-            if (symbols && window.pythonBridge.onOutlineReceived) {
-                // Simplify to just what we need to minimize JSON serialization cost
-                const cleanSymbols = function(syms) {
-                    return syms.map(s => ({
-                        name: s.name,
-                        detail: s.detail,
-                        kind: s.kind,
-                        // Convert Position/Range objects to plain objects
-                        range: { 
-                            startLineNumber: s.range.start.line + 1, 
-                            startColumn: s.range.start.character + 1,
-                            endLineNumber: s.range.end.line + 1,
-                            endColumn: s.range.end.character + 1
-                        },
-                        children: s.children ? cleanSymbols(s.children) : []
-                    }));
+
+        const normalizeVscodeSymbols = function(syms) {
+            if (!Array.isArray(syms)) return [];
+            return syms.map(s => ({
+                name:   s.name   || '',
+                detail: s.detail || '',
+                kind:   s.kind   ?? 0,
+                range: {
+                    startLineNumber: (s.range?.start?.line ?? 0) + 1,
+                    startColumn:     (s.range?.start?.character ?? 0) + 1,
+                    endLineNumber:   (s.range?.end?.line ?? 0) + 1,
+                    endColumn:       (s.range?.end?.character ?? 0) + 1,
+                },
+                children: Array.isArray(s.children) ? normalizeVscodeSymbols(s.children) : []
+            }));
+        };
+
+        const normalizeLspSymbols = function(syms) {
+            if (!Array.isArray(syms)) return [];
+            return syms.map(s => {
+                const rng = s.range || s.selectionRange || {};
+                const start = rng.start || {};
+                const end   = rng.end   || start;
+                return {
+                    name:   s.name   || '',
+                    detail: s.detail || '',
+                    kind:   s.kind   ?? 0,
+                    range: {
+                        startLineNumber: (start.line ?? 0) + 1,
+                        startColumn:     (start.character ?? 0) + 1,
+                        endLineNumber:   (end.line ?? 0) + 1,
+                        endColumn:       (end.character ?? 0) + 1,
+                    },
+                    children: Array.isArray(s.children) ? normalizeLspSymbols(s.children) : []
                 };
-                window.pythonBridge.onOutlineReceived(JSON.stringify(cleanSymbols(symbols)));
-            } else if (!symbols && window.pythonBridge.onOutlineReceived) {
-                window.pythonBridge.onOutlineReceived("[]");
+            });
+        };
+
+        const send = (syms) => {
+            if (window.pythonBridge.onOutlineReceived) {
+                window.pythonBridge.onOutlineReceived(JSON.stringify(syms));
             }
+        };
+
+        // Strategy 1: vscode.commands (rich, has children hierarchy) — works with @codingame/monaco-vscode-api
+        try {
+            const symbols = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', model.uri);
+            if (symbols && symbols.length > 0) {
+                send(normalizeVscodeSymbols(symbols));
+                return;
+            }
+        } catch (_) { /* fallthrough */ }
+
+        // Strategy 2: Direct LSP request fallback
+        try {
+            const symbols = await languageClient.sendRequest('textDocument/documentSymbol', {
+                textDocument: { uri: model.uri.toString() }
+            });
+            send(normalizeLspSymbols(symbols || []));
         } catch (e) {
-            console.error("Failed to get document symbols:", e);
+            console.error('Failed to get document symbols:', e);
+            send([]);
         }
     });
+
 
     // Subscribe to content changes from Python
     window.pythonBridge.setContent.connect(function (content, language, filePath) {

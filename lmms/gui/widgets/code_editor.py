@@ -8,20 +8,16 @@ from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 
 
-# ── Singleton LSP Manager ──────────────────────────────────────────────────────
-# One pylsp process shared across ALL open editor tabs.
+# ── LSP Manager Factory ────────────────────────────────────────────────────────
+# One pylsp process per editor tab to avoid JSON-RPC conflicts.
 
-_lsp_singleton = None
-
-def _get_lsp():
-    global _lsp_singleton
-    if _lsp_singleton is None:
-        from lmms.gui.utils.lsp_manager import LSPManager
-        cmd = _detect_lsp_command()
-        _lsp_singleton = LSPManager(cmd)
-        _lsp_singleton.start()
-        print(f"[LSP] Started singleton: {' '.join(cmd)}")
-    return _lsp_singleton
+def _create_lsp():
+    from lmms.gui.utils.lsp_manager import LSPManager
+    cmd = _detect_lsp_command()
+    lsp = LSPManager(cmd)
+    lsp.start()
+    print(f"[LSP] Started instance: {' '.join(cmd)}")
+    return lsp
 
 
 def _detect_lsp_command():
@@ -119,14 +115,13 @@ class CodeEditor(QWebEngineView):
         self.channel.registerObject("pythonBridge", self.bridge)
         self.page().setWebChannel(self.channel)
 
-        # Wire to the SHARED LSP singleton
-        lsp = _get_lsp()
-        if lsp and lsp.command:
+        # Wire to a dedicated LSP instance per editor tab
+        self._lsp = _create_lsp()
+        if self._lsp and self._lsp.command:
             # JS → Python → LSP process
-            self.bridge.lspMessageFromJs.connect(lsp.sendMessage)
-            # LSP process → Python → JS  (broadcast to all tabs; client ignores
-            # responses for requests it didn't send — standard JSON-RPC behaviour)
-            lsp.messageReceived.connect(self.bridge.sendLspMessage)
+            self.bridge.lspMessageFromJs.connect(self._lsp.sendMessage)
+            # LSP process → Python → JS
+            self._lsp.messageReceived.connect(self.bridge.sendLspMessage)
 
         # Bridge signals
         self.bridge.contentChanged.connect(self._on_content_changed)
@@ -303,10 +298,10 @@ class CodeEditor(QWebEngineView):
     def cleanup(self):
         """Called when the tab is closed."""
         self._git_timer.stop()
-        lsp = _get_lsp()
-        if lsp and lsp.command:
+        if hasattr(self, '_lsp') and self._lsp:
             try:
-                lsp.messageReceived.disconnect(self.bridge.sendLspMessage)
-                self.bridge.lspMessageFromJs.disconnect(lsp.sendMessage)
+                self._lsp.messageReceived.disconnect(self.bridge.sendLspMessage)
+                self.bridge.lspMessageFromJs.disconnect(self._lsp.sendMessage)
             except TypeError:
                 pass
+            self._lsp.stop()

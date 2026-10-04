@@ -5,28 +5,31 @@ def launch_main_window(icon_path):
     try:
         from lmms.gui.core.main_window import MainWindow
         from PyQt6.QtGui import QIcon
-        
+
         window = MainWindow()
         if os.path.exists(icon_path):
             window.setWindowIcon(QIcon(icon_path))
-        
+
         # Keep a global reference to prevent garbage collection
         global _main_window
         _main_window = window
         window.show()
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[FATAL] MainWindow failed to load: {e}")
         try:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(None, "LMMs failed to start", str(e))
-        except:
+        except Exception:
             pass
         sys.exit(1)
+
 
 def main():
     # Make sure python path is correct for imports
     sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-    
+
     # Handle workspace path argument (e.g. 'lmms .')
     if len(sys.argv) > 1:
         target_path = sys.argv[1]
@@ -40,21 +43,21 @@ def main():
                 os.chdir(abs_path)
             except Exception:
                 pass
-                
+
     import qasync
     import asyncio
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QIcon
-    
+
     # Let ui module know it's in GUI mode
     import lmms.gui.core.ui as ui
     ui.GUI_MODE = True
-    
+
     # Force native GTK file dialog on Linux (e.g. Kali/XFCE)
     if sys.platform.startswith("linux"):
         if "QT_QPA_PLATFORMTHEME" not in os.environ:
             os.environ["QT_QPA_PLATFORMTHEME"] = "gtk3"
-            
+
     os.environ["QT_NO_DBUS"] = "1"
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.core.qobject.*=false"
     os.environ["LC_ALL"] = "C.UTF-8"
@@ -68,49 +71,47 @@ def main():
     app.setApplicationName("LMMs-GUI")
     app.setApplicationDisplayName("LMMs - GUI Mode")
     app.setDesktopFileName(f"lmms-{os.getpid()}")
-    
+
     icon_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "assets", "lmms_logo_transparent.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
-        
+
     theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "dark.qss")
     try:
         from lmms.gui.themes.theme_manager import ThemeManager
-        # Default VS Code theme we downloaded
         vscode_theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "vscode", "dark_vs.json")
         theme_mgr = ThemeManager(vscode_theme_path)
-        
-        # Load base QSS
+
         with open(theme_path, "r") as f:
             base_qss = f.read()
-            
-        # Get overrides and monaco JSON
+
         overrides = theme_mgr.generate_qss_overrides()
         monaco_theme_json = theme_mgr.get_monaco_theme_json()
-        
-        # Store for CodeEditor
+
         os.environ["LMMS_MONACO_THEME"] = monaco_theme_json or ""
-        
-        # Apply combined QSS
         app.setStyleSheet(base_qss + "\n" + overrides)
     except Exception as e:
         print(f"[Theme] Failed to load theme: {e}")
 
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
-    
-    # Auto-start the background API server if it's not running
-    try:
-        from lmms.backend.main import auto_start_engine
-        auto_start_engine()
-    except Exception as e:
-        print(f"Warning: Failed to auto-start engine: {e}")
-    
-    # Launch immediately without splash screen
-    launch_main_window(icon_path)
-    
+
+    # Only auto-start the engine if launcher has NOT already managed it.
+    # launcher.py sets LMMS_ENGINE_MANAGED=1 when it starts the engine itself.
+    if not os.environ.get("LMMS_ENGINE_MANAGED"):
+        try:
+            from lmms.backend.main import auto_start_engine
+            auto_start_engine()
+        except Exception as e:
+            print(f"Warning: Failed to auto-start engine: {e}")
+
+    # Defer window creation to AFTER the event loop starts — feels instant.
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(0, lambda: launch_main_window(icon_path))
+
     with loop:
         sys.exit(loop.run_forever())
+
 
 if __name__ == "__main__":
     main()

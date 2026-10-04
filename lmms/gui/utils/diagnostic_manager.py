@@ -26,6 +26,9 @@ class DiagnosticManager(QObject):
         else:
             file_path = unquote(uri)
             
+        with open("/tmp/lmms_diags.log", "a") as f:
+            f.write(f"Received diags for {file_path}: {diagnostics}\n")
+            
         if "__pyrefly_virtual__" in file_path:
             return
             

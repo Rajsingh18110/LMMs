@@ -120,6 +120,8 @@ class LSPManager(QObject):
 
     def _handle_diagnostics(self, body: str):
         try:
+            with open("/tmp/lsp_debug.log", "a") as f:
+                f.write(f"LSP RECV: {body}\n")
             msg = json.loads(body)
             if msg.get("method") == "textDocument/publishDiagnostics":
                 params      = msg.get("params", {})
