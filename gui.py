@@ -76,9 +76,9 @@ def main():
     theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "dark.qss")
     try:
         from lmms.gui.themes.theme_manager import ThemeManager
-        # Default premium theme
-        premium_theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "premium", "midnight_violet.json")
-        theme_mgr = ThemeManager(premium_theme_path)
+        # Default VS Code theme we downloaded
+        vscode_theme_path = os.path.join(os.path.dirname(__file__), "lmms", "gui", "themes", "vscode", "dark_vs.json")
+        theme_mgr = ThemeManager(vscode_theme_path)
         
         # Load base QSS
         with open(theme_path, "r") as f:
