@@ -1248,15 +1248,21 @@ class MainWindow(QMainWindow):
         views_containers = contributes.get("viewsContainers", {})
         views = contributes.get("views", {})
         
-        # Build mapping of view_id -> name (from the views block)
+        activity_bars = views_containers.get("activitybar", [])
+        
+        # Build mapping of view_id -> container_title
+        builtin_map = {'explorer': 'Explorer', 'scm': 'Source Control', 'search': 'Search', 'debug': 'Run and Debug'}
         for container_id, view_list in views.items():
+            container_title = builtin_map.get(container_id, container_id)
+            for bar in activity_bars:
+                if bar.get("id") == container_id:
+                    container_title = bar.get("title", container_title)
+                    break
+                    
             for v in view_list:
                 view_id = v.get("id")
-                name = v.get("name")
-                if view_id and name:
-                    self._extension_view_map[view_id] = name
-        
-        activity_bars = views_containers.get("activitybar", [])
+                if view_id:
+                    self._extension_view_map[view_id] = container_title
         
         for bar in activity_bars:
             title = bar.get("title", ext_id)
