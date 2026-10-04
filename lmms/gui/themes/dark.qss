@@ -1,201 +1,336 @@
-/* dark.qss - Premium LMMs Theme (Base) */
+/* dark.qss - Antigravity IDE Pixel-Parity Dark Theme */
 
 /* =========================================
-   Base Application Styling
+   Design Tokens (From Reference Screenshot)
+   sidebar_bg: #181818
+   editor_bg: #1e1e1e
+   panel_bg: #181818
+   statusbar_bg: #181818
+   tab_active_bg: #1e1e1e
+   tab_inactive_bg: #2d2d2d
+   accent_color: #1f6feb
+   border_color: #30363d
+   text_primary: #e5e7eb
+   text_secondary: #8b949e
+   error_color: #f14c4c
+   warning_color: #cca700
    ========================================= */
+
+QMainWindow {
+    background-color: #1e1e1e; /* editor_bg */
+}
+
 QWidget {
-    color: #E2E8F0;
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Geist", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #e5e7eb; /* text_primary */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
 }
 
-/* =========================================
-   Navigation & Activity Bar
-   ========================================= */
+#Sidebar {
+    background-color: #181818; /* sidebar_bg */
+    border-right: 1px solid #30363d; /* border_color */
+}
+
 #NavButton {
     background-color: transparent;
-    color: #64748B;
+    color: #8b949e;
     text-align: left;
     padding: 10px 15px;
-    border-radius: 8px;
+    border-radius: 6px;
     border: none;
-    font-weight: 600;
+    font-weight: 500;
     font-size: 14px;
 }
 
 #NavButton:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    color: #E2E8F0;
+    background-color: #21262d;
+    color: #c9d1d9;
 }
 
 #NavButton:checked {
-    background-color: #8B5CF6;
+    background-color: #1f6feb; /* Accent blue */
     color: #ffffff;
-    /* Soft shadow illusion via border */
-    border: 1px solid #7C3AED;
 }
 
-/* =========================================
-   Scrollbars (Thin, Mac-like)
-   ========================================= */
+#ContentArea {
+    background-color: #1e1e1e; /* editor_bg */
+}
+
+/* Scrollbars */
 QScrollBar:vertical {
     border: none;
     background: transparent;
-    width: 6px;
-    margin: 2px;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
 }
 QScrollBar::handle:vertical {
-    background: rgba(255, 255, 255, 0.1);
+    background: #30363d;
     min-height: 20px;
-    border-radius: 3px;
+    border-radius: 5px;
 }
 QScrollBar::handle:vertical:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: #484f58;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     border: none;
     background: none;
 }
-QScrollBar:horizontal {
-    border: none;
-    background: transparent;
-    height: 6px;
-    margin: 2px;
-}
-QScrollBar::handle:horizontal {
-    background: rgba(255, 255, 255, 0.1);
-    min-width: 20px;
-    border-radius: 3px;
-}
-QScrollBar::handle:horizontal:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    border: none;
-    background: none;
+
+/* Chat Input Area */
+QTextEdit, QPlainTextEdit, QLineEdit {
+    background-color: #161b22;
+    color: #e5e7eb;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px;
+    selection-background-color: #1f6feb;
 }
 
-/* =========================================
-   Inputs & Fields
-   ========================================= */
-QTextEdit, QPlainTextEdit, QLineEdit, QComboBox {
-    background-color: #1B1926;
-    color: #E2E8F0;
-    border: 1px solid #2D2A3E;
-    border-radius: 8px;
-    padding: 6px 10px;
-    selection-background-color: rgba(139, 92, 246, 0.3);
+QTextEdit:focus, QPlainTextEdit:focus, QLineEdit:focus {
+    border: 1px solid #1f6feb;
 }
 
-QTextEdit:focus, QPlainTextEdit:focus, QLineEdit:focus, QComboBox:focus {
-    border: 1px solid #8B5CF6;
-    background-color: #12111A;
-}
-
-/* =========================================
-   Buttons
-   ========================================= */
+/* Buttons */
 QPushButton {
-    background-color: #1B1926;
-    color: #E2E8F0;
-    border: 1px solid #2D2A3E;
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-weight: 500;
+    background-color: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 12px;
 }
 
 QPushButton:hover {
-    background-color: #2D2A3E;
-    border: 1px solid #4C4666;
+    background-color: #30363d;
+    border: 1px solid #8b949e;
 }
 
 QPushButton:pressed {
-    background-color: #12111A;
+    background-color: #21262d;
 }
 
-/* =========================================
-   Splitters (Invisible borders)
-   ========================================= */
+/* Primary Button */
+QPushButton#PrimaryButton {
+    background-color: #238636;
+    color: #ffffff;
+    border: 1px solid #2ea043;
+}
+
+QPushButton#PrimaryButton:hover {
+    background-color: #2ea043;
+}
+
+/* Dock Widgets & Separators (VS Code style boundaries) */
 QMainWindow::separator {
-    background: transparent;
-    width: 6px;
-    height: 6px;
+    background: #30363d;
+    width: 2px;
+    height: 2px;
 }
+
 QMainWindow::separator:hover {
-    background: rgba(139, 92, 246, 0.3);
+    background: #58a6ff;
 }
+
 QSplitter::handle {
-    background: transparent;
+    background: #30363d;
+}
+
+QSplitter::handle:hover {
+    background: #58a6ff;
+}
+
+QDockWidget {
+    color: #8b949e;
+}
+
+QDockWidget::title {
+    text-align: left;
+    background: #181818; /* panel_bg */
+    padding-left: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    font-size: 11px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #30363d; /* border_color */
 }
 
 /* =========================================
-   Window Controls
+   1. Title Bar Controls & Toggles
    ========================================= */
-QPushButton#minimizeBtn, QPushButton#maximizeBtn, QPushButton#closeBtn {
-    width: 24px;
-    height: 24px;
-    border-radius: 12px;
+QPushButton#minimizeBtn, QPushButton#maximizeBtn {
+    width: 46px;
+    height: 30px;
     background: transparent;
     border: none;
-    margin: 2px;
+    color: #cccccc;
 }
 QPushButton#minimizeBtn:hover, QPushButton#maximizeBtn:hover {
     background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+QPushButton#closeBtn {
+    width: 46px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: #cccccc;
 }
 QPushButton#closeBtn:hover {
-    background-color: #ef4444;
+    background-color: #e81123; /* VS Code Red */
+    color: #ffffff;
+}
+
+QPushButton#toggleBtn {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: transparent;
+    border: none;
+    color: #cccccc;
+}
+QPushButton#toggleBtn:hover {
+    background-color: #2a2d2e;
 }
 
 /* =========================================
-   Title Bar
+   2. QTabBar (Editor Tabs & Close Button)
    ========================================= */
-#CustomTitleBar {
-    background-color: transparent;
-    color: #94A3B8;
+QTabBar::tab {
+    background-color: #2d2d2d;
+    color: #8b949e;
+    padding: 8px 16px;
+    border: none;
+    border-right: 1px solid #1e1e1e; /* Subtle separator */
+}
+QTabBar::tab:selected {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border-top: 1px solid #007acc; /* Subtle top accent line */
+}
+QTabBar::close-button {
+    background: transparent;
+    padding: 2px;
+}
+QTabBar::close-button:hover {
+    background: #333333;
+    border-radius: 4px;
 }
 
 /* =========================================
-   Tree View (Explorer)
+   3. File Explorer & Splitter (Border Bleed Fix)
    ========================================= */
+QTreeView#explorerTree {
+    background-color: #181818;
+    border: none;
+    border-bottom: none;
+    outline: none;
+    show-decoration-selected: 1;
+}
+QTreeView#explorerTree::item {
+    padding: 2px 0px;
+}
+QTreeView#explorerTree::item:hover { 
+    background-color: #21262d; 
+}
+QTreeView#explorerTree::item:selected {
+    background-color: #30363d;
+    color: #ffffff;
+}
+QTreeView#explorerTree::item:selected:active {
+    background-color: #30363d;
+}
+QTreeView#explorerTree::item:selected:!active {
+    background-color: #21262d;
+}
 QTreeView#explorerTree::branch {
     background-color: transparent;
 }
 QTreeView#explorerTree::branch:has-siblings:!adjoins-item {
-    border-left: 1px solid #2D2A3E;
+    border-left: 1px solid #30363d;
     margin-left: 10px;
 }
 QTreeView#explorerTree::branch:has-siblings:adjoins-item {
-    border-left: 1px solid #2D2A3E;
+    border-left: 1px solid #30363d;
     margin-left: 10px;
 }
 QTreeView#explorerTree::branch:!has-children:!has-siblings:adjoins-item {
-    border-left: 1px solid #2D2A3E;
+    border-left: 1px solid #30363d;
     margin-left: 10px;
 }
 
 /* =========================================
-   Status Bar (Footer)
+   4. AI Chat Panel
    ========================================= */
+QTextEdit#chatInput {
+    background-color: #1e1e1e; /* editor_bg */
+    border: 1px solid #30363d; /* border_color */
+    border-radius: 6px;
+    padding: 8px;
+    color: #e5e7eb; /* text_primary */
+    font-size: 13px;
+}
+QTextEdit#chatInput:focus {
+    border: 1px solid #1f6feb; /* accent_color */
+    outline: none;
+}
+
+QPushButton#sendBtn {
+    background-color: #0e639c; /* VS Code modern blue */
+    color: #ffffff;
+    border-radius: 4px;
+    padding: 6px 14px;
+    border: none;
+    font-weight: bold;
+}
+QPushButton#sendBtn:hover {
+    background-color: #1177bb;
+}
+
+QPushButton#attachBtn {
+    background-color: transparent;
+    color: #cccccc;
+    border-radius: 4px;
+    padding: 6px 10px;
+    border: none;
+}
+QPushButton#attachBtn:hover {
+    background-color: #2a2d2e;
+}
+
+/* =========================================
+   5. Custom Title Bar
+   ========================================= */
+#CustomTitleBar {
+    background-color: #181818;
+    color: #c9d1d9;
+    border-bottom: 1px solid #30363d;
+}
+
+/* =========================================
+   6. Status Bar (Footer) — VS Code Blue
+      objectName ensures global QPushButton /
+      QWidget rules CANNOT bleed in here.
+   ========================================= */
+QWidget#CustomStatusBar {
+    background-color: #007acc;
+    border-top: none;
+    min-height: 22px;
+    max-height: 22px;
+}
 QWidget#CustomStatusBar QLabel {
     background-color: transparent;
-    color: #94A3B8;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 0 8px;
+    color: #ffffff;
+    font-size: 12px;
+    padding: 0 6px;
     border: none;
 }
 QWidget#CustomStatusBar QPushButton {
     background-color: transparent;
-    color: #94A3B8;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 0 10px;
+    color: #ffffff;
+    font-size: 12px;
+    padding: 0 8px;
     border: none;
-    border-radius: 6px;
-    margin: 2px;
+    border-radius: 0px;
 }
 QWidget#CustomStatusBar QPushButton:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #E2E8F0;
+    background-color: rgba(255, 255, 255, 0.15);
 }
-
