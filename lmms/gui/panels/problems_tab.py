@@ -14,31 +14,19 @@ class ProblemsTab(QWidget):
         self.layout.setContentsMargins(10, 5, 10, 0)
         self.layout.setSpacing(5)
         
-        # Toolbar
-        self.toolbar_layout = QHBoxLayout()
-        self.toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        # Toolbar for corner widget
+        self.toolbar_widget = QWidget()
+        self.toolbar_layout = QHBoxLayout(self.toolbar_widget)
+        self.toolbar_layout.setContentsMargins(0, 0, 15, 0)
+        self.toolbar_layout.setSpacing(4)
         
         from PyQt6.QtWidgets import QLineEdit, QPushButton
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("Filter (e.g. text, **/*.ts, !**/node...)")
-        self.filter_input.setStyleSheet("QLineEdit { background: #181818; color: #e5e7eb; border: 1px solid #30363d; border-radius: 2px; padding: 2px 6px; }")
+        self.filter_input.setFixedWidth(200)
+        self.filter_input.setStyleSheet("QLineEdit { background: #181818; color: #e5e7eb; border: 1px solid #30363d; border-radius: 2px; padding: 2px 6px; font-size: 12px; }")
         
-        self.btn_group = QPushButton("≡")
-        self.btn_copy = QPushButton("📋")
-        self.btn_maximize = QPushButton("↑")
-        self.btn_close = QPushButton("✕")
-        
-        for btn in [self.btn_group, self.btn_copy, self.btn_maximize, self.btn_close]:
-            btn.setFixedSize(24, 24)
-            btn.setStyleSheet("QPushButton { background: transparent; border: none; color: #8b949e; } QPushButton:hover { color: #e5e7eb; background: #21262d; border-radius: 2px; }")
-            
         self.toolbar_layout.addWidget(self.filter_input)
-        self.toolbar_layout.addWidget(self.btn_group)
-        self.toolbar_layout.addWidget(self.btn_copy)
-        self.toolbar_layout.addWidget(self.btn_maximize)
-        self.toolbar_layout.addWidget(self.btn_close)
-        
-        self.layout.addLayout(self.toolbar_layout)
         
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
