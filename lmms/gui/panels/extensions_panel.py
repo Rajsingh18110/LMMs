@@ -1190,11 +1190,66 @@ class ExtensionsPanel(QDockWidget):
         t.start()
         self._search_thread = t
 
+    @staticmethod
+    def _fallback_extensions() -> list[dict]:
+        return [
+            {
+                "namespace": "ms-python",
+                "name": "python",
+                "displayName": "Python",
+                "description": "Python language support and tooling for LMMs development.",
+                "version": "2026.1.0",
+                "downloadCount": 1000000,
+                "files": {"icon": ""},
+            },
+            {
+                "namespace": "github",
+                "name": "vscode-pull-request-github",
+                "displayName": "GitHub Pull Requests",
+                "description": "Review and manage pull requests directly from the editor.",
+                "version": "0.90.0",
+                "downloadCount": 820000,
+                "files": {"icon": ""},
+            },
+            {
+                "namespace": "redhat",
+                "name": "java",
+                "displayName": "Language Support for Java",
+                "description": "Java tools and language intelligence for coding workflows.",
+                "version": "1.32.0",
+                "downloadCount": 640000,
+                "files": {"icon": ""},
+            },
+        ]
+
+    def _show_empty_state(self, message: str = "No extensions found."):
+        self.list_widget.clear()
+        item = QListWidgetItem(self.list_widget)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+        widget = QWidget(self.list_widget)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 18, 16, 18)
+        label = QLabel(message)
+        label.setStyleSheet("color:#9aa5b1; font-size:12px; background:transparent;")
+        layout.addWidget(label)
+        widget.setStyleSheet("background:transparent;")
+        self.list_widget.setItemWidget(item, widget)
+        item.setSizeHint(widget.sizeHint())
+
     # ── Results ───────────────────────────────────────────────────────────────
 
     def _on_results(self, extensions: list, total: int, append: bool):
         self.progress.hide()
         self._total = total
+
+        if not extensions and not append:
+            extensions = self._fallback_extensions()
+            total = len(extensions)
+            self._show_empty_state("No extensions found — showing safe defaults.")
+
+        if not extensions and append:
+            self._show_empty_state("No more extensions found.")
+            return
 
         base_idx = len(self._ext_map)
 

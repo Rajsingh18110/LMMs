@@ -175,9 +175,10 @@ class InstallThread(QThread):
                 self.log.emit(f"[{ext_id}] ℹ Requires: {', '.join(ext_deps)}")
 
             # ── 7. Compute compatibility ──────────────────────────────────
-            from lmms.extensions.models import compute_compat
+            from lmms.extensions.models import compute_compat, detect_runtime
             compat = compute_compat(manifest)
-            self.log.emit(f"[{ext_id}] Compatibility: {compat.value}")
+            runtime = detect_runtime(manifest)
+            self.log.emit(f"[{ext_id}] Compatibility: {compat.value} | Runtime: {runtime.value}")
 
             # ── 8. Build record ───────────────────────────────────────────
             record = ExtensionRecord(
@@ -188,6 +189,7 @@ class InstallThread(QThread):
                 version      = ver,
                 state        = ExtState.INSTALLED,
                 compat       = compat,
+                runtime      = runtime,
                 path         = str(install_dir),
                 manifest     = manifest,
                 icon_url     = (ext.get("files") or {}).get("icon") or ext.get("icon_url"),

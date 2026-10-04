@@ -9,6 +9,7 @@ from PyQt6.QtGui import QIcon, QFont, QCursor, QColor, QPixmap, QPainter
 
 from lmms.backend.config.config import ConfigManager
 import os
+import re
 try:
     from PyQt6.QtGui import QFileSystemModel
 except ImportError:
@@ -741,17 +742,47 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda checked: CommandRegistry.execute("settings.providers"))
         else:
             if is_extension and name not in self.docks:
-                # Create an empty dock for the extension right now
+                # Real extension docks should render an actual extension detail page,
+                # not a dead placeholder. If no extension-specific UI exists yet,
+                # we still render the extension metadata view so the pane is usable.
                 dock = QDockWidget(name, self.inner_window)
                 dock.setObjectName(f"{name}Dock")
                 dock.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
-                
-                # Create a WebEngineView for extension UI
-                from PyQt6.QtWebEngineWidgets import QWebEngineView
-                webview = QWebEngineView()
-                webview.setHtml(f"<html><body style='background:#1e1e1e; color:white;'>Extension Panel: {name}</body></html>")
-                dock.setWidget(webview)
-                
+
+                from lmms.gui.panels.extensions_panel import ExtensionDetailTab
+                slug = re.sub(r"[^a-z0-9]+", "-", (name or "extension").lower()).strip("-") or "extension"
+                ext_meta = {
+                    "namespace": "local",
+                    "name": slug,
+                    "displayName": name,
+                    "description": "Extension is loaded through the runtime manager. The extension detail panel is available here.",
+                    "version": "0.0.0",
+                    "downloadCount": 0,
+                    "files": {"icon": "", "readme": ""},
+                    "categories": ["general"],
+                }
+
+                # If an installed extension record already exists, prefer its real metadata.
+                from lmms.extensions.manager import ExtensionManager
+                mgr = ExtensionManager.instance()
+                for ext_id, rec in getattr(mgr, "_records", {}).items():
+                    record_name = rec.name if hasattr(rec, "name") else ""
+                    if record_name and record_name.lower() == name.lower():
+                        ext_meta = {
+                            "namespace": ext_id.split(".", 1)[0],
+                            "name": ext_id.split(".", 1)[1],
+                            "displayName": getattr(rec, "display_name", record_name),
+                            "description": getattr(rec, "description", rec.summary or ""),
+                            "version": getattr(rec, "version", "0.0.0"),
+                            "downloadCount": getattr(rec, "downloads", 0),
+                            "files": getattr(rec, "files", {}) or {"icon": ""},
+                            "categories": getattr(rec, "categories", []) or ["general"],
+                        }
+                        break
+
+                detail_tab = ExtensionDetailTab(ext_meta)
+                dock.setWidget(detail_tab)
+
                 self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
                 dock.hide()
                 self.docks[name] = dock

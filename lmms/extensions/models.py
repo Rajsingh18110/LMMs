@@ -28,6 +28,13 @@ class CompatLevel(str, Enum):
     INCOMPATIBLE = "INCOMPATIBLE"  # e.g. requires unavailable platform
 
 
+class ExtensionRuntime(str, Enum):
+    NODE = "node"
+    PYTHON = "python"
+    LMMs = "lmms"
+    UNKNOWN = "unknown"
+
+
 # APIs we actually implement — used to compute compat level
 IMPLEMENTED_APIS = {
     "vscode.commands",
@@ -59,6 +66,7 @@ class ExtensionRecord:
     version:      str
     state:        ExtState         = ExtState.AVAILABLE
     compat:       CompatLevel      = CompatLevel.INSTALL_ONLY
+    runtime:      ExtensionRuntime = ExtensionRuntime.UNKNOWN
     path:         Optional[str]    = None   # extracted dir
     manifest:     dict             = field(default_factory=dict)
     error:        Optional[str]    = None
@@ -77,6 +85,7 @@ class ExtensionRecord:
             "version":      self.version,
             "state":        self.state.value,
             "compat":       self.compat.value,
+            "runtime":      self.runtime.value,
             "path":         self.path,
             "manifest":     self.manifest,
             "error":        self.error,
@@ -86,6 +95,12 @@ class ExtensionRecord:
 
     @classmethod
     def from_json(cls, d: dict) -> "ExtensionRecord":
+        runtime_value = d.get("runtime", "unknown")
+        try:
+            runtime = ExtensionRuntime(runtime_value)
+        except ValueError:
+            runtime = ExtensionRuntime.UNKNOWN
+
         r = cls(
             ext_id       = d["ext_id"],
             namespace    = d["namespace"],
@@ -94,6 +109,7 @@ class ExtensionRecord:
             version      = d.get("version", ""),
             state        = ExtState(d.get("state", "installed")),
             compat       = CompatLevel(d.get("compat", "INSTALL_ONLY")),
+            runtime      = runtime,
             path         = d.get("path"),
             manifest     = d.get("manifest", {}),
             error        = d.get("error"),
@@ -110,14 +126,36 @@ class ExtensionRecord:
             self.log_lines = self.log_lines[-500:]
 
 
+def detect_runtime(manifest: dict) -> ExtensionRuntime:
+    """Pick the runtime required by the extension package."""
+    if manifest.get("lmms"):
+        return ExtensionRuntime.LMMs
+
+    main = manifest.get("main") or manifest.get("browser") or ""
+    main_name = str(main).lower()
+    if main_name.endswith(".py"):
+        return ExtensionRuntime.PYTHON
+    if main_name.endswith((".js", ".cjs", ".mjs")):
+        return ExtensionRuntime.NODE
+    if manifest.get("language") or manifest.get("contributes"):
+        return ExtensionRuntime.NODE
+    return ExtensionRuntime.UNKNOWN
+
+
 def compute_compat(manifest: dict) -> CompatLevel:
     """
     Determine compatibility level by examining what the extension contributes
     and what VS Code API level it needs.
     """
     import shutil
+    runtime = detect_runtime(manifest)
+
+    # Python extensions are valid if Python is available; otherwise install-only
+    if runtime == ExtensionRuntime.PYTHON:
+        return CompatLevel.PARTIAL if shutil.which("python") else CompatLevel.INSTALL_ONLY
+
     # Without Node.js we can't activate JS extensions
-    if not shutil.which("node"):
+    if runtime == ExtensionRuntime.NODE and not shutil.which("node"):
         return CompatLevel.INSTALL_ONLY
 
     # Engine requirement
