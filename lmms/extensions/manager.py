@@ -297,15 +297,26 @@ class ExtensionManager(QObject):
         try:
             with open(_STATE_FILE, encoding="utf-8") as fh:
                 data = json.load(fh)
+            
+            extensions_to_activate = []
             for ext_id, d in data.items():
                 try:
                     rec = ExtensionRecord.from_json(d)
-                    # On reload, INSTALLING/ACTIVATING → INSTALLED (process died)
-                    if rec.state in (ExtState.INSTALLING, ExtState.ACTIVATING,
-                                     ExtState.UNINSTALLING):
+                    # On reload, processes are dead, so reset state to INSTALLED
+                    # unless it's DISABLED
+                    if rec.state != ExtState.DISABLED:
                         rec.state = ExtState.INSTALLED
+                        extensions_to_activate.append(ext_id)
                     self._records[ext_id] = rec
                 except Exception as e:
                     print(f"[ExtensionManager] Failed to load {ext_id}: {e}")
+                    
+            # Schedule activation slightly later so UI is fully ready
+            if extensions_to_activate:
+                def activate_all():
+                    for ext_id in extensions_to_activate:
+                        self._activate(ext_id)
+                QTimer.singleShot(1000, activate_all)
+                
         except Exception as e:
             print(f"[ExtensionManager] Load error: {e}")
