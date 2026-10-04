@@ -27,38 +27,149 @@ class ThemeManager:
             return False
 
     def generate_qss_overrides(self):
-        """Generates a QSS string that overrides the default colors with the theme colors."""
+        """Generates a QSS string that overrides the default colors with the premium theme."""
         if not self.theme_data:
             return ""
             
         colors = self.theme_data.get("colors", {})
         
-        # VS Code color keys to QSS mappings
-        editor_bg = colors.get("editor.background", "#1e1e1e")
-        sidebar_bg = colors.get("sideBar.background", "#181818")
-        accent_color = colors.get("button.background", "#1f6feb")
-        text_primary = colors.get("editor.foreground", "#e5e7eb")
-        text_secondary = colors.get("sideBar.foreground", "#8b949e")
-        border_color = colors.get("sideBar.border", colors.get("panel.border", "#30363d"))
-        tab_active_bg = colors.get("tab.activeBackground", editor_bg)
-        tab_inactive_bg = colors.get("tab.inactiveBackground", "#2d2d2d")
+        # Color mappings
+        base_bg = colors.get("editor.background", "#0A0910")
+        panel_bg = colors.get("sideBar.background", "#12111A")
+        elevated_bg = colors.get("editorWidget.background", "#1B1926")
+        accent_color = colors.get("button.background", "#8B5CF6")
+        accent_hover = colors.get("button.hoverBackground", "#7C3AED")
+        text_primary = colors.get("editor.foreground", "#E2E8F0")
+        text_secondary = colors.get("sideBar.foreground", "#94A3B8")
+        border_color = colors.get("sideBar.border", "#2D2A3E")
+        tab_active_bg = colors.get("tab.activeBackground", "#1B1926")
+        tab_inactive_bg = colors.get("tab.inactiveBackground", base_bg)
+        selection_bg = colors.get("list.activeSelectionBackground", "#8B5CF640")
         
-        # Build the override stylesheet
+        # Build the luxury override stylesheet
         overrides = f"""
-        /* --- DYNAMIC THEME OVERRIDES --- */
-        QMainWindow {{ background-color: {editor_bg}; }}
-        #Sidebar {{ background-color: {sidebar_bg}; border-right: 1px solid {border_color}; }}
-        #ContentArea {{ background-color: {editor_bg}; }}
+        /* --- PREMIUM DYNAMIC THEME OVERRIDES --- */
         
-        QTabBar::tab {{ background-color: {tab_inactive_bg}; color: {text_secondary}; }}
-        QTabBar::tab:selected {{ background-color: {tab_active_bg}; color: {text_primary}; border-top: 1px solid {accent_color}; }}
+        /* 1. Base Window & Floating Panels */
+        QMainWindow {{ background-color: {base_bg}; }}
+        #ContentArea {{ background-color: {base_bg}; }}
         
-        QTreeView#explorerTree {{ background-color: {sidebar_bg}; }}
-        QDockWidget::title {{ background: {sidebar_bg}; border-bottom: 1px solid {border_color}; }}
-        QTextEdit#chatInput {{ background-color: {editor_bg}; border: 1px solid {border_color}; }}
+        /* Floating Dock Widget styling (gives a "floating" feel around panels) */
+        QDockWidget > QWidget {{
+            background-color: {panel_bg};
+            border: 1px solid {border_color};
+            border-radius: 12px;
+            margin: 4px; /* Creates the floating gap */
+        }}
         
-        QPushButton#PrimaryButton {{ background-color: {accent_color}; border: 1px solid {accent_color}; }}
-        QPushButton#sendBtn {{ background-color: {accent_color}; }}
+        /* Sidebars & Explorer Tree */
+        #Sidebar {{ background-color: transparent; border: none; }}
+        QTreeView#explorerTree {{ background-color: transparent; border: none; }}
+        QTreeView#explorerTree::item {{ padding: 4px; border-radius: 6px; margin: 2px 8px; }}
+        QTreeView#explorerTree::item:hover {{ background-color: rgba(255, 255, 255, 0.06); }}
+        QTreeView#explorerTree::item:selected {{ background-color: {selection_bg}; color: {text_primary}; }}
+        
+        /* 2. Pill-Shaped Tabs */
+        QTabBar::tab {{
+            background-color: {tab_inactive_bg};
+            color: {text_secondary};
+            padding: 8px 16px;
+            margin: 4px 2px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+        }}
+        QTabBar::tab:selected {{
+            background-color: {tab_active_bg};
+            color: {text_primary};
+            border: 1px solid {border_color};
+            border-bottom: 2px solid qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8B5CF6, stop:1 #06B6D4);
+        }}
+        QTabBar::tab:hover:!selected {{
+            background-color: rgba(255, 255, 255, 0.05);
+        }}
+        
+        /* 3. Terminal & AI Chat Input */
+        QTextEdit#chatInput {{
+            background-color: {elevated_bg};
+            border: 1px solid {border_color};
+            border-radius: 12px;
+            padding: 10px;
+        }}
+        QTextEdit#chatInput:focus {{
+            border: 1px solid {accent_color};
+            background-color: {panel_bg};
+        }}
+        
+        QFrame#ChatInputFrame {{
+            background-color: {elevated_bg};
+            border: 1px solid {border_color};
+            border-radius: 14px;
+        }}
+        QFrame#ChatInputFrame:focus-within {{
+            border: 1px solid qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8B5CF6, stop:1 #06B6D4);
+        }}
+        
+        /* Buttons */
+        QPushButton#PrimaryButton, QPushButton#sendBtn {{
+            background-color: {accent_color};
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 6px 12px;
+            border: none;
+        }}
+        QPushButton#PrimaryButton:hover, QPushButton#sendBtn:hover {{
+            background-color: {accent_hover};
+        }}
+        
+        /* Dock Title Bars */
+        QDockWidget::title {{
+            background: transparent;
+            text-align: left;
+            padding: 8px 14px;
+            font-weight: bold;
+            font-size: 12px;
+            color: {text_primary};
+        }}
+        
+        /* Custom Status Bar Pill */
+        QWidget#CustomStatusBar {{
+            background-color: {panel_bg};
+            border-top: 1px solid {border_color};
+            border-radius: 12px;
+            margin: 4px;
+        }}
+        
+        /* Chat Action Buttons */
+        QPushButton#AgentModeToggle {{
+            background: transparent; border: 1px solid transparent; color: {text_secondary}; font-size: 14px; border-radius: 4px;
+        }}
+        QPushButton#AgentModeToggle:checked {{
+            background: {accent_color}40; color: {text_primary}; border: 1px solid {accent_color};
+        }}
+        QPushButton#AgentModeToggle:hover:!checked {{
+            background: rgba(255, 255, 255, 0.1);
+        }}
+        
+        QPushButton#attachBtn, QPushButton#micBtn {{
+            background: transparent; border: none; color: {text_secondary}; font-size: 14px; border-radius: 4px;
+        }}
+        QPushButton#attachBtn:hover, QPushButton#micBtn:hover {{
+            background: rgba(255, 255, 255, 0.1); color: {text_primary};
+        }}
+        
+        QPushButton#sendBtn {{
+            background: transparent; color: {text_primary}; border-radius: 4px; border: none; font-size: 14px;
+        }}
+        QPushButton#sendBtn:hover {{
+            background: rgba(255, 255, 255, 0.1);
+        }}
+        
+        QPushButton#ChatTextLinkBtn {{
+            background: transparent; color: {accent_color}; font-size: 11px; padding: 2px 4px; border: none; text-align: left;
+        }}
+        QPushButton#ChatTextLinkBtn:hover {{
+            text-decoration: underline; color: {accent_hover};
+        }}
         """
         return overrides
 
