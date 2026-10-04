@@ -392,6 +392,12 @@ class TerminalPanel(QWidget):
             if not self.terminals:
                 self.add_new_terminal()
                 
+    def send_command(self, cmd):
+        idx = self.terminal_list.currentRow()
+        if 0 <= idx < len(self.terminals):
+            term = self.terminals[idx]
+            term.backend.write_data(cmd + '\r')
+                
     def on_tab_changed(self, index):
         title = self.tabs.tabText(index)
         if title.startswith("Problems"):

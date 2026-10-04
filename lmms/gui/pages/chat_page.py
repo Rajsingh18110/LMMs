@@ -83,6 +83,73 @@ class ChatPage(QWidget):
         chat_layout.setContentsMargins(0, 0, 0, 0)
         chat_layout.setSpacing(0)
 
+        # ── Top Toolbar (Model & Agent Selection) ────────────────────────
+        top_toolbar_container = QWidget()
+        top_toolbar_container.setStyleSheet("background-color: transparent; border-bottom: 1px solid #30363d;")
+        top_layout = QHBoxLayout(top_toolbar_container)
+        top_layout.setContentsMargins(10, 8, 10, 8)
+        top_layout.setSpacing(6)
+        
+        self.model_filter_combo = QComboBox()
+        self.model_filter_combo.addItems(["All", "Online", "Offline"])
+        self.model_filter_combo.setFixedHeight(24)
+        self.model_filter_combo.setFixedWidth(65)
+        self.model_filter_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                color: #8b949e;
+                font-size: 11px;
+                padding: 2px 6px;
+            }
+            QComboBox:hover { background: #30363d; border-color: #30363d; }
+            QComboBox::drop-down { border: none; width: 14px; }
+            QComboBox QAbstractItemView {
+                background: #1e1e1e; color: #e5e7eb; selection-background-color: #04395e; border: 1px solid #30363d;
+            }
+        """)
+        self.model_filter_combo.currentTextChanged.connect(self.refresh_models)
+        
+        self.model_combo = QComboBox()
+        self.model_combo.setFixedHeight(24)
+        self.model_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.model_combo.setMinimumWidth(100)
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                color: #c9d1d9;
+                font-size: 11px;
+                padding: 2px 6px;
+            }
+            QComboBox:hover { background: #30363d; border-color: #30363d; }
+            QComboBox::drop-down { border: none; width: 14px; }
+            QComboBox QAbstractItemView {
+                background: #1e1e1e; color: #e5e7eb; selection-background-color: #04395e; border: 1px solid #30363d;
+            }
+        """)
+        
+        self.agent_mode_toggle = QPushButton("🤖")
+        self.agent_mode_toggle.setToolTip("Toggle Agent Mode")
+        self.agent_mode_toggle.setFixedSize(24, 24)
+        self.agent_mode_toggle.setCheckable(True)
+        self.agent_mode_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.agent_mode_toggle.setStyleSheet("""
+            QPushButton {
+                background: transparent; border: 1px solid transparent; color: #8b949e; font-size: 14px; border-radius: 4px;
+            }
+            QPushButton:checked { background: #04395e; color: #ffffff; border: 1px solid #1f6feb; }
+            QPushButton:hover:!checked { background: #30363d; }
+        """)
+        
+        top_layout.addWidget(self.model_filter_combo)
+        top_layout.addWidget(self.model_combo, 1) # Give it stretch
+        top_layout.addWidget(self.agent_mode_toggle)
+        
+        chat_layout.addWidget(top_toolbar_container)
+
         self.message_list = MessageListWidget()
         self.message_list.link_clicked.connect(self.on_link_clicked)
         self.message_list.edit_requested.connect(self.on_edit_requested)
@@ -92,63 +159,24 @@ class ChatPage(QWidget):
 
         # ── Input Area ────────────────────────────────────────────────────
         input_outer = QHBoxLayout()
-        input_outer.setContentsMargins(16, 0, 16, 14)
+        input_outer.setContentsMargins(14, 0, 14, 14)
 
         input_container = QFrame()
         input_container.setObjectName("ChatInputFrame")
         input_container.setStyleSheet("""
             QFrame#ChatInputFrame {
-                background-color: #181818;
-                border: 1px solid #30363d;
-                border-radius: 10px;
+                background-color: #1e1e1e;
+                border: 1px solid #454545;
+                border-radius: 6px;
             }
             QFrame#ChatInputFrame:focus-within {
-                border-color: #1f6feb;
+                border-color: #007acc;
             }
         """)
         input_layout = QVBoxLayout(input_container)
-        input_layout.setContentsMargins(12, 8, 12, 8)
-        input_layout.setSpacing(4)
+        input_layout.setContentsMargins(6, 6, 6, 6)
+        input_layout.setSpacing(2)
         
-        # Action row: Walkthrough + Review Changes
-        action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 4)
-        action_row.setSpacing(6)
-        
-        self.btn_walkthrough = QPushButton("📋 Walkthrough")
-        self.btn_walkthrough.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_walkthrough.setStyleSheet("""
-            QPushButton {
-                background: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 4px;
-                color: #8b949e;
-                font-size: 11px;
-                padding: 3px 8px;
-            }
-            QPushButton:hover { background: #30363d; color: #e5e7eb; }
-        """)
-        
-        self.btn_review = QPushButton("🔄 0 Files With Changes")
-        self.btn_review.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_review.setStyleSheet("""
-            QPushButton {
-                background: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 4px;
-                color: #8b949e;
-                font-size: 11px;
-                padding: 3px 8px;
-            }
-            QPushButton:hover { background: #30363d; color: #e5e7eb; }
-        """)
-        self._dirty_file_count = 0
-        
-        action_row.addWidget(self.btn_walkthrough)
-        action_row.addWidget(self.btn_review)
-        action_row.addStretch()
-        input_layout.addLayout(action_row)
-
         # Attachment chips
         self.attachment_container = QWidget()
         self.attachment_layout = QHBoxLayout(self.attachment_container)
@@ -160,136 +188,90 @@ class ChatPage(QWidget):
         self.input_field = ChatInputEdit()
         self.input_field.setObjectName("chatInput")
         self.input_field.setStyleSheet(
-            "border: none; background: transparent; color: #e5e7eb; font-size: 14px;"
+            "border: none; background: transparent; color: #cccccc; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;"
         )
-        self.input_field.setPlaceholderText("Message LMMs…")
+        self.input_field.setPlaceholderText("Ask anything...")
         self.input_field.setMaximumHeight(140)
         self.input_field.send_callback = self.send_message
         self.input_field.files_pasted.connect(self.add_attached_files)
         input_layout.addWidget(self.input_field)
 
-        # Bottom toolbar
+        # Bottom toolbar (inside the input box)
         toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(0, 2, 0, 0)
-        toolbar.setSpacing(6)
+        toolbar.setContentsMargins(2, 0, 2, 0)
+        toolbar.setSpacing(4)
 
-        self.attach_btn = QPushButton("+")
-        self.attach_btn.setToolTip("Attach file")
-        self.attach_btn.setFixedSize(26, 26)
+        self.attach_btn = QPushButton("📎")
+        self.attach_btn.setToolTip("Attach Context")
+        self.attach_btn.setFixedSize(24, 24)
         self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.attach_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent; border: none;
-                color: #c9d1d9; font-size: 20px; font-weight: normal; border-radius: 4px;
-            }
-            QPushButton:hover { background: #1f2937; color: #ffffff; }
+            QPushButton { background: transparent; border: none; color: #cccccc; font-size: 13px; border-radius: 4px; }
+            QPushButton:hover { background: #333333; }
         """)
         self.attach_btn.clicked.connect(self.attach_files)
 
-        self.model_filter_combo = QComboBox()
-        self.model_filter_combo.addItems(["All", "Online", "Offline"])
-        self.model_filter_combo.setFixedHeight(26)
-        self.model_filter_combo.setFixedWidth(82)
-        self.model_filter_combo.setStyleSheet("""
-            QComboBox {
-                background: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 13px;
-                color: #8b949e;
-                font-size: 11px;
-                padding: 2px 10px;
-            }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView {
-                background: #181818;
-                color: #e5e7eb;
-                selection-background-color: #1f6feb;
-                border: 1px solid #30363d;
-            }
-        """)
-        self.model_filter_combo.currentTextChanged.connect(self.refresh_models)
-        
-        self.model_combo = QComboBox()
-        self.model_combo.setFixedHeight(26)
-        self.model_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.model_combo.setMinimumWidth(120)
-        self.model_combo.setMaximumWidth(240)
-        self.model_combo.setStyleSheet("""
-            QComboBox {
-                background: #21262d;
-                border: 1px solid #30363d;
-                border-radius: 13px;
-                color: #8b949e;
-                font-size: 11px;
-                padding: 2px 10px;
-            }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView {
-                background: #181818;
-                color: #e5e7eb;
-                selection-background-color: #1f6feb;
-                border: 1px solid #30363d;
-            }
-        """)
-        self.refresh_models()
-        
-        self.agent_mode_toggle = QPushButton("🤖 Agent Mode: OFF")
-        self.agent_mode_toggle.setFixedHeight(26)
-        self.agent_mode_toggle.setCheckable(True)
-        self.agent_mode_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.agent_mode_toggle.setStyleSheet("""
-            QPushButton {
-                background: #21262d; border: 1px solid #30363d;
-                color: #8b949e; font-size: 11px; border-radius: 13px; padding: 2px 10px;
-            }
-            QPushButton:checked {
-                background: #1f6feb; color: #ffffff; border: 1px solid #1f6feb;
-            }
-            QPushButton:hover:!checked { background: #30363d; }
-        """)
-        self.agent_mode_toggle.toggled.connect(
-            lambda checked: self.agent_mode_toggle.setText("🤖 Agent Mode: ON" if checked else "🤖 Agent Mode: OFF")
-        )
-
         self.mic_btn = QPushButton("🎙️")
-        self.mic_btn.setToolTip("Voice Input (Coming Soon)")
-        self.mic_btn.setFixedSize(26, 26)
+        self.mic_btn.setToolTip("Use Voice")
+        self.mic_btn.setFixedSize(24, 24)
         self.mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.mic_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent; border: none;
-                color: #8b949e; font-size: 14px; border-radius: 4px;
-            }
-            QPushButton:hover { background: #1f2937; color: #c9d1d9; }
+            QPushButton { background: transparent; border: none; color: #cccccc; font-size: 13px; border-radius: 4px; }
+            QPushButton:hover { background: #333333; }
         """)
 
-        self.send_btn = QPushButton("➔")
-        self.send_btn.setFixedSize(30, 30)
+        self.send_btn = QPushButton("➤")
+        self.send_btn.setToolTip("Send Message (Enter)")
+        self.send_btn.setFixedSize(24, 24)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._set_send_ready()
 
         toolbar.addWidget(self.attach_btn)
-        toolbar.addWidget(self.model_filter_combo)
-        toolbar.addStretch()
-        toolbar.addWidget(self.model_combo)
-        toolbar.addWidget(self.agent_mode_toggle)
         toolbar.addWidget(self.mic_btn)
+        toolbar.addStretch()
         toolbar.addWidget(self.send_btn)
         input_layout.addLayout(toolbar)
 
         input_outer.addWidget(input_container)
         chat_layout.addLayout(input_outer)
+        
+        # Action row below input (Walkthrough + Review Changes)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(14, 0, 14, 14)
+        action_row.setSpacing(6)
+        
+        self.btn_walkthrough = QPushButton("Walkthrough")
+        self.btn_walkthrough.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_walkthrough.setStyleSheet("""
+            QPushButton { background: transparent; color: #007acc; font-size: 11px; padding: 2px 4px; border: none; text-align: left; }
+            QPushButton:hover { text-decoration: underline; }
+        """)
+        
+        self.btn_review = QPushButton("0 Files With Changes")
+        self.btn_review.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_review.setStyleSheet("""
+            QPushButton { background: transparent; color: #007acc; font-size: 11px; padding: 2px 4px; border: none; text-align: right; }
+            QPushButton:hover { text-decoration: underline; }
+        """)
+        self._dirty_file_count = 0
+        
+        action_row.addWidget(self.btn_walkthrough)
+        action_row.addStretch()
+        action_row.addWidget(self.btn_review)
+        chat_layout.addLayout(action_row)
+
         main_layout.addWidget(chat_container)
 
+        self.refresh_models()
         self.start_new_chat()
 
     def set_dirty_count(self, count: int):
         """Update the Review Changes button with the number of dirty files."""
         self._dirty_file_count = count
         if count > 0:
-            self.btn_review.setText(f"🔄 {count} Files With Changes")
+            self.btn_review.setText(f"{count} Files With Changes")
         else:
-            self.btn_review.setText("🔄 0 Files With Changes")
+            self.btn_review.setText("0 Files With Changes")
 
     # ── Send button states ────────────────────────────────────────────────────
     def _set_send_ready(self):
@@ -298,16 +280,10 @@ class ChatPage(QWidget):
         except TypeError:
             pass
         self.send_btn.clicked.connect(self.send_message)
-        self.send_btn.setText("➔")
-        self.send_btn.setFixedSize(30, 30)
+        self.send_btn.setText("➤")
         self.send_btn.setStyleSheet("""
-            QPushButton {
-                background: #2563eb; color: #fff;
-                border-radius: 15px; border: none;
-                font-size: 16px; font-weight: bold;
-            }
-            QPushButton:hover { background: #3b82f6; }
-            QPushButton:disabled { background: #1f2937; color: #6b7280; }
+            QPushButton { background: transparent; color: #cccccc; border-radius: 4px; border: none; font-size: 14px; }
+            QPushButton:hover { background: #333333; }
         """)
         self.input_field.setReadOnly(False)
 
@@ -322,14 +298,9 @@ class ChatPage(QWidget):
             pass
         self.send_btn.clicked.connect(self.stop_generation)
         self.send_btn.setText("■")
-        self.send_btn.setFixedSize(30, 30)
         self.send_btn.setStyleSheet("""
-            QPushButton {
-                background: #374151; color: #f87171;
-                border-radius: 15px; border: none;
-                font-size: 14px; font-weight: bold;
-            }
-            QPushButton:hover { background: #4b5563; }
+            QPushButton { background: transparent; color: #f87171; border-radius: 4px; border: none; font-size: 14px; font-weight: bold; }
+            QPushButton:hover { background: #333333; }
         """)
         self.input_field.setReadOnly(True)
 
