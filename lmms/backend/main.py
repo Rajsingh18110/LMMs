@@ -14,6 +14,8 @@ from lmms.backend.tools.search import web_search
 from lmms.backend.tools.browser import BrowserTool
 from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
+from lmms.backend.tools.app_launcher import AppLauncherTool
+from lmms.backend.tools.messenger import MessengerTool
 from lmms.backend.config.config import ConfigManager
 from lmms.backend.context.workspace_rules import load_workspace_rules
 from lmms.backend.cli.diagnostics import collect_doctor_report, collect_status, render_doctor, render_status
@@ -105,8 +107,28 @@ def should_force_tool_mode(prompt: str) -> bool:
         "browser.click_element",
         "browser.fill_form",
         "browser.scrape",
+        "browser.scrape_live",
+        "browser.type",
+        "browser.press_key",
+        "browser.get_interactive_dom",
+        "browser.screenshot",
         "browser.scroll",
         "browser.open_authenticated",
+        "app.launch",
+        "app.list",
+        "app.close",
+        "os.launch_app",
+        "message.send",
+        "telegram.send_message",
+        "send message",
+        "send telegram",
+        "desktop notification",
+        "notify me",
+        "launch app",
+        "open app",
+        "open browser",
+        "fill form",
+        "interactive dom",
         "web_search",
         "search the web",
         "use tool",
@@ -154,7 +176,7 @@ def should_force_tool_mode(prompt: str) -> bool:
         return False
 
     # Tool-driven commands are typically imperative and task-like rather than casual chat.
-    if any(keyword in lowered for keyword in ["read ", "write ", "search ", "open ", "run ", "debug ", "inspect ", "summarize "]):
+    if any(keyword in lowered for keyword in ["read ", "write ", "search ", "open ", "run ", "debug ", "inspect ", "summarize ", "launch ", "notify ", "scrape ", "click ", "login "]):
         return True
 
     return False
@@ -417,8 +439,8 @@ class ContextManager:
 
 class CapabilityManager:
     def __init__(self):
-        self.active_capabilities = {"core", "terminal", "files"}
-        self.available_capabilities = {"web"}
+        self.active_capabilities = {"core", "terminal", "files", "web", "apps", "messaging"}
+        self.available_capabilities = {"web", "apps", "messaging"}
         
     def activate(self, cap: str):
         if cap in self.available_capabilities:
@@ -432,8 +454,20 @@ class CapabilityManager:
             prompt += (
                 "## Browsing Private Sites & Authentication\n"
                 "If the user asks you to fetch data from a private or authenticated website, DO NOT immediately ask for credentials.\n"
-                "ALWAYS try to use `browser.open_url` or `browser.scrape` FIRST to navigate to the page and extract data.\n"
-                "If `browser.open_url` returns '401 Unauthorized' or a 'login page', DO NOT ask the user for credentials. Instead, YOU MUST immediately use the `browser.open_authenticated` tool with `headless: false` to allow the user to log in interactively.\n\n"
+                "ALWAYS try to use `browser.open_url` or `browser.scrape_live` FIRST to navigate to the page and inspect the interactive DOM.\n"
+                "If login is required, inspect interactive elements via `browser.get_interactive_dom`, fill credentials with `browser.fill_form`, and click the login button via `browser.click_element`.\n"
+                "If a CAPTCHA or SSO authentication is needed, use `browser.open_authenticated` with `headless: false`.\n\n"
+            )
+        if "apps" in self.active_capabilities:
+            prompt += (
+                "## Desktop Application Launching\n"
+                "You can launch desktop applications (Chrome, VLC, Calculator, VS Code, Spotify) or open files/URLs using `app.launch`.\n"
+                "Apps run in detached background mode and will not freeze the terminal.\n\n"
+            )
+        if "messaging" in self.active_capabilities:
+            prompt += (
+                "## Notifications & Messaging\n"
+                "You can send native desktop notifications or messages to Telegram/Discord/Slack webhooks using `message.send`.\n\n"
             )
         return prompt
         
@@ -443,6 +477,12 @@ class CapabilityManager:
             if not line.strip(): continue
             if "browser." in line or "web_search" in line:
                 if "web" in self.active_capabilities:
+                    filtered.append(line)
+            elif "app." in line:
+                if "apps" in self.active_capabilities:
+                    filtered.append(line)
+            elif "message." in line or "telegram." in line:
+                if "messaging" in self.active_capabilities:
                     filtered.append(line)
             else:
                 filtered.append(line)
@@ -554,12 +594,18 @@ def run_cli():
     browser_tool = BrowserTool()
     file_tool = FileTool()
     terminal_tool = TerminalTool()
+    app_launcher = AppLauncherTool()
+    messenger_tool = MessengerTool()
     
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
         nonlocal checkpoint_created_this_session
         
         # Backward compatibility for planning mode
-        if planning_mode and tool_name in ["files.write", "browser.click_element", "browser.fill_form"]:
+        if planning_mode and tool_name in [
+            "files.write", "browser.click_element", "browser.fill_form",
+            "browser.type", "browser.type_text", "browser.press_key",
+            "app.launch", "os.launch_app", "app.close", "message.send", "telegram.send_message"
+        ]:
             console.print("[yellow]Planning mode is read-only. Use /apply before making changes.[/yellow]")
             return False
 
@@ -1660,19 +1706,27 @@ def run_cli():
     
                     base_tools = (
                         "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\n"
-                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\"}}\n"
-                        "3. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\n"
-                        "4. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"url\": \"...\", \"fields\": {\"selector\": \"value\"}}}\n"
-                        "5. browser.scrape: {\"tool\": \"browser.scrape\", \"kwargs\": {\"url\": \"...\", \"selector\": \"css_selector\"}}\n"
-                        "6. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\n"
-                        "7. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\n"
-                        "8. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\n"
-                        "9. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\n"
-                        "10. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": True}} (Set headless to False to show browser and bypass bot-detection for SSO login.)\n"
-                        "11. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
-                        "12. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
-                        "13. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
-                        "14. security.generate_report: {\"tool\": \"security.generate_report\", \"kwargs\": {\"findings_summary\": \"Exec summary of what was found...\"}} (Generate a markdown security report of all actions)\n"
+                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\", \"headless\": False}} (Opens live browser window. Returns interactive DOM with labeled IDs like [ID 1], [ID 2])\n"
+                        "3. browser.get_interactive_dom: {\"tool\": \"browser.get_interactive_dom\", \"kwargs\": {\"url\": \"http...\"}} (Extracts all clickable & input elements with discrete IDs like [ID 1], [ID 2] for precise interaction)\n"
+                        "4. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"selector\": \"1\"}} (Click element by ID number like '1' or CSS selector)\n"
+                        "5. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"fields\": {\"1\": \"user@example.com\", \"2\": \"secret_pass\"}}} (Fill multiple form inputs by ID or selector)\n"
+                        "6. browser.type: {\"tool\": \"browser.type\", \"kwargs\": {\"selector\": \"1\", \"text\": \"search query\", \"press_enter\": True}} (Type text into element and optionally press enter)\n"
+                        "7. browser.press_key: {\"tool\": \"browser.press_key\", \"kwargs\": {\"key\": \"Enter\"}} (Press keyboard key like Enter, Tab, Escape)\n"
+                        "8. browser.scrape_live: {\"tool\": \"browser.scrape_live\", \"kwargs\": {\"url\": \"...\", \"selector\": \"...\"}} (Live JS-rendered scraping)\n"
+                        "9. browser.screenshot: {\"tool\": \"browser.screenshot\", \"kwargs\": {\"save_path\": \"/tmp/shot.png\"}}\n"
+                        "10. app.launch: {\"tool\": \"app.launch\", \"kwargs\": {\"app_name_or_target\": \"calculator\"}} (Launch desktop app like 'calculator', 'chrome', 'code', 'vlc', or open URL/file in detached background mode)\n"
+                        "11. app.list: {\"tool\": \"app.list\", \"kwargs\": {\"filter_query\": \"\"}} (List installed desktop applications)\n"
+                        "12. app.close: {\"tool\": \"app.close\", \"kwargs\": {\"app_name\": \"calculator\"}} (Close running desktop application)\n"
+                        "13. message.send: {\"tool\": \"message.send\", \"kwargs\": {\"platform\": \"desktop\", \"message\": \"Task finished\", \"recipient\": \"Alert Title\"}} (Send message via desktop notification, telegram, discord, or slack)\n"
+                        "14. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\n"
+                        "15. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\n"
+                        "16. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\n"
+                        "17. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\n"
+                        "18. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": False}} (Set headless to False to show browser for SSO/authenticated session)\n"
+                        "19. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
+                        "20. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
+                        "21. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
+                        "22. security.generate_report: {\"tool\": \"security.generate_report\", \"kwargs\": {\"findings_summary\": \"Exec summary of what was found...\"}} (Generate a markdown security report of all actions)\n"
                     )
                     filtered_tools = cap_manager.filter_tools(base_tools)
                     
@@ -1686,11 +1740,27 @@ def run_cli():
                         f"{filtered_tools}\n"
                     )
                     system_prompt += (
-                        "## Few-Shot Example (How to use tools)\n"
-                        "User: open youtube and play a song\n"
-                        "Assistant: <tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://youtube.com/results?search_query=song\"}}</tool_call>\n"
-                        "Observation: [Page Loaded...]\n"
-                        "Assistant: I have opened YouTube for you.\n\n"
+                        "## Few-Shot Examples (How to use tools)\n"
+                        "Example 1 - Launch Desktop App:\n"
+                        "User: open calculator / launch chrome\n"
+                        "Assistant: <tool_call>{\"tool\": \"app.launch\", \"kwargs\": {\"app_name_or_target\": \"calculator\"}}</tool_call>\n"
+                        "Observation: [SUCCESS] Launched 'gnome-calculator' successfully (PID: 12345).\n"
+                        "Assistant: I have launched the calculator application for you.\n\n"
+                        "Example 2 - Live Web Navigation, DOM Elements & Form Login:\n"
+                        "User: open github and login\n"
+                        "Assistant: <tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://github.com/login\", \"headless\": False}}</tool_call>\n"
+                        "Observation: [Page Loaded: Sign in to GitHub]\n[ID 1] <input name='login' type='text'>\n[ID 2] <input name='password' type='password'>\n[ID 3] <input type='submit' value='Sign in'>\n"
+                        "Assistant: <tool_call>{\"tool\": \"browser.fill_form\", \"kwargs\": {\"fields\": {\"1\": \"user@example.com\", \"2\": \"secretpassword\"}}}</tool_call>\n"
+                        "Observation: [FILL_SUCCESS] Filled fields: [data-lmms-id='1'], [data-lmms-id='2'].\n"
+                        "Assistant: <tool_call>{\"tool\": \"browser.click_element\", \"kwargs\": {\"selector\": \"3\"}}</tool_call>\n"
+                        "Observation: [CLICK_SUCCESS] Clicked '3'.\n"
+                        "Assistant: I have filled in your credentials and clicked Sign In.\n\n"
+                        "Example 3 - Send Desktop Notification or Telegram Alert:\n"
+                        "User: notify me that the build finished\n"
+                        "Assistant: <tool_call>{\"tool\": \"message.send\", \"kwargs\": {\"platform\": \"desktop\", \"message\": \"Build completed successfully!\", \"recipient\": \"Build Alert\"}}</tool_call>\n"
+                        "Observation: [SUCCESS] Desktop notification displayed: 'Build Alert: Build completed successfully!'.\n"
+                        "Assistant: I have sent a desktop notification to alert you.\n\n"
+                        "Example 4 - Web Search & Info Extraction:\n"
                         "User: search what is current gold price\n"
                         "Assistant: <tool_call>{\"tool\": \"web_search\", \"kwargs\": {\"query\": \"current gold price\"}}</tool_call>\n"
                         "Observation: [Search Results...]\n"
@@ -2086,13 +2156,49 @@ def run_cli():
                                 if t_name == "web_search":
                                     observation = web_search(t_kwargs.get("query", ""), t_kwargs.get("max_results", 5))
                                 elif t_name == "browser.open_url":
-                                    observation = browser_tool.open_url(t_kwargs.get("url", ""))
+                                    is_headless = t_kwargs.get("headless", False)
+                                    observation = browser_tool.open_url(t_kwargs.get("url", ""), headless=is_headless)
+                                elif t_name == "browser.get_interactive_dom":
+                                    observation = browser_tool.get_interactive_dom(t_kwargs.get("url"))
                                 elif t_name == "browser.click_element":
-                                    observation = browser_tool.click_element(t_kwargs.get("url", ""), t_kwargs.get("selector", ""))
+                                    selector_val = t_kwargs.get("selector") or t_kwargs.get("id")
+                                    observation = browser_tool.click_element(selector=selector_val, url=t_kwargs.get("url"))
                                 elif t_name == "browser.fill_form":
-                                    observation = browser_tool.fill_form(t_kwargs.get("url", ""), t_kwargs.get("fields", {}))
-                                elif t_name == "browser.scrape":
-                                    observation = browser_tool.scrape(t_kwargs.get("url", ""), t_kwargs.get("selector", ""))
+                                    observation = browser_tool.fill_form(fields=t_kwargs.get("fields", {}), url=t_kwargs.get("url"))
+                                elif t_name in ("browser.type", "browser.type_text"):
+                                    observation = browser_tool.type_text(
+                                        selector=t_kwargs.get("selector") or t_kwargs.get("id", ""),
+                                        text=t_kwargs.get("text", ""),
+                                        press_enter=t_kwargs.get("press_enter", False),
+                                        url=t_kwargs.get("url")
+                                    )
+                                elif t_name == "browser.press_key":
+                                    observation = browser_tool.press_key(t_kwargs.get("key", "Enter"))
+                                elif t_name in ("browser.scrape", "browser.scrape_live"):
+                                    observation = browser_tool.scrape_live(url=t_kwargs.get("url"), selector=t_kwargs.get("selector"))
+                                elif t_name == "browser.screenshot":
+                                    observation = browser_tool.screenshot(save_path=t_kwargs.get("save_path", "/tmp/lmms_browser.png"), url=t_kwargs.get("url"))
+                                elif t_name in ("app.launch", "os.launch_app"):
+                                    target = t_kwargs.get("app_name_or_target") or t_kwargs.get("app_name") or t_kwargs.get("target", "")
+                                    args = t_kwargs.get("args") or []
+                                    observation = app_launcher.launch(target, args)
+                                elif t_name == "app.list":
+                                    observation = app_launcher.list_apps(t_kwargs.get("filter_query", ""))
+                                elif t_name == "app.close":
+                                    observation = app_launcher.close_app(t_kwargs.get("app_name", ""))
+                                elif t_name == "message.send":
+                                    observation = messenger_tool.send(
+                                        platform=t_kwargs.get("platform", "desktop"),
+                                        message=t_kwargs.get("message", ""),
+                                        recipient=t_kwargs.get("recipient"),
+                                        **{k: v for k, v in t_kwargs.items() if k not in ("platform", "message", "recipient")}
+                                    )
+                                elif t_name == "telegram.send_message":
+                                    observation = messenger_tool.send_telegram(
+                                        message=t_kwargs.get("message", ""),
+                                        chat_id=t_kwargs.get("chat_id"),
+                                        bot_token=t_kwargs.get("bot_token")
+                                    )
                                 elif t_name == "files.read":
                                     observation = file_tool.read(t_kwargs.get("path", ""))
                                 elif t_name == "files.write":

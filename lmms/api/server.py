@@ -7,7 +7,10 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
 import asyncio
-from huggingface_hub import hf_hub_download
+try:
+    from huggingface_hub import hf_hub_download
+except ImportError:
+    hf_hub_download = None
 
 from lmms.engine.manager import engine_manager
 
@@ -500,6 +503,8 @@ def download_model_task(model_name: str, file_name: Optional[str] = None):
         _tqdm.tqdm = DownloadTqdm
         
         try:
+            if hf_hub_download is None:
+                raise ImportError("huggingface_hub is not installed. Please install it with: pip install huggingface_hub")
             hf_hub_download(repo_id=repo_id, filename=target_file, local_dir=MODELS_DIR)
             
             # Set state to complete
@@ -718,165 +723,738 @@ async def serve_dashboard():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>LMMs Engine Dashboard</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+        <title>LMMs Engine Dashboard | Powered by MarkanM</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
-            body { 
-                font-family: 'Inter', sans-serif; 
-                background: radial-gradient(circle at 10% 20%, rgb(14, 14, 25) 0%, rgb(0, 0, 0) 90%);
-                color: #ffffff; 
-                display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; 
-                overflow: hidden;
+            :root {
+                --bg-primary: #07090e;
+                --card-bg: rgba(14, 18, 27, 0.78);
+                --card-border: rgba(255, 255, 255, 0.08);
+                --accent-emerald: #10b981;
+                --accent-cyan: #06b6d4;
+                --accent-violet: #8b5cf6;
+                --accent-amber: #f59e0b;
+                --text-main: #f8fafc;
+                --text-muted: #94a3b8;
+                --glow-color: rgba(6, 182, 212, 0.12);
             }
-            /* Ambient background glow */
-            .glow {
-                position: absolute;
-                width: 600px; height: 600px;
-                background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(0,0,0,0) 70%);
-                top: -200px; left: -200px;
-                border-radius: 50%;
-                z-index: -1;
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { 
+                font-family: 'Inter', -apple-system, sans-serif; 
+                background-color: var(--bg-primary);
+                background-image: 
+                    radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.09) 0%, transparent 45%),
+                    radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.09) 0%, transparent 45%),
+                    radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 60%);
+                color: var(--text-main); 
+                min-height: 100vh;
+                display: flex; 
+                justify-content: center; 
+                align-items: center; 
+                padding: 30px 20px;
+                overflow-x: hidden;
+            }
+            .ambient-mesh {
+                position: fixed;
+                top: 0; left: 0; width: 100%; height: 100%;
+                background: linear-gradient(to right, rgba(255,255,255,0.01) 1px, transparent 1px),
+                            linear-gradient(to bottom, rgba(255,255,255,0.01) 1px, transparent 1px);
+                background-size: 40px 40px;
+                pointer-events: none;
+                z-index: 0;
+            }
+            .container {
+                position: relative;
+                z-index: 1;
+                width: 100%;
+                max-width: 680px;
             }
             .card { 
-                background: rgba(20, 20, 30, 0.5); 
-                backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.08); 
-                border-radius: 16px; 
-                padding: 40px; width: 450px; 
-                box-shadow: 0 8px 32px rgba(0,0,0,0.8), inset 0 0 15px rgba(255,255,255,0.02); 
+                background: var(--card-bg); 
+                backdrop-filter: blur(28px);
+                -webkit-backdrop-filter: blur(28px);
+                border: 1px solid var(--card-border); 
+                border-radius: 20px; 
+                padding: 32px; 
+                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08); 
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             }
-            h2 { 
-                margin-top: 0; 
-                background: linear-gradient(90deg, #4ade80, #3b82f6);
+            .header-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 24px;
+                padding-bottom: 20px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .brand-group {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .logo-icon {
+                width: 42px;
+                height: 42px;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 900;
+                font-size: 20px;
+                color: #041019;
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+            }
+            .brand-title {
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: -0.5px;
+                background: linear-gradient(90deg, #ffffff 30%, #a7f3d0 100%);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
-                font-weight: 800;
-                font-size: 28px;
-                margin-bottom: 25px;
             }
-            .form-group { margin-bottom: 25px; }
-            label { display: block; font-size: 13px; margin-bottom: 10px; color: #a1a1aa; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;}
-            input[type="text"] { 
-                width: 100%; padding: 12px 15px; 
-                background-color: rgba(0, 0, 0, 0.5); 
-                border: 1px solid rgba(255, 255, 255, 0.1); 
-                border-radius: 8px; color: #fff; font-size: 16px; box-sizing: border-box; 
-                transition: all 0.3s ease;
+            .brand-sub {
+                font-size: 11px;
+                color: var(--text-muted);
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                font-weight: 600;
             }
-            input[type="text"]:focus {
-                border-color: #3b82f6;
-                box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+            .status-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                border-radius: 9999px;
+                background: rgba(16, 185, 129, 0.1);
+                border: 1px solid rgba(16, 185, 129, 0.25);
+                font-size: 11px;
+                font-weight: 600;
+                color: #34d399;
+            }
+            .pulse-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #10b981;
+                box-shadow: 0 0 10px #10b981;
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0% { transform: scale(0.95); opacity: 0.8; }
+                50% { transform: scale(1.3); opacity: 1; }
+                100% { transform: scale(0.95); opacity: 0.8; }
+            }
+            .model-banner {
+                background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+                border: 1px solid rgba(6, 182, 212, 0.2);
+                border-radius: 14px;
+                padding: 16px 20px;
+                margin-bottom: 24px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .model-top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .model-label {
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                font-weight: 700;
+                color: var(--accent-cyan);
+            }
+            .model-name {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 14px;
+                font-weight: 600;
+                color: #ffffff;
+            }
+            .engine-tag {
+                font-size: 11px;
+                padding: 3px 8px;
+                border-radius: 6px;
+                background: rgba(245, 158, 11, 0.15);
+                border: 1px solid rgba(245, 158, 11, 0.3);
+                color: #fbbf24;
+                font-weight: 600;
+            }
+            .layer-bar-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .layer-bar-info {
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                color: var(--text-muted);
+            }
+            .split-bar {
+                height: 8px;
+                border-radius: 4px;
+                overflow: hidden;
+                display: flex;
+                background: rgba(255, 255, 255, 0.06);
+            }
+            .split-gpu {
+                background: linear-gradient(90deg, #10b981, #06b6d4);
+                height: 100%;
+                transition: width 0.8s ease;
+            }
+            .split-cpu {
+                background: linear-gradient(90deg, #8b5cf6, #ec4899);
+                height: 100%;
+                transition: width 0.8s ease;
+            }
+            .stats-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 14px;
+                margin-bottom: 24px;
+            }
+            .stat-box {
+                background: rgba(255, 255, 255, 0.025);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 12px;
+                padding: 14px;
+            }
+            .stat-title {
+                font-size: 11px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                margin-bottom: 6px;
+            }
+            .stat-val {
+                font-size: 16px;
+                font-weight: 700;
+                color: #ffffff;
+                display: flex;
+                align-items: baseline;
+                gap: 6px;
+            }
+            .stat-sub {
+                font-size: 11px;
+                color: var(--text-muted);
+                font-weight: 500;
+            }
+            .meter-bar {
+                margin-top: 8px;
+                height: 5px;
+                border-radius: 3px;
+                background: rgba(255, 255, 255, 0.06);
+                overflow: hidden;
+            }
+            .meter-fill {
+                height: 100%;
+                background: var(--accent-emerald);
+                transition: width 0.6s ease;
+            }
+            .meter-fill.violet {
+                background: var(--accent-violet);
+            }
+            .field-group {
+                margin-bottom: 20px;
+            }
+            .field-label {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 12px;
+                color: var(--text-muted);
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                margin-bottom: 8px;
+            }
+            .field-badge {
+                font-size: 10px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: #cbd5e1;
+            }
+            .input-box {
+                position: relative;
+                display: flex;
+                align-items: center;
+                background: rgba(3, 7, 18, 0.7);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 10px;
+                padding: 4px 6px 4px 14px;
+                transition: border-color 0.2s, box-shadow 0.2s;
+            }
+            .input-box:focus-within {
+                border-color: var(--accent-cyan);
+                box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+            }
+            .code-text {
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 13px;
+                color: #38bdf8;
+                width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                user-select: all;
+            }
+            .action-btn-group {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .icon-btn {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: var(--text-muted);
+                width: 34px;
+                height: 34px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .icon-btn:hover {
+                background: rgba(255, 255, 255, 0.12);
+                color: #ffffff;
+            }
+            .primary-copy-btn {
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%);
+                border: 1px solid rgba(16, 185, 129, 0.35);
+                color: #a7f3d0;
+                padding: 7px 14px;
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                transition: all 0.2s;
+                white-space: nowrap;
+            }
+            .primary-copy-btn:hover {
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%);
+                border-color: #34d399;
+                color: #ffffff;
+                transform: translateY(-1px);
+            }
+            .primary-copy-btn.copied {
+                background: #10b981;
+                color: #041019;
+                border-color: #10b981;
+            }
+            .curl-section {
+                margin-top: 24px;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
+                padding-top: 20px;
+            }
+            .curl-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .curl-header span {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+            }
+            .test-btn {
+                background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+                color: white;
+                border: none;
+                padding: 7px 14px;
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .test-btn:hover {
+                box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+                transform: translateY(-1px);
+            }
+            .curl-box {
+                background: rgba(3, 7, 18, 0.85);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 10px;
+                padding: 12px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 11px;
+                color: #cbd5e1;
+                overflow-x: auto;
+                line-height: 1.6;
+            }
+            .curl-box .hl-k { color: #f43f5e; }
+            .curl-box .hl-u { color: #38bdf8; }
+            .curl-box .hl-h { color: #fbbf24; }
+            .auth-input-group {
+                margin-bottom: 20px;
+            }
+            .auth-input {
+                width: 100%;
+                background: rgba(3, 7, 18, 0.7);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                padding: 14px 16px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 18px;
+                color: #ffffff;
+                text-align: center;
+                letter-spacing: 6px;
+                text-transform: uppercase;
+                transition: all 0.3s;
+            }
+            .auth-input:focus {
                 outline: none;
+                border-color: #10b981;
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
             }
-            button { 
-                width: 100%; padding: 14px; 
-                background: linear-gradient(45deg, #3b82f6, #8b5cf6); 
-                color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
-                cursor: pointer; transition: all 0.3s ease; 
-                box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+            .unlock-btn {
+                width: 100%;
+                background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+                color: #041019;
+                border: none;
+                padding: 14px;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+                transition: all 0.2s;
             }
-            button:hover { 
+            .unlock-btn:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+                box-shadow: 0 8px 25px rgba(16, 185, 129, 0.45);
             }
             .hidden { display: none !important; }
-            canvas { 
-                background-color: rgba(0,0,0,0.6); 
-                border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); 
-                margin-bottom: 15px; padding: 10px; cursor: crosshair; 
-                box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+            #error-msg {
+                color: #f87171;
+                font-size: 13px;
+                margin-top: 14px;
+                text-align: center;
             }
-            .copy-btn { 
-                width: auto; padding: 6px 12px; font-size: 12px; 
-                background: rgba(255,255,255,0.1); color: #fff; 
-                border-radius: 6px; margin-bottom: 25px; 
-                box-shadow: none; border: 1px solid rgba(255,255,255,0.1);
+            /* Toast notification */
+            .toast-box {
+                position: fixed;
+                bottom: 25px;
+                right: 25px;
+                background: #0f172a;
+                border: 1px solid #10b981;
+                color: #ffffff;
+                padding: 12px 20px;
+                border-radius: 10px;
+                font-size: 13px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                transform: translateY(100px);
+                opacity: 0;
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                z-index: 9999;
             }
-            .copy-btn:hover {
-                background: rgba(255,255,255,0.2);
+            .toast-box.show {
                 transform: translateY(0);
-                box-shadow: none;
+                opacity: 1;
             }
-            .agent-name { 
-                color: #facc15; font-weight: 600; margin-bottom: 25px; 
-                padding: 10px; background: rgba(250, 204, 21, 0.1); 
-                border-radius: 8px; border: 1px solid rgba(250, 204, 21, 0.2);
-                display: inline-block;
+            .test-result-box {
+                margin-top: 12px;
+                background: rgba(3, 7, 18, 0.9);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+                border-radius: 8px;
+                padding: 10px 14px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 11px;
+                color: #34d399;
+                max-height: 120px;
+                overflow-y: auto;
             }
-            #error-msg { color: #f87171; font-size: 14px; margin-top: 15px; text-align: center; }
         </style>
     </head>
     <body>
-        <div class="glow"></div>
-        <div class="card" id="login-card">
-            <h2>System Authentication</h2>
-            <div class="form-group">
-                <label for="otp">Terminal OTP</label>
-                <input type="text" id="otp" placeholder="Enter 6-character code" autocomplete="off">
+        <div class="ambient-mesh"></div>
+        <div class="container">
+            <!-- LOGIN CARD -->
+            <div class="card" id="login-card">
+                <div class="header-bar" style="margin-bottom: 28px;">
+                    <div class="brand-group">
+                        <div class="logo-icon">⚡</div>
+                        <div>
+                            <div class="brand-title">LMMs Engine</div>
+                            <div class="brand-sub">System Security & Gateway</div>
+                        </div>
+                    </div>
+                    <span class="status-pill"><span class="pulse-dot"></span> Port 11435</span>
+                </div>
+                
+                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.5;">
+                    Enter the 6-character terminal OTP displayed in your console to securely unlock master credentials.
+                </p>
+
+                <div class="auth-input-group">
+                    <input type="text" id="otp" class="auth-input" maxlength="6" placeholder="------" autocomplete="off" autofocus>
+                </div>
+                
+                <button class="unlock-btn" onclick="unlock()">Unlock Dashboard</button>
+                <div id="error-msg"></div>
             </div>
-            <button onclick="unlock()">Unlock Engine Dashboard</button>
-            <div id="error-msg"></div>
+
+            <!-- MAIN CREDENTIALS CARD -->
+            <div class="card hidden" id="keys-card">
+                <div class="header-bar">
+                    <div class="brand-group">
+                        <div class="logo-icon">⚡</div>
+                        <div>
+                            <div class="brand-title">LMMs</div>
+                            <div class="brand-sub">Universal Cognitive Gateway • MarkanM Edition</div>
+                        </div>
+                    </div>
+                    <span class="status-pill"><span class="pulse-dot"></span> Online</span>
+                </div>
+
+                <!-- MODEL & HYBRID LAYER BANNER -->
+                <div class="model-banner">
+                    <div class="model-top">
+                        <span class="model-label">⚡ Active Engine Model</span>
+                        <span class="engine-tag">Air Engine Hybrid</span>
+                    </div>
+                    <div class="model-name" id="display-agent">qwen2.5-1.5b-instruct-q5_k_m</div>
+                    <div class="layer-bar-wrap">
+                        <div class="layer-bar-info">
+                            <span id="gpu-split-text">GPU VRAM: 100% (28 Layers)</span>
+                            <span id="cpu-split-text">CPU DDR5: 0% (0 Layers)</span>
+                        </div>
+                        <div class="split-bar">
+                            <div class="split-gpu" id="split-gpu-bar" style="width: 100%;"></div>
+                            <div class="split-cpu" id="split-cpu-bar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIVE HARDWARE TELEMETRY -->
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-title">GPU VRAM</div>
+                        <div class="stat-val" id="vram-val">-- <span class="stat-sub">/ -- GB</span></div>
+                        <div class="meter-bar"><div class="meter-fill" id="vram-meter" style="width: 0%;"></div></div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-title">System RAM (DDR5)</div>
+                        <div class="stat-val" id="ram-val">-- <span class="stat-sub">/ -- GB</span></div>
+                        <div class="meter-bar"><div class="meter-fill violet" id="ram-meter" style="width: 0%;"></div></div>
+                    </div>
+                </div>
+
+                <!-- MASTER API KEY -->
+                <div class="field-group">
+                    <div class="field-label">
+                        <span>Master API Key</span>
+                        <span class="field-badge">MarkanM Auth</span>
+                    </div>
+                    <div class="input-box">
+                        <div class="code-text" id="api-key-text">MarkanM-sk-••••••••••••••••••••••••••••••••</div>
+                        <div class="action-btn-group">
+                            <button class="icon-btn" onclick="toggleKeyVisibility()" title="Toggle visibility" id="eye-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                            <button class="primary-copy-btn" id="btn-copy-key" onclick="copyCred('api_key', 'btn-copy-key')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                Copy Key
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UNIVERSAL WEBHOOK URL -->
+                <div class="field-group">
+                    <div class="field-label">
+                        <span>LMMs Universal Webhook URL</span>
+                        <span class="field-badge" style="color: #34d399; background: rgba(16, 185, 129, 0.1);">Live Gateway</span>
+                    </div>
+                    <div class="input-box">
+                        <div class="code-text" id="webhook-url-text" style="color: #4ade80;">http://localhost:11435/webhook</div>
+                        <div class="action-btn-group">
+                            <button class="primary-copy-btn" id="btn-copy-webhook" onclick="copyCred('webhook_url', 'btn-copy-webhook')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                Copy URL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CURL SNIPPET & INTERACTIVE TESTER -->
+                <div class="curl-section">
+                    <div class="curl-header">
+                        <span>1-Click Terminal cURL Test</span>
+                        <button class="test-btn" id="test-webhook-btn" onclick="triggerTestPing()">⚡ Send Test Ping</button>
+                    </div>
+                    <div class="curl-box" id="curl-display">
+                        <span class="hl-k">curl</span> -X POST <span class="hl-u">http://localhost:11435/webhook</span> \\<br>
+                        &nbsp;&nbsp;-H <span class="hl-h">"Authorization: Bearer <span id="curl-key-placeholder">MarkanM-sk-...</span>"</span> \\<br>
+                        &nbsp;&nbsp;-H <span class="hl-h">"Content-Type: application/json"</span> \\<br>
+                        &nbsp;&nbsp;-d '{"messages":[{"role":"user","content":"Hello LMMs"}]}'
+                    </div>
+                    <div id="test-result" class="test-result-box hidden"></div>
+                </div>
+            </div>
         </div>
 
-        <div class="card hidden" id="keys-card">
-            <h2>LMMs Credentials</h2>
-            <div class="agent-name" id="display-agent">System Offline</div>
-            
-            <label>Master API Key (Encrypted View)</label>
-            <canvas id="canvas-api-key" width="370" height="40"></canvas>
-            <button class="copy-btn" onclick="copyKey('api_key')">Copy API Key</button>
-            
-            <label>Universal Webhook URL</label>
-            <canvas id="canvas-webhook" width="370" height="40"></canvas>
-            <button class="copy-btn" onclick="copyKey('webhook_url')">Copy Webhook</button>
+        <div class="toast-box" id="toast">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span id="toast-text">Copied to clipboard!</span>
         </div>
 
         <script>
             let authToken = "";
             let secureCache = {};
+            let isKeyMasked = true;
+
+            document.getElementById("otp").addEventListener("keyup", function(e) {
+                if (e.key === "Enter") unlock();
+            });
 
             async function unlock() {
-                const otp = document.getElementById("otp").value;
-                const res = await fetch("/v1/auth/unlock", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ otp })
-                });
-                if (!res.ok) {
-                    document.getElementById("error-msg").innerText = "Invalid OTP. Check your terminal.";
-                    return;
+                const otp = document.getElementById("otp").value.trim().toUpperCase();
+                if (!otp) return;
+                
+                try {
+                    const res = await fetch("/v1/auth/unlock", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ otp })
+                    });
+                    if (!res.ok) {
+                        document.getElementById("error-msg").innerText = "Invalid OTP. Check your terminal.";
+                        return;
+                    }
+                    const data = await res.json();
+                    authToken = data.token;
+                    
+                    const keysRes = await fetch("/v1/auth/keys", {
+                        headers: { "Authorization": "Bearer " + authToken }
+                    });
+                    const keys = await keysRes.json();
+                    secureCache = keys;
+                    
+                    // Switch views
+                    document.getElementById("login-card").classList.add("hidden");
+                    document.getElementById("keys-card").classList.remove("hidden");
+                    
+                    // Render details
+                    document.getElementById("display-agent").innerText = keys.agent_name || "LMMs Hybrid Air Engine";
+                    document.getElementById("webhook-url-text").innerText = keys.webhook_url;
+                    
+                    updateKeyDisplay();
+                    
+                    // Update telemetry
+                    if (keys.hardware) {
+                        const hw = keys.hardware;
+                        document.getElementById("vram-val").innerHTML = `${hw.vram_used} <span class="stat-sub">/ ${hw.vram_total} GB</span>`;
+                        document.getElementById("vram-meter").style.width = Math.min(100, hw.vram_pct) + "%";
+                        
+                        document.getElementById("ram-val").innerHTML = `${hw.ram_used} <span class="stat-sub">/ ${hw.ram_total} GB</span>`;
+                        document.getElementById("ram-meter").style.width = Math.min(100, hw.ram_pct) + "%";
+                    }
+
+                    if (keys.model_stats && keys.model_stats.gpu_pct !== undefined) {
+                        const gpuP = keys.model_stats.gpu_pct;
+                        const cpuP = 100 - gpuP;
+                        document.getElementById("split-gpu-bar").style.width = gpuP + "%";
+                        document.getElementById("split-cpu-bar").style.width = cpuP + "%";
+                        document.getElementById("gpu-split-text").innerText = `GPU VRAM: ${gpuP.toFixed(1)}%`;
+                        document.getElementById("cpu-split-text").innerText = `CPU DDR5: ${cpuP.toFixed(1)}%`;
+                    }
+                    
+                    document.getElementById("curl-key-placeholder").innerText = keys.api_key;
+                } catch(e) {
+                    document.getElementById("error-msg").innerText = "Error connecting to LMMs server.";
                 }
-                const data = await res.json();
-                authToken = data.token;
-                
-                const keysRes = await fetch("/v1/auth/keys", {
-                    headers: { "Authorization": "Bearer " + authToken }
+            }
+
+            function updateKeyDisplay() {
+                const textElem = document.getElementById("api-key-text");
+                const fullKey = secureCache.api_key || "";
+                if (isKeyMasked) {
+                    const prefix = fullKey.substring(0, 11); // MarkanM-sk-
+                    textElem.innerText = prefix + "•".repeat(32);
+                } else {
+                    textElem.innerText = fullKey;
+                }
+            }
+
+            function toggleKeyVisibility() {
+                isKeyMasked = !isKeyMasked;
+                updateKeyDisplay();
+                const btn = document.getElementById("eye-btn");
+                btn.innerHTML = isKeyMasked 
+                    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+            }
+
+            function copyCred(type, btnId) {
+                const val = secureCache[type] || document.getElementById(type === "webhook_url" ? "webhook-url-text" : "api-key-text").innerText;
+                navigator.clipboard.writeText(val).then(() => {
+                    showToast(type === "api_key" ? "Master API Key Copied!" : "Webhook URL Copied!");
+                    const btn = document.getElementById(btnId);
+                    const originalText = btn.innerHTML;
+                    btn.classList.add("copied");
+                    btn.innerHTML = `✓ Copied!`;
+                    setTimeout(() => {
+                        btn.classList.remove("copied");
+                        btn.innerHTML = originalText;
+                    }, 2000);
                 });
-                const keys = await keysRes.json();
-                secureCache = keys;
-                
-                document.getElementById("login-card").classList.add("hidden");
-                document.getElementById("keys-card").classList.remove("hidden");
-                
-                document.getElementById("display-agent").innerText = "Active Model: " + keys.agent_name;
-                
-                drawToCanvas("canvas-api-key", keys.api_key);
-                drawToCanvas("canvas-webhook", keys.webhook_url);
             }
 
-            function drawToCanvas(canvasId, text) {
-                const canvas = document.getElementById(canvasId);
-                const ctx = canvas.getContext("2d");
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = "#4ade80";
-                ctx.font = "15px Consolas, monospace";
-                ctx.fillText(text, 10, 25);
+            function showToast(msg) {
+                const toast = document.getElementById("toast");
+                document.getElementById("toast-text").innerText = msg;
+                toast.classList.add("show");
+                setTimeout(() => toast.classList.remove("show"), 2500);
             }
 
-            function copyKey(keyType) {
-                if (secureCache[keyType]) {
-                    navigator.clipboard.writeText(secureCache[keyType])
-                        .then(() => alert("Copied securely!"))
-                        .catch(err => alert("Copy failed: " + err));
+            async function triggerTestPing() {
+                const resBox = document.getElementById("test-result");
+                const btn = document.getElementById("test-webhook-btn");
+                btn.innerText = "⏳ Testing...";
+                resBox.classList.remove("hidden");
+                resBox.innerText = "Sending test ping to http://localhost:11435/webhook...";
+                
+                const t0 = performance.now();
+                try {
+                    const res = await fetch("/webhook", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Bearer " + secureCache.api_key
+                        },
+                        body: JSON.stringify({
+                            messages: [{ role: "user", content: "Ping from LMMs Dashboard" }]
+                        })
+                    });
+                    const duration = Math.round(performance.now() - t0);
+                    if (res.ok) {
+                        const json = await res.json();
+                        resBox.innerHTML = `✓ Status: ${res.status} OK (${duration}ms)<br>${JSON.stringify(json, null, 2)}`;
+                    } else {
+                        resBox.innerHTML = `⚠ HTTP ${res.status} (${duration}ms): ${res.statusText}`;
+                    }
+                } catch(err) {
+                    resBox.innerHTML = `✕ Test Error: ${err.message}`;
+                } finally {
+                    btn.innerText = "⚡ Send Test Ping";
                 }
             }
         </script>
@@ -900,24 +1478,58 @@ async def get_keys(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     global active_agent_name, server_api_key
+    model_name = active_agent_name or "qwen2.5-1.5b-instruct-q5_k_m"
+    model_stats = {}
     try:
         active_f = os.path.expanduser("~/.lmms/logs/active_models.json")
         if os.path.exists(active_f):
             with open(active_f, "r") as f: d = json.load(f)
-            if d: active_agent_name = list(d.keys())[0]
+            if d: 
+                model_name = list(d.keys())[0]
+                model_stats = d.get(model_name, {})
     except Exception: pass
-        
+
+    # Hardware stats
+    import psutil
+    sys_ram = psutil.virtual_memory()
+    ram_total = round(sys_ram.total / (1024**3), 1)
+    ram_used = round(sys_ram.used / (1024**3), 1)
+    ram_pct = round(sys_ram.percent, 1)
+
+    vram_total = 0.0
+    vram_used = 0.0
+    vram_pct = 0.0
+    try:
+        import torch
+        if torch.cuda.is_available():
+            vram_total = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1)
+            vram_used = round(torch.cuda.memory_allocated(0) / (1024**3), 1)
+            vram_pct = round((vram_used / max(vram_total, 0.1)) * 100, 1)
+    except Exception:
+        pass
+
     return {
         "api_key": server_api_key,
         "webhook_url": "http://localhost:11435/webhook",
-        "agent_name": active_agent_name
+        "agent_name": model_name,
+        "model_stats": model_stats,
+        "hardware": {
+            "vram_total": vram_total,
+            "vram_used": vram_used,
+            "vram_pct": vram_pct,
+            "ram_total": ram_total,
+            "ram_used": ram_used,
+            "ram_pct": ram_pct,
+            "cpu_cores": psutil.cpu_count(logical=False) or 4,
+            "cpu_pct": psutil.cpu_percent(interval=None)
+        }
     }
 
 
 def run_server(port: int = 11435):
     global server_otp, server_api_key
     server_otp = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    server_api_key = "lmms-sk-" + ''.join(random.choices(string.ascii_letters + string.digits, k=48))
+    server_api_key = "MarkanM-sk-" + ''.join(random.choices(string.ascii_letters + string.digits, k=48))
     
     print(f"===========================================================")
     print(f"             LMMs Secure API Server Started                ")
@@ -933,3 +1545,4 @@ def run_server(port: int = 11435):
 
 if __name__ == "__main__":
     run_server()
+
