@@ -162,6 +162,11 @@ class ExtensionManager(QObject):
                 except Exception as e:
                     self._emit_log(ext_id, "error", f"Failed to parse package.json: {e}")
 
+        rec.manifest = manifest
+        if manifest:
+            from lmms.extensions.models import detect_runtime
+            rec.runtime = detect_runtime(manifest)
+
         contributes = manifest.get("contributes", {})
         if contributes.get("viewsContainers") or contributes.get("views"):
             self.extension_ui_registered.emit(ext_id, contributes)
@@ -169,11 +174,17 @@ class ExtensionManager(QObject):
         if manifest:
             self.extension_js_activation.emit(ext_id, json.dumps(manifest))
 
-        from lmms.extensions.host import ExtensionHost
         from lmms.extensions.vscode_api import VScodeApiBridge
         from lmms.extensions.commands import CommandRegistry
+        from lmms.extensions.models import ExtensionRuntime
 
-        host = ExtensionHost(rec, self._workspace_root)
+        if rec.runtime == ExtensionRuntime.PYTHON:
+            from lmms.extensions.python_host import PythonExtensionHost
+            host = PythonExtensionHost(rec, self._workspace_root)
+        else:
+            from lmms.extensions.host import ExtensionHost
+            host = ExtensionHost(rec, self._workspace_root)
+
         host.log_line.connect(self.log_emitted)
         host.activated.connect(self._on_activated)
         host.activation_failed.connect(self._on_activation_failed)
@@ -297,15 +308,26 @@ class ExtensionManager(QObject):
         try:
             with open(_STATE_FILE, encoding="utf-8") as fh:
                 data = json.load(fh)
+            
+            extensions_to_activate = []
             for ext_id, d in data.items():
                 try:
                     rec = ExtensionRecord.from_json(d)
-                    # On reload, INSTALLING/ACTIVATING → INSTALLED (process died)
-                    if rec.state in (ExtState.INSTALLING, ExtState.ACTIVATING,
-                                     ExtState.UNINSTALLING):
+                    # On reload, processes are dead, so reset state to INSTALLED
+                    # unless it's DISABLED
+                    if rec.state != ExtState.DISABLED:
                         rec.state = ExtState.INSTALLED
+                        extensions_to_activate.append(ext_id)
                     self._records[ext_id] = rec
                 except Exception as e:
                     print(f"[ExtensionManager] Failed to load {ext_id}: {e}")
+                    
+            # Schedule activation slightly later so UI is fully ready
+            if extensions_to_activate:
+                def activate_all():
+                    for ext_id in extensions_to_activate:
+                        self._activate(ext_id)
+                QTimer.singleShot(1000, activate_all)
+                
         except Exception as e:
             print(f"[ExtensionManager] Load error: {e}")

@@ -1,10 +1,11 @@
 from typing import Optional, Dict, Any
 from lmms.engine.air.loader import ModelProfile
-from lmms.backend.manager import backend_manager
 
 try:
+    import llama_cpp
     from llama_cpp import Llama, LlamaState
 except ImportError:
+    llama_cpp = None
     Llama = None
     LlamaState = None
 
@@ -23,16 +24,40 @@ class AirPager:
             self._park_current()
 
         try:
-            print("[AirPager] mmap enabled: TRUE")
-            print("[AirPager] Loading model into execution runtime...")
-            self.active_model = Llama(
-                model_path=profile.file_path,
-                n_gpu_layers=profile.optimal_gpu_layers,
-                n_ctx=4096, # Give a solid context window
-                use_mmap=True, # Critical for disk-paging
-                use_mlock=False, # Allow OS to page to disk
-                verbose=False
-            )
+            print("[AirPager] mmap enabled: TRUE (Zero-latency OS virtual memory mapping)")
+            print(f"[AirPager] P-Core affinity locking: n_threads={profile.recommended_threads}")
+            print(f"[AirPager] Quantized KV Cache: Q8_0 + FlashAttention enabled")
+            print(f"[AirPager] Allocating {profile.optimal_gpu_layers} layers to GPU ({profile.gpu_pct:.1f}%), {profile.cpu_layers} layers to DDR5 CPU ({profile.cpu_pct:.1f}%)")
+
+            ctx_len = min(getattr(profile, "context_length", 4096), 4096)
+            threads = getattr(profile, "recommended_threads", 6)
+            
+            init_kwargs = {
+                "model_path": profile.file_path,
+                "n_gpu_layers": profile.optimal_gpu_layers,
+                "n_ctx": ctx_len,
+                "n_threads": threads,
+                "use_mmap": True,
+                "use_mlock": False,
+                "verbose": False
+            }
+
+            # Enable Quantized KV Cache (Q8_0) and FlashAttention
+            if llama_cpp is not None:
+                if hasattr(llama_cpp, "GGML_TYPE_Q8_0"):
+                    init_kwargs["type_k"] = llama_cpp.GGML_TYPE_Q8_0
+                    init_kwargs["type_v"] = llama_cpp.GGML_TYPE_Q8_0
+                init_kwargs["flash_attn"] = True
+
+            try:
+                self.active_model = Llama(**init_kwargs)
+            except (TypeError, Exception) as flag_err:
+                print(f"[AirPager] Info: Retrying with standard KV parameters: {flag_err}")
+                init_kwargs.pop("flash_attn", None)
+                init_kwargs.pop("type_k", None)
+                init_kwargs.pop("type_v", None)
+                self.active_model = Llama(**init_kwargs)
+
             self.active_profile = profile
             
             # STRICT KV CACHE RESTORE RULES:

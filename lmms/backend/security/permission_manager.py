@@ -71,7 +71,6 @@ class PermissionManager:
                 # If scope is not active, network actions and unauthorized targets are blocked.
                 # Local filesystem tools are allowed (offline mode).
                 if tool_def.requires_network or tool_def.requires_target_authorization:
-                    # Except localhost? The spec says "Do not assume localhost is allowed unless explicitly authorized"
                     return PermissionResult(allowed=False, reason="[SYSTEM_DENY] Target or Network blocked because Scope is not active. STOP executing tools. Instruct the user to run EXACTLY '/scope init' in their CLI. Do NOT use terminal.run to run this command, as it is a CLI internal command.", risk_level=tool_def.risk_level)
                 return PermissionResult(allowed=True, reason="Offline tool allowed in safe mode.", risk_level=tool_def.risk_level)
                 

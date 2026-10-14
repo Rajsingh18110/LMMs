@@ -48,9 +48,8 @@ def ensure_engine_running():
         if getattr(sys, 'frozen', False):
             p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
         else:
-            cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
-            p = subprocess.Popen([sys.executable, "-m", "lmms.lmmsengine.main", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
-        
+            cmd = [sys.executable, "-m", "lmms.engine.main", "server"]
+            p = subprocess.Popen(cmd, stdout=f, stderr=f, env=env, start_new_session=True)
         
         # Give it a moment to boot
         time.sleep(2)
@@ -175,12 +174,16 @@ def main():
         return
 
     # Direct launch overrides
-    if args[0] in ["cli", "engine"]:
+    if args[0] in ["cli", "tui", "engine"]:
         launch(args[0], args[1:])
         return
         
-    if args[0] in ["cli", "engine", "-c", "-e", "--cli", "--engine"]:
-        mode_map = {"cli": "cli", "engine": "engine", "-c": "cli", "-e": "engine", "--cli": "cli", "--engine": "engine"}
+    if args[0] in ["cli", "tui", "engine", "-c", "-t", "-e", "--cli", "--tui", "--engine"]:
+        mode_map = {
+            "cli": "cli", "tui": "tui", "engine": "engine",
+            "-c": "cli", "-t": "tui", "-e": "engine",
+            "--cli": "cli", "--tui": "tui", "--engine": "engine"
+        }
         launch(mode_map[args[0]], args[1:])
         return
 
@@ -201,28 +204,32 @@ def launch(mode, forward_args=None, ensure_engine=True):
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
 
-    # In a compiled environment, this would call ./lmms-backend or ./lmms-engine
-    # For now, we call the python scripts.
+    # In a compiled environment, this calls ./lmms-backend or ./lmms-engine
     while True:
         engine_proc = None
-        if mode == "cli":
+        if mode in ["cli", "tui"]:
             if ensure_engine:
                 engine_proc = ensure_engine_running()
                 env["LMMS_ENGINE_MANAGED"] = "1"
             
-            if getattr(sys, 'frozen', False):
-                cmd = [sys.executable, "--internal-backend"]
+            if mode == "tui":
+                if getattr(sys, 'frozen', False):
+                    cmd = [sys.executable, "--internal-backend"]
+                else:
+                    cmd = [sys.executable, "-m", "lmms.tui.main"]
             else:
-                cmd = [sys.executable, "-m", "lmms.backend.main"]
-                
+                if getattr(sys, 'frozen', False):
+                    cmd = [sys.executable, "--internal-backend"]
+                else:
+                    cmd = [sys.executable, "-m", "lmms.backend.main"]
+                    
             if forward_args:
                 cmd.extend(forward_args)
         elif mode == "engine":
             if getattr(sys, 'frozen', False):
                 cmd = [sys.executable, "--internal-engine"]
             else:
-                cmd = [sys.executable, "-m", "lmms.lmmsengine.main"]
-                # cmd already set
+                cmd = [sys.executable, "-m", "lmms.engine.main"]
             
             if forward_args:
                 cmd.extend(forward_args)
@@ -264,9 +271,17 @@ if __name__ == "__main__":
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] == "--internal-engine":
         # Modify argv to strip internal flag
-        sys.argv = [sys.argv[0]] + sys.argv[2:]
-        from lmms.lmmsengine.main import main as engine_main
+        try:
+            from lmms.engine.main import main as engine_main
+        except ImportError:
+            from lmms.lmmsengine.main import main as engine_main
         engine_main()
+        sys.exit(0)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--internal-gui":
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
+        print("\n\033[91m[ERROR]\033[0m GUI component not found!")
+        print("It looks like you only installed the CLI or Engine. To use the GUI, please run:")
+        print("\033[96m  lmms install --gui\033[0m  (or \033[96mlmms install --all\033[0m for everything)\n")
         sys.exit(0)
         
     # multiprocessing support for windows exes
