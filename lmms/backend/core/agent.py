@@ -16,6 +16,8 @@ from lmms.backend.tools.search import web_search
 from lmms.backend.tools.browser import BrowserTool
 from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
+from lmms.backend.tools.app_launcher import AppLauncherTool
+from lmms.backend.tools.messenger import MessengerTool
 from lmms.gui.core.ui import (
     show_error, stream_response, show_info,
     show_tool_use, console, Markdown, Panel,
@@ -75,6 +77,8 @@ class HexAgent:
         self.file_tool.agent = self
         self.terminal_tool = TerminalTool()
         self.terminal_tool.agent = self
+        self.app_launcher = AppLauncherTool()
+        self.messenger = MessengerTool()
         self.canvas = get_canvas()
 
         # Backend selection: lmms_engine | airllm | cloud:<name>
@@ -88,8 +92,16 @@ class HexAgent:
         self.tools = {
             "web_search": web_search,
             "open_url": self.browser_tool.open_url,
-            "browser_click": self.browser_tool.human_click,
-            "browser_type": self.browser_tool.human_type,
+            "browser_click": self.browser_tool.click_element,
+            "browser_type": self.browser_tool.type_text,
+            "get_interactive_dom": self.browser_tool.get_interactive_dom,
+            "fill_form": self.browser_tool.fill_form,
+            "scrape_live": self.browser_tool.scrape_live,
+            "app_launch": self.app_launcher.launch,
+            "app_list": self.app_launcher.list_apps,
+            "app_close": self.app_launcher.close_app,
+            "send_message": self.messenger.send,
+            "send_telegram": self.messenger.send_telegram,
             "read_file": self.file_tool.read,
             "write_file": self.file_tool.write,
             "edit_in_vscode": self.file_tool.edit_in_vscode,
@@ -100,7 +112,8 @@ class HexAgent:
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.system_prompt = (
             "You are LMMs by MarkanM Team — a powerful local AI assistant. "
-            "You can search the web, browse URLs, read/write files, run terminal commands, "
+            "You can search the web, browse URLs with interactive DOM and form filling, "
+            "launch desktop applications, send notifications, read/write files, run terminal commands, "
             "and write code. Be concise, accurate, and helpful."
         )
 
@@ -116,23 +129,56 @@ class HexAgent:
                     "query": {"type": "string", "description": "Search query"}
                 }, "required": ["query"]}}},
             {"type": "function", "function": {
-                "name": "open_url", "description": "Open a webpage and extract content. Automatically bypasses simple CAPTCHAs.",
+                "name": "open_url", "description": "Open a webpage, extract interactive DOM elements with [ID 1], [ID 2] tags. Automatically bypasses simple CAPTCHAs.",
                 "parameters": {"type": "object", "properties": {
                     "url": {"type": "string", "description": "URL to open"}
                 }, "required": ["url"]}}},
             {"type": "function", "function": {
-                "name": "browser_click", "description": "Click an element on the current webpage using human-like mouse movements. Use this to bypass 'Verify you are human' or to navigate.",
+                "name": "browser_click", "description": "Click an element by ID number (e.g. '1') or CSS selector.",
                 "parameters": {"type": "object", "properties": {
-                    "url": {"type": "string", "description": "Current URL"},
-                    "selector": {"type": "string", "description": "CSS selector or text content to click"}
-                }, "required": ["url", "selector"]}}},
+                    "selector": {"type": "string", "description": "Element ID number or CSS selector to click"},
+                    "url": {"type": "string", "description": "Optional URL if navigating"}
+                }, "required": ["selector"]}}},
             {"type": "function", "function": {
-                "name": "browser_type", "description": "Type text into an input field on the current webpage with human-like delays. Use for login forms.",
+                "name": "browser_type", "description": "Type text into an input element (by ID or selector) and optionally press enter.",
                 "parameters": {"type": "object", "properties": {
-                    "url": {"type": "string", "description": "Current URL"},
-                    "selector": {"type": "string", "description": "CSS selector for the input field"},
-                    "text": {"type": "string", "description": "Text to type"}
-                }, "required": ["url", "selector", "text"]}}},
+                    "selector": {"type": "string", "description": "Element ID number or CSS selector"},
+                    "text": {"type": "string", "description": "Text to type"},
+                    "press_enter": {"type": "boolean", "description": "Whether to press Enter after typing"}
+                }, "required": ["selector", "text"]}}},
+            {"type": "function", "function": {
+                "name": "get_interactive_dom", "description": "Extract all clickable and input elements on the current page with assigned [ID 1], [ID 2] numbers.",
+                "parameters": {"type": "object", "properties": {
+                    "url": {"type": "string", "description": "Optional URL to inspect"}
+                }}}},
+            {"type": "function", "function": {
+                "name": "fill_form", "description": "Fill multiple form fields at once by ID or selector. Example: {'1': 'user@example.com', '2': 'mypassword'}",
+                "parameters": {"type": "object", "properties": {
+                    "fields": {"type": "object", "description": "Dictionary mapping element IDs/selectors to values"}
+                }, "required": ["fields"]}}},
+            {"type": "function", "function": {
+                "name": "scrape_live", "description": "Scrape JavaScript-rendered dynamic content from a live webpage.",
+                "parameters": {"type": "object", "properties": {
+                    "url": {"type": "string", "description": "URL to scrape"},
+                    "selector": {"type": "string", "description": "Optional CSS selector to scope content"}
+                }}}},
+            {"type": "function", "function": {
+                "name": "app_launch", "description": "Launch a desktop app (Chrome, VLC, Calculator, Spotify, VS Code) or open URL/file without freezing.",
+                "parameters": {"type": "object", "properties": {
+                    "app_name_or_target": {"type": "string", "description": "Application name (e.g. 'calculator', 'chrome', 'vlc') or file/URL to open"}
+                }, "required": ["app_name_or_target"]}}},
+            {"type": "function", "function": {
+                "name": "app_list", "description": "List installed desktop applications on the system.",
+                "parameters": {"type": "object", "properties": {
+                    "filter_query": {"type": "string", "description": "Optional search filter"}
+                }}}},
+            {"type": "function", "function": {
+                "name": "send_message", "description": "Send a message via native desktop notification, Telegram, Discord, or Slack webhook.",
+                "parameters": {"type": "object", "properties": {
+                    "platform": {"type": "string", "description": "'desktop', 'telegram', 'discord', or 'slack'"},
+                    "message": {"type": "string", "description": "Message text to send"},
+                    "recipient": {"type": "string", "description": "Notification title or Telegram chat ID / Webhook URL"}
+                }, "required": ["platform", "message"]}}},
             {"type": "function", "function": {
                 "name": "read_file", "description": "Read contents of a local file",
                 "parameters": {"type": "object", "properties": {

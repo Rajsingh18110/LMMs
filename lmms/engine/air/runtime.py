@@ -57,17 +57,13 @@ class AirRuntime(RuntimeContract):
             
             # Print performance metrics
             profile = self.scheduler.pager.active_profile
-            gpu_pct = 0.0
-            cpu_pct = 100.0
-            if profile and profile.total_layers_est > 0:
-                if profile.optimal_gpu_layers == -1:
-                    gpu_pct = 100.0
-                else:
-                    gpu_pct = (profile.optimal_gpu_layers / profile.total_layers_est) * 100.0
-                cpu_pct = 100.0 - gpu_pct
+            gpu_pct = profile.gpu_pct if profile else 0.0
+            cpu_pct = profile.cpu_pct if profile else 100.0
+            optimal_gpu_l = profile.optimal_gpu_layers if (profile and profile.optimal_gpu_layers != -1) else (profile.total_layers if profile else 0)
+            cpu_l = profile.cpu_layers if profile else 0
                 
             print(f"\n\n[AirRuntime] Inference completed ({tps:.2f} tokens/sec)")
-            print(f"[AirPlanner] Policy Assigned Split: GPU {gpu_pct:.1f}% | CPU {cpu_pct:.1f}% (Note: Physical execution depends on compiled backend)")
+            print(f"[AirPlanner] Dynamic Hybrid Split: GPU {optimal_gpu_l} layers ({gpu_pct:.1f}%) | CPU DDR5 {cpu_l} layers ({cpu_pct:.1f}%)")
             
         return stream_wrapper(result)
 

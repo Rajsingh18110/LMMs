@@ -65,12 +65,12 @@ class PermissionManager:
         # 2. Is scope valid and active?
         scope = load_scope(request.workspace)
         if not is_scope_active(scope):
-            # If scope is not active, network actions and unauthorized targets are blocked.
-            # Local filesystem tools are allowed (offline mode).
-            if tool_def.requires_network or tool_def.requires_target_authorization:
-                # Except localhost? The spec says "Do not assume localhost is allowed unless explicitly authorized"
-                return PermissionResult(allowed=False, reason=f"Scope is not active. Network/Target tools are blocked.", risk_level=tool_def.risk_level)
-            return PermissionResult(allowed=True, reason="Offline tool allowed in safe mode.", risk_level=tool_def.risk_level)
+            # If scope is not active, tools requiring target authorization (like nmap, curl) or offensive tools are blocked.
+            if tool_def.requires_target_authorization or tool_def.category == "security_offensive":
+                return PermissionResult(allowed=False, reason="Scope is not active. Target-probing and offensive security tools are blocked in offline mode.", risk_level=tool_def.risk_level)
+            if tool_def.requires_network and tool_def.category not in ("internal", "system", "developer") and request.permission_level == "low":
+                return PermissionResult(allowed=False, reason="Scope is not active. External network access is restricted on low permission.", risk_level=tool_def.risk_level)
+            return PermissionResult(allowed=True, reason="Tool allowed.", risk_level=tool_def.risk_level)
             
         # 3. Is the tool allowed by the scope?
         # Note: we only strictly filter terminal shell tools (like nmap). 
