@@ -10,11 +10,9 @@ import site
 
 # Auto-detect and switch to Python environment with LMMs dependencies if running in an incompatible interpreter
 def _ensure_compatible_python():
-    try:
-        import huggingface_hub
+    import importlib.util
+    if importlib.util.find_spec("huggingface_hub") is not None:
         return
-    except ImportError:
-        pass
 
     candidates = []
     # 1. Check shebang of installed 'lmms' CLI executable
