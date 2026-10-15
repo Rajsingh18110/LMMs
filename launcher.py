@@ -1,11 +1,56 @@
 import os
 import sys
 import json
+import shutil
 import subprocess
 import time
 import urllib.request
 import threading
 import site
+
+# Auto-detect and switch to Python environment with LMMs dependencies if running in an incompatible interpreter
+def _ensure_compatible_python():
+    try:
+        import huggingface_hub
+        return
+    except ImportError:
+        pass
+
+    candidates = []
+    # 1. Check shebang of installed 'lmms' CLI executable
+    lmms_bin = shutil.which("lmms")
+    if lmms_bin:
+        try:
+            with open(lmms_bin, "r") as f:
+                first_line = f.readline().strip()
+                if first_line.startswith("#!"):
+                    py_path = first_line[2:].strip().split()[0]
+                    if os.path.exists(py_path):
+                        candidates.append(py_path)
+        except Exception:
+            pass
+
+    # 2. Check standard Python versions in PATH and system
+    for ver in ["python3.11", "python3.12", "python3.10"]:
+        found = shutil.which(ver)
+        if found and found not in candidates:
+            candidates.append(found)
+
+    for p in ["/usr/local/bin/python3.11", "/usr/bin/python3.11", "/usr/local/bin/python3.12", "/usr/bin/python3.12"]:
+        if os.path.exists(p) and p not in candidates:
+            candidates.append(p)
+
+    for cand in candidates:
+        if cand == sys.executable:
+            continue
+        try:
+            ret = subprocess.run([cand, "-c", "import huggingface_hub"], capture_output=True, timeout=2)
+            if ret.returncode == 0:
+                os.execv(cand, [cand] + sys.argv)
+        except Exception:
+            continue
+
+_ensure_compatible_python()
 
 # Allow PyInstaller executable to load heavy modules (like torch) installed on the host system
 try:
