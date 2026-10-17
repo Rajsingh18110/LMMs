@@ -18,9 +18,20 @@ def _enforce_poison_pill():
         for frame in inspect.stack():
             if "ollama" in frame.filename:
                 raise RuntimeError("POISON PILL: Active 'ollama' usage detected. LMMS is fully native.")
-    sys.modules["ollama"] = None
+    from typing import cast
+    sys.modules["ollama"] = cast(Any, None)
 
 _enforce_poison_pill()
+
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class CachedModel:
+    model_id: str
+    handle: Any = None
+    size_gb: float = 0.0
+    location: str = "VRAM"
 
 class CacheManager:
     """
@@ -29,6 +40,28 @@ class CacheManager:
     def __init__(self):
         # We store loaded models here. dict of model_id -> size_gb
         self.loaded_models: Dict[str, float] = {}
+
+    def location(self, model_id: str) -> str:
+        return "VRAM" if model_id in self.loaded_models else "DISK"
+
+    def get_ram(self, model_id: str) -> Any:
+        return None
+
+    def put_vram(self, model_or_id: Any, handle: Any = None) -> None:
+        if isinstance(model_or_id, CachedModel):
+            self.loaded_models[model_or_id.model_id] = float(model_or_id.size_gb)
+        else:
+            self.loaded_models[str(model_or_id)] = 0.0
+
+    def evict_vram(self, model_id: Optional[str] = None) -> Optional[CachedModel]:
+        if model_id:
+            self.unload_model(model_id)
+            return CachedModel(model_id=model_id, handle=None, size_gb=0.0)
+        elif self.loaded_models:
+            first_key = next(iter(self.loaded_models))
+            size = self.loaded_models.pop(first_key)
+            return CachedModel(model_id=first_key, handle=None, size_gb=size)
+        return None
 
     def _get_cuda_info(self) -> tuple[float, float, float]:
         """Returns (total, used, available) in GB for CUDA."""

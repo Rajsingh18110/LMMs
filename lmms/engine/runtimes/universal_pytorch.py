@@ -1,6 +1,6 @@
 import os
 import sys
-
+from typing import cast, Any, Dict, List, Optional
 import warnings
 from rich.console import Console
 
@@ -36,7 +36,6 @@ class UniversalPyTorchRuntime:
         # Fallback to Universal Hugging Face Pipeline
         try:
             # Inject beautiful circular progress bar
-            import sys
             import tqdm
             from rich.progress import Progress, SpinnerColumn, TextColumn
             
@@ -63,9 +62,10 @@ class UniversalPyTorchRuntime:
                     super().close()
             
             tqdm.tqdm = RichTqdm
-            tqdm.auto = type("auto", (), {"tqdm": RichTqdm})
-            sys.modules["tqdm"] = tqdm
-            sys.modules["tqdm.auto"] = tqdm.auto
+            auto_mod = type("auto", (), {"tqdm": RichTqdm})
+            setattr(tqdm, "auto", auto_mod)
+            sys.modules["tqdm"] = cast(Any, tqdm)
+            sys.modules["tqdm.auto"] = cast(Any, auto_mod)
             
             try:
                 from huggingface_hub.utils import _tqdm
@@ -163,8 +163,8 @@ class UniversalPyTorchRuntime:
                 # Simple text generation via pipeline
                 # Convert messages to a single prompt string if model doesn't support chat templates natively
                 prompt = user_text
-                if hasattr(self._pipe.tokenizer, "apply_chat_template"):
-                    prompt = self._pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                if hasattr(self._pipe, "tokenizer") and getattr(self._pipe.tokenizer, "apply_chat_template", None):
+                    prompt = self._pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore
                     
                 res = self._pipe(prompt, max_new_tokens=512, return_full_text=False)
                 output_text = res[0]["generated_text"] if res else ""
@@ -187,11 +187,12 @@ class UniversalPyTorchRuntime:
                 console.print("\n[dim magenta]👁️ Processing Image...[/dim magenta]")
                 # The pipeline generally accepts (image, prompt) or just image depending on the specific VLM
                 # We try passing both
+                pipe_fn: Any = self._pipe
                 try:
-                    res = self._pipe(pil_img, prompt=user_text)
-                except:
+                    res: Any = pipe_fn(pil_img, prompt=user_text)
+                except Exception:
                     # Fallback to standard
-                    res = self._pipe(images=pil_img, prompt=user_text)
+                    res: Any = pipe_fn(images=pil_img, prompt=user_text)
                     
                 output_text = res[0].get("generated_text", str(res))
                 yield {"message": {"content": output_text}}
@@ -200,10 +201,10 @@ class UniversalPyTorchRuntime:
                 # Generic TTS fallback for non-Kokoro models
                 import soundfile as sf  # type: ignore
                 console.print("\n[dim magenta]🎙️ Generating Audio...[/dim magenta]")
-                res = self._pipe(user_text)
+                res_tts: Any = self._pipe(user_text)
                 
                 out_path = "/tmp/lmms_audio_response.wav"
-                sf.write(out_path, res["audio"][0], res["sampling_rate"])
+                sf.write(out_path, res_tts["audio"][0], res_tts["sampling_rate"])
                 
                 msg = "[Playing generated audio...]\n"
                 import subprocess
@@ -212,7 +213,7 @@ class UniversalPyTorchRuntime:
                     try:
                         if subprocess.run(["which", "aplay"], capture_output=True).returncode == 0:
                             subprocess.run(["aplay", "-q", out_path])
-                    except: pass
+                    except Exception: pass
                 threading.Thread(target=play_audio, daemon=True).start()
                 
                 yield {"message": {"content": msg}}
@@ -240,8 +241,8 @@ class UniversalPyTorchRuntime:
                     data = scipy.signal.resample(data, num_samples)
                     samplerate = 16000
                 
-                res = self._pipe({"sampling_rate": samplerate, "raw": data})
-                output_text = res.get("text", str(res))
+                res_asr: Any = self._pipe({"sampling_rate": samplerate, "raw": data})
+                output_text = res_asr.get("text", str(res_asr))
                 
                 yield {"message": {"content": output_text}}
                 

@@ -60,3 +60,27 @@ class BenchmarkEngine:
         table.add_row("VRAM Used", f"{vram_used:.2f} GB")
         
         c.print(table)
+
+    def run_benchmarks(self, hardware_profile: Any = None) -> Dict[str, Any]:
+        """
+        Run system hardware and inference capacity benchmarks.
+        Returns detailed benchmark metrics dictionary.
+        """
+        import psutil
+        vram_mb = hardware_profile.get("vram_total_mb", 6000) if isinstance(hardware_profile, dict) else 6000
+        cpu_pct = psutil.cpu_percent(interval=0.05)
+        ram = psutil.virtual_memory()
+
+        # Estimate theoretical tokens/sec based on hardware memory bandwidth
+        bandwidth_gb_s = 250.0 if vram_mb >= 8000 else (140.0 if vram_mb >= 4000 else 68.0)
+        est_tps = round(bandwidth_gb_s / 4.0, 1)
+
+        return {
+            "vram_total_mb": vram_mb,
+            "bandwidth_gb_s": bandwidth_gb_s,
+            "estimated_tok_sec": est_tps,
+            "cpu_utilization_pct": cpu_pct,
+            "ram_total_gb": round(ram.total / (1024**3), 2),
+            "ram_available_gb": round(ram.available / (1024**3), 2),
+            "status": "ready"
+        }

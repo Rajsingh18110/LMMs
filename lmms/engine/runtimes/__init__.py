@@ -1,4 +1,10 @@
+from typing import TYPE_CHECKING
 from .base import RuntimeContract
+
+if TYPE_CHECKING:
+    from .engine_1_pytorch import UniversalPyTorchRuntime
+    from .engine_2_llamacpp import LlamaCppRuntime
+    from .engine_3_air import AirRuntime
 
 def __getattr__(name: str):
     if name == "UniversalPyTorchRuntime":
