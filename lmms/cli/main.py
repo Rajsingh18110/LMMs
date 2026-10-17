@@ -8,7 +8,7 @@ from __future__ import annotations
 import sys
 from typing import List, Optional
 
-from lmms.cli.installer import run_installer
+from lmms.cli.installer import run_installer, run_updater
 from lmms.cli.commands import (
     cmd_connect,
     cmd_remote,
@@ -43,7 +43,8 @@ def print_banner() -> None:
     sys.stdout.write(f"  {COLOR_CYAN}lmms ps{COLOR_RESET}                         Active model memory inspection\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms list{COLOR_RESET}                       Available model catalog\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms stats{COLOR_RESET}                      Hardware & system telemetry\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--gui]{COLOR_RESET}      Package resolver & installer\n\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--gui|--engine]{COLOR_RESET} Package resolver & interactive installer\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms update [--all|--cli|--gui|--engine]{COLOR_RESET}  Component version updater\n\n")
     sys.stdout.flush()
 
 
@@ -60,6 +61,8 @@ def main(args: Optional[List[str]] = None) -> None:
 
     if cmd == "install":
         run_installer(sub_args)
+    elif cmd == "update":
+        run_updater(sub_args)
     elif cmd in ["server", "serve", "daemon"]:
         cmd_server(sub_args)
     elif cmd in ["gui", "-g", "--gui"]:
