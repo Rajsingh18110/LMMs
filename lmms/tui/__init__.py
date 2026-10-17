@@ -1,6 +1,8 @@
 """
-LMMs TUI (Terminal User Interface) Module
+LMMs TUI Package
+Standalone Terminal User Interface & Studio.
 """
-from lmms.tui.main import main
 
-__all__ = ["main"]
+from .main import launch_tui, LMMsTUI
+
+__all__ = ["launch_tui", "LMMsTUI"]

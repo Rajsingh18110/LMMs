@@ -295,3 +295,21 @@ def cmd_server(args: List[str]) -> None:
         sys.stdout.write(f"{COLOR_RED}Unknown server command:{COLOR_RESET} {action}\n")
         sys.stdout.write(f"Usage: {COLOR_CYAN}lmms server [start|stop|restart|status] [--port 11435] [--engine 1|2|auto] [--foreground]{COLOR_RESET}\n")
 
+
+def cmd_gui(args: List[str]) -> None:
+    """Launch the standalone desktop GUI application."""
+    try:
+        from lmms.gui.app import run_gui
+        run_gui(args)
+    except ImportError:
+        sys.stderr.write(f"\n{COLOR_RED}✖ GUI component or dependencies missing (PyQt6/qasync).{COLOR_RESET}\n")
+        sys.stderr.write(f"  To install GUI requirements, run: {COLOR_CYAN}lmms install --gui{COLOR_RESET}\n\n")
+        sys.exit(1)
+
+
+def cmd_tui(args: List[str]) -> None:
+    """Launch the interactive terminal user interface."""
+    from lmms.tui.main import launch_tui
+    launch_tui(args)
+
+
