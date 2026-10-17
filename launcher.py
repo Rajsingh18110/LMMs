@@ -102,18 +102,8 @@ def main():
         return
 
     if args[0] in ["--update", "update"]:
-        branch = config.get("installed_branch", "main")
-        if "--gui" in args:
-            branch = "gui"
-        elif "--cli" in args:
-            branch = "cli"
-            
-        print(f"\033[96m[INFO]\033[0m Force Updating LMMs ecosystem from GitHub (branch: {branch})...")
-        lmms_dir = os.path.expanduser("~/.lmms/LMMs")
-        if not os.path.exists(lmms_dir):
-            subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
-            
-        subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && pip install -r requirements.txt", shell=True)
+        from lmms.cli.installer import run_updater
+        run_updater(args[1:])
         return
         
     if args[0] in ["--uninstall", "uninstall", "purge"]:
