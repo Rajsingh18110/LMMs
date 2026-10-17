@@ -3,6 +3,16 @@ class AirSwapper:
         self.scheduler = scheduler
         self.ram_cache = ram_cache
         
+    def get_max_vram(self) -> float:
+        """Dynamically detect GPU VRAM capacity without hardcoded limits."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        except Exception:
+            pass
+        return 6.0  # Safe fallback for consumer mobile GPU
+
     def swap_to_ram(self, model_name: str):
         """
         Offloads a model from VRAM to RAM Cache.
@@ -40,14 +50,14 @@ class AirSwapper:
 
     def ensure_vram_capacity(self, needed_gb: float) -> bool:
         """
-        Ensures there is enough VRAM. If not, evicts the oldest models.
+        Ensures there is enough VRAM dynamically. If not, evicts the oldest models.
         """
-        MAX_VRAM = 24.0 # Hardcoded for now
+        max_vram = self.get_max_vram()
         
         def get_used():
             return sum(m["vram_gb"] for m in self.scheduler.active_models.values() if m["location"] == "VRAM")
             
-        while get_used() + needed_gb > MAX_VRAM:
+        while get_used() + needed_gb > max_vram:
             # Find a model to evict (not Generating)
             evicted = False
             for name, info in self.scheduler.active_models.items():
