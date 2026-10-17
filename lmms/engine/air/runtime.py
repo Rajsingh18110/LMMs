@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from lmms.engine.runtimes.base import RuntimeContract
 from lmms.engine.air.scheduler import AirScheduler
 from lmms.engine.air.monitor import AirMonitor
@@ -26,7 +26,7 @@ class AirRuntime(RuntimeContract):
         self.scheduler.pager._park_current()
         return True
 
-    def chat(self, model: str, messages: list, stream: bool = False, options: dict = None, **kwargs) -> Any:
+    def chat(self, model: str, messages: list, stream: bool = False, options: Optional[dict] = None, **kwargs) -> Any:
         context = {'messages': messages, 'target_role': kwargs.get('target_role', 'text'), 'model': model}
         return self.generate(context, stream)
 
