@@ -168,8 +168,13 @@ def main():
             cmd_remote(args[1:])
         return
 
+    if args[0] in ["server", "serve", "daemon"]:
+        from lmms.cli.commands import cmd_server
+        cmd_server(args[1:])
+        return
+
     # Engine commands should be routed directly to the engine
-    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]
+    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create"]
     if args[0] in engine_commands or args[0] in ["--air", "-air"]:
         launch("engine", args)
         return
@@ -266,12 +271,16 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--internal-gui":
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         try:
-            from gui import main as gui_main
-            gui_main()
+            from lmms.gui.app import run_gui
+            run_gui()
         except ImportError:
-            print("\n\033[91m[ERROR]\033[0m GUI component not found!")
-            print("It looks like you only installed the CLI or Engine. To use the GUI, please run:")
-            print("\033[96m  lmms install --gui\033[0m  (or \033[96mlmms install --all\033[0m for everything)\n")
+            try:
+                from gui import main as gui_main
+                gui_main()
+            except ImportError:
+                print("\n\033[91m[ERROR]\033[0m GUI component not found!")
+                print("It looks like you only installed the CLI or Engine. To use the GUI, please run:")
+                print("\033[96m  lmms install --gui\033[0m  (or \033[96mlmms install --all\033[0m for everything)\n")
         sys.exit(0)
         
     # multiprocessing support for windows exes
