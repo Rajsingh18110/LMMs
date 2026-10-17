@@ -79,12 +79,15 @@ class AirLlamaCppRuntime(RuntimeContract):
 
     def generate(self, context: Any, stream: bool = False) -> Any:
         messages = context.get("messages", [])
-        model = context.get("model") or context.get("model_name") or "default"
+        model = context.get("model") or context.get("model_name") or self.active_model_name
+        if not model and getattr(self, "pager", None) and self.pager.active_profile:
+            model = self.pager.active_profile.model_name
+        if not model:
+            model = "default"
         target_role = context.get("target_role", "text")
 
         # Ensure model is routed/loaded in scheduler
-        if not self.scheduler.groups:
-            self.scheduler.parse_input_and_create_group(1, f"text:{model}")
+        self.scheduler.parse_input_and_create_group(1, f"text:{model}")
 
         result = self.scheduler.route_request(1, target_role, messages)
 

@@ -267,6 +267,22 @@ def run_engine(args: Optional[List[str]] = None) -> None:
         from lmms.engine.benchmark import run_benchmark
         model = sub_args[0] if sub_args else "default"
         run_benchmark(model)
+    elif subcmd in ["server", "serve"]:
+        from lmms.api.server import run_server
+        port = 11435
+        host = "0.0.0.0"
+        idx = 0
+        while idx < len(sub_args):
+            if sub_args[idx] in ["--port", "-p"] and idx + 1 < len(sub_args):
+                try: port = int(sub_args[idx+1])
+                except Exception: pass
+                idx += 2
+            elif sub_args[idx] in ["--host", "-h"] and idx + 1 < len(sub_args):
+                host = sub_args[idx+1]
+                idx += 2
+            else:
+                idx += 1
+        run_server(host=host, port=port)
     else:
         sys.stdout.write(f"Unknown engine command: '{subcmd}'. Run 'lmms engine' for options.\n")
         sys.exit(1)

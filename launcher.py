@@ -44,16 +44,19 @@ def ensure_engine_running():
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
         
-        f = open(log_file, "a")
-        if getattr(sys, 'frozen', False):
-            p = subprocess.Popen([sys.executable, "--internal-engine", "server"], stdout=f, stderr=f, env=env, start_new_session=True)
-        else:
-            cmd = [sys.executable, "-m", "lmms.engine.main", "server"]
+        try:
+            from lmms.api.service import start_server_daemon
+            res = start_server_daemon()
+            time.sleep(1.0)
+            return res
+        except Exception:
+            f = open(log_file, "a")
+            from lmms.api.service import get_ai_python_executable
+            py_exe = get_ai_python_executable()
+            cmd = [py_exe, "-m", "lmms.api.server", "--host", "0.0.0.0", "--port", "11435"]
             p = subprocess.Popen(cmd, stdout=f, stderr=f, env=env, start_new_session=True)
-        
-        # Give it a moment to boot
-        time.sleep(2)
-        return p
+            time.sleep(1.5)
+            return p
 
 
 def load_config():

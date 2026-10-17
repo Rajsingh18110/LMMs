@@ -24,6 +24,17 @@ class AirPager:
             self._park_current()
 
         try:
+            global llama_cpp, Llama, LlamaState
+            if Llama is None:
+                try:
+                    import llama_cpp as _lcpp
+                    from llama_cpp import Llama as _L, LlamaState as _LS
+                    llama_cpp = _lcpp
+                    Llama = _L
+                    LlamaState = _LS
+                except Exception:
+                    pass
+
             print("[AirPager] mmap enabled: TRUE (Zero-latency OS virtual memory mapping)")
             print(f"[AirPager] P-Core affinity locking: n_threads={profile.recommended_threads}")
             print(f"[AirPager] Quantized KV Cache: Q8_0 + FlashAttention enabled")
@@ -55,12 +66,17 @@ class AirPager:
             llama_factory: Any = Llama
             try:
                 self.active_model = llama_factory(**init_kwargs)
-            except (TypeError, Exception) as flag_err:
+            except Exception as flag_err:
                 print(f"[AirPager] Info: Retrying with standard KV parameters: {flag_err}")
                 init_kwargs.pop("flash_attn", None)
                 init_kwargs.pop("type_k", None)
                 init_kwargs.pop("type_v", None)
-                self.active_model = llama_factory(**init_kwargs)
+                try:
+                    self.active_model = llama_factory(**init_kwargs)
+                except Exception as cuda_err:
+                    print(f"[AirPager] Info: GPU/CUDA initialization failed, falling back to CPU DDR5 mmap: {cuda_err}")
+                    init_kwargs["n_gpu_layers"] = 0
+                    self.active_model = llama_factory(**init_kwargs)
 
             self.active_profile = profile
             
@@ -84,6 +100,8 @@ class AirPager:
             return True
         except Exception as e:
             print(f"AirPager load failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def _park_current(self):
