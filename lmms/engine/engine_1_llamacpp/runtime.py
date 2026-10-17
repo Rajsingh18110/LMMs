@@ -21,6 +21,20 @@ class AirLlamaCppRuntime(RuntimeContract):
         self._is_loaded = True
         self.active_model_name: Optional[str] = None
 
+    @property
+    def _models(self) -> Dict[str, Any]:
+        """Dictionary of currently loaded active models for backward compatibility."""
+        models: Dict[str, Any] = {}
+        if getattr(self, "pager", None) and self.pager.active_profile and self.pager.active_model:
+            models[self.pager.active_profile.model_name] = self.pager.active_model
+        elif self.active_model_name:
+            models[self.active_model_name] = getattr(self.pager, "active_model", None)
+        return models
+
+    @property
+    def _model_id(self) -> str:
+        return self.active_model_name or ""
+
     def load_model(self, model_id: str) -> bool:
         """
         Loads GGUF model via AirLoader hardware profile and AirPager.

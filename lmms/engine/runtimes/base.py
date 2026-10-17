@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
 class RuntimeContract(ABC):
     """
@@ -32,5 +32,5 @@ class RuntimeContract(ABC):
         pass
 
     @abstractmethod
-    def chat(self, model: str, messages: list, stream: bool = False, options: dict = None, **kwargs) -> Any:
+    def chat(self, model: str, messages: list, stream: bool = False, options: Optional[dict] = None, **kwargs) -> Any:
         pass

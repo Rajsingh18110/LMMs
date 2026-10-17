@@ -15,8 +15,12 @@ from lmms.engine.core.base import RuntimeContract
 
 class HfVisionRuntime(RuntimeContract):
     def __init__(self):
-        self._models = {}
+        self._loaded_models: Dict[str, Any] = {}
         self._global_lock = threading.Lock()
+
+    @property
+    def _models(self) -> Dict[str, Any]:
+        return self._loaded_models
         
     def load_model(self, model_id: str) -> bool:
         # Import inside to avoid slow startup for non-vision users
@@ -27,21 +31,24 @@ class HfVisionRuntime(RuntimeContract):
             warnings.filterwarnings("ignore", category=UserWarning)
             warnings.filterwarnings("ignore", category=FutureWarning)
             
-            from transformers import AutoProcessor, AutoModelForImageTextToText
-            from transformers import BitsAndBytesConfig
+            from transformers import AutoProcessor, BitsAndBytesConfig
+            try:
+                from transformers import AutoModelForImageTextToText  # type: ignore
+            except ImportError:
+                from transformers import AutoModelForVision2Seq as AutoModelForImageTextToText  # type: ignore
             import logging
             logging.getLogger("transformers").setLevel(logging.ERROR)
         except ImportError:
             print("ERROR: transformers or bitsandbytes not installed.")
             return False
             
-        if model_id in self._models:
+        if model_id in self._loaded_models:
             return True
             
         try:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16
+                bnb_4bit_compute_dtype=torch.float16 if torch else None
             )
             
             processor = AutoProcessor.from_pretrained(model_id)
@@ -51,25 +58,28 @@ class HfVisionRuntime(RuntimeContract):
                 quantization_config=quantization_config
             )
             
-            self._models[model_id] = {
+            self._loaded_models[model_id] = {
                 "processor": processor,
                 "model": model
             }
-            self._models["active"] = self._models[model_id]
+            self._loaded_models["active"] = self._loaded_models[model_id]
             return True
         except Exception as e:
             print(f"ERROR: Failed to load PyTorch Vision Model: {e}")
             return False
 
-    def unload_model(self) -> bool:
-        if "active" in self._models:
-            del self._models["active"]
-        self._models.clear()
+    def unload_model(self, model_id: Optional[str] = None) -> bool:
+        if model_id and model_id in self._loaded_models:
+            del self._loaded_models[model_id]
+        else:
+            self._loaded_models.clear()
+        if "active" in self._loaded_models:
+            del self._loaded_models["active"]
         # Optionally free CUDA memory
         try:
-            import torch
-            torch.cuda.empty_cache()
-        except:
+            if torch and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
             pass
         return True
 

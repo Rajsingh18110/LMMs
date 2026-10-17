@@ -6,7 +6,7 @@ Decoupled terminal operations client with local and remote Wi-Fi/LAN connectivit
 from __future__ import annotations
 
 import sys
-from typing import List
+from typing import List, Optional
 
 from lmms.cli.installer import run_installer
 from lmms.cli.commands import (
@@ -41,7 +41,7 @@ def print_banner() -> None:
     sys.stdout.flush()
 
 
-def main(args: List[str] = None) -> None:
+def main(args: Optional[List[str]] = None) -> None:
     if args is None:
         args = sys.argv[1:]
 

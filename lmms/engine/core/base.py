@@ -41,3 +41,8 @@ class RuntimeContract(ABC):
     def chat(self, model: str, messages: list, stream: bool = False, options: Optional[dict] = None, **kwargs) -> Any:
         """Chat completion convenience endpoint."""
         pass
+
+    @property
+    def _models(self) -> Dict[str, Any]:
+        """Dictionary of currently loaded active models."""
+        return {}

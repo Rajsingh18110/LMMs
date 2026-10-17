@@ -20,6 +20,17 @@ class AirPyTorchRuntime(RuntimeContract):
         self.active_model_id: Optional[str] = None
         self._is_loaded = False
 
+    @property
+    def _models(self) -> Dict[str, Any]:
+        """Dictionary of currently loaded active models."""
+        if self._is_loaded and self.active_model_id:
+            return {self.active_model_id: getattr(self._universal, "model", None)}
+        return {}
+
+    @property
+    def _model_id(self) -> str:
+        return self.active_model_id or ""
+
     def load_model(self, model_id: str) -> bool:
         self.streamer = AirPyTorchStreamer(model_id)
         self.trainer = AirTrainer(model_id)

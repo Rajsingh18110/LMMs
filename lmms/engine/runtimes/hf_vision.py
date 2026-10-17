@@ -8,7 +8,8 @@ try:
     from PIL import Image
     import torch
 except ImportError:
-    pass
+    Image: Any = None
+    torch: Any = None
 
 from lmms.engine.runtimes.base import RuntimeContract
 
@@ -26,8 +27,11 @@ class HfVisionRuntime(RuntimeContract):
             warnings.filterwarnings("ignore", category=UserWarning)
             warnings.filterwarnings("ignore", category=FutureWarning)
             
-            from transformers import AutoProcessor, AutoModelForImageTextToText
-            from transformers import BitsAndBytesConfig
+            from transformers import AutoProcessor, BitsAndBytesConfig
+            try:
+                from transformers import AutoModelForImageTextToText  # type: ignore
+            except ImportError:
+                from transformers import AutoModelForVision2Seq as AutoModelForImageTextToText  # type: ignore
             import logging
             logging.getLogger("transformers").setLevel(logging.ERROR)
         except ImportError:
@@ -40,7 +44,7 @@ class HfVisionRuntime(RuntimeContract):
         try:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16
+                bnb_4bit_compute_dtype=torch.float16 if torch else None
             )
             
             processor = AutoProcessor.from_pretrained(model_id)
@@ -66,13 +70,13 @@ class HfVisionRuntime(RuntimeContract):
         self._models.clear()
         # Optionally free CUDA memory
         try:
-            import torch
-            torch.cuda.empty_cache()
-        except:
+            if torch and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
             pass
         return True
 
-    def chat(self, model: str, messages: list, stream: bool = False, options: dict = None, **kwargs) -> Any:
+    def chat(self, model: str, messages: list, stream: bool = False, options: Optional[dict] = None, **kwargs) -> Any:
         context = {'messages': messages, 'model_name': model}
         return self.generate(context, stream)
 

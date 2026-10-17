@@ -1,6 +1,6 @@
 import httpx
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 class LMMsClient:
     def __init__(self, base_url: str = "http://localhost:8080"):
@@ -25,7 +25,7 @@ class LMMsClient:
         resp = await self.client.get(f"{self.base_url}/system/status")
         return resp.json()
 
-    async def stream_chat(self, message: str, mode: str = "fast", model: str = "qwen3:8b", session_id: str = None) -> AsyncGenerator[str, None]:
+    async def stream_chat(self, message: str, mode: str = "fast", model: str = "qwen3:8b", session_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         async with self.client.stream("POST", f"{self.base_url}/chat/stream", json={
             "message": message,
             "mode": mode,
