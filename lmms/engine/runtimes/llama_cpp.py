@@ -15,11 +15,11 @@ try:
     llama_cpp.llama_log_set(_log_callback_wrapper, ctypes.c_void_p())
 except Exception as e:
     print(f"Warning: Failed to import llama_cpp: {e}")
-    Llama = None
+    Llama: Any = None
 
 class LlamaCppRuntime(RuntimeContract):
     def __init__(self):
-        self._models: Dict[str, Llama] = {}
+        self._models: Dict[str, Any] = {}
         self._global_lock = threading.Lock()
 
     def _detect_chat_format(self, model_path: str) -> Optional[str]:
@@ -107,6 +107,7 @@ class LlamaCppRuntime(RuntimeContract):
         attempt = 1
         import time
         while current_ctx >= 512 or first_try:
+            start_time = time.time()
             try:
                 kwargs = {
                     "model_path": full_path,
@@ -118,7 +119,6 @@ class LlamaCppRuntime(RuntimeContract):
                 # Let llama-cpp-python handle chat format natively from GGUF metadata
                 
                 print(f"[TIMING LOG] Attempt {attempt}: Loading Llama with n_ctx={current_ctx}, n_gpu_layers=-1...")
-                start_time = time.time()
                 model_instance = Llama(**kwargs)
                 end_time = time.time()
                 print(f"[TIMING LOG] Attempt {attempt} SUCCEEDED in {end_time - start_time:.2f}s")
@@ -169,7 +169,7 @@ class LlamaCppRuntime(RuntimeContract):
         
         self._models[key] = model_instance
         return True
-    def unload_model(self, model_id: str = None) -> bool:
+    def unload_model(self, model_id: Optional[str] = None) -> bool:
         if model_id:
             if model_id in self._models:
                 del self._models[model_id]
@@ -177,7 +177,7 @@ class LlamaCppRuntime(RuntimeContract):
             self._models.clear()
         return True
 
-    def chat(self, model: str, messages: list, stream: bool = False, options: dict = None, **kwargs) -> Any:
+    def chat(self, model: str, messages: list, stream: bool = False, options: Optional[dict] = None, **kwargs) -> Any:
         context = {'messages': messages, 'model_name': model}
         return self.generate(context, stream)
 
@@ -315,6 +315,7 @@ class LlamaCppRuntime(RuntimeContract):
                                 
                                 # Check for repetition dynamically for sizes from 1 up to ngram_window
                                 is_repeating = False
+                                matched_window = 0
                                 for w in range(1, ngram_window + 1):
                                     if len(recent_tokens) >= w * max_repeats:
                                         is_rep = True
@@ -336,12 +337,13 @@ class LlamaCppRuntime(RuntimeContract):
                                                 is_rep = False
                                             else:
                                                 is_repeating = True
+                                                matched_window = w
                                                 break
 
                                 if is_repeating:
                                     print(f"\n--- REPETITION SAFETY-NET TRIGGERED ---")
                                     print(f"Recent Tokens Array: {recent_tokens}")
-                                    print(f"Matched Window Size: {w}")
+                                    print(f"Matched Window Size: {matched_window}")
                                     print(f"Accumulated Text snippet: {accumulated_text[-200:]}")
                                     print("---------------------------------------\n")
                                     print("Model repetition detected, generation stopped early.")
