@@ -655,6 +655,8 @@ def main():
                 
                 if forced_engine:
                     engine_to_use = forced_engine
+                elif is_air:
+                    engine_to_use = "air"
                 else:
                     # Route GGUF local files to llama if text, otherwise Universal PyTorch
                     if is_vlm or is_audio or (pipeline_tag and pipeline_tag not in ["text-generation", "text2text-generation"]):
@@ -688,6 +690,10 @@ def main():
                         repo_to_load = hf_repo
                         if not runtime.load_model(repo_to_load):
                             sys.exit(1)
+                    elif engine_to_use == "air":
+                        from lmms.engine.air.runtime import AirRuntime
+                        runtime = AirRuntime()
+                        runtime.scheduler.parse_input_and_create_group(1, f"text:{model_name}")
                     else:
                         from lmms.engine.runtimes.llama_cpp import LlamaCppRuntime
                         runtime = LlamaCppRuntime()
