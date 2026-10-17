@@ -218,3 +218,80 @@ def cmd_stats(args: List[str]) -> None:
             sys.stdout.write(f"  {COLOR_CYAN}{k:<22}{COLOR_RESET} : {COLOR_DIM}{v}{COLOR_RESET}\n")
     except Exception as e:
         sys.stdout.write(f"{COLOR_RED}Failed to query stats from {info['url']}:{COLOR_RESET} {e}\n")
+
+
+def cmd_server(args: List[str]) -> None:
+    """Manage the local standalone LMMs API backend server (start, stop, status)."""
+    from lmms.api.service import start_server_daemon, stop_server_daemon, get_server_daemon_status
+    from lmms.api.server import run_server
+
+    action = args[0].lower() if args else "status"
+
+    if action in ["start", "up"]:
+        port = 11435
+        host = "0.0.0.0"
+        engine_mode = "auto"
+        foreground = False
+
+        idx = 1
+        while idx < len(args):
+            arg = args[idx]
+            if arg in ["--port", "-p"] and idx + 1 < len(args):
+                try:
+                    port = int(args[idx + 1])
+                except ValueError:
+                    pass
+                idx += 2
+            elif arg in ["--host", "-h"] and idx + 1 < len(args):
+                host = args[idx + 1]
+                idx += 2
+            elif arg in ["--engine", "-e"] and idx + 1 < len(args):
+                engine_mode = args[idx + 1]
+                idx += 2
+            elif arg in ["--foreground", "-f"]:
+                foreground = True
+                idx += 1
+            else:
+                idx += 1
+
+        if foreground:
+            sys.stdout.write(f"ℹ {COLOR_DIM}Starting LMMs server in foreground on {host}:{port}...{COLOR_RESET}\n")
+            run_server(host=host, port=port)
+        else:
+            res = start_server_daemon(port=port, host=host, engine_mode=engine_mode)
+            if res.get("status") == "already_running":
+                sys.stdout.write(f"{COLOR_YELLOW}⚠{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server already running{COLOR_RESET} (PID {res['pid']}) at {res['url']}\n")
+            else:
+                sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server started in background{COLOR_RESET} (PID {res['pid']})\n")
+                sys.stdout.write(f"  • API URL:       {COLOR_CYAN}{res['api_url']}{COLOR_RESET}\n")
+                sys.stdout.write(f"  • Web Dashboard: {COLOR_CYAN}{res['dashboard_url']}{COLOR_RESET}\n")
+                sys.stdout.write(f"  • Server Logs:   {COLOR_DIM}{res['log_file']}{COLOR_RESET}\n")
+
+    elif action in ["stop", "down"]:
+        res = stop_server_daemon()
+        if res.get("status") == "stopped":
+            sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server stopped{COLOR_RESET} (PID {res['pid']})\n")
+        else:
+            sys.stdout.write(f"{COLOR_DIM}No running LMMs Server daemon detected.{COLOR_RESET}\n")
+
+    elif action in ["restart"]:
+        stop_server_daemon()
+        res = start_server_daemon()
+        sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server restarted{COLOR_RESET} (PID {res.get('pid')})\n")
+
+    elif action in ["status", "info"]:
+        st = get_server_daemon_status()
+        if st["running"]:
+            sys.stdout.write(f"{COLOR_GREEN}●{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server Status:{COLOR_RESET} {COLOR_BOLD_GREEN}ACTIVE (PID {st['pid']}){COLOR_RESET}\n")
+            sys.stdout.write(f"  • Log File: {COLOR_DIM}{st['log_file']}{COLOR_RESET}\n")
+            if st["recent_logs"]:
+                sys.stdout.write(f"\n{COLOR_DIM}Recent Logs:{COLOR_RESET}\n")
+                for line in st["recent_logs"][-5:]:
+                    sys.stdout.write(f"  {COLOR_DIM}{line}{COLOR_RESET}\n")
+        else:
+            sys.stdout.write(f"{COLOR_RED}○{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server Status:{COLOR_RESET} {COLOR_DIM}OFFLINE (Not running){COLOR_RESET}\n")
+            sys.stdout.write(f"  Start with: {COLOR_CYAN}lmms server start{COLOR_RESET}\n")
+    else:
+        sys.stdout.write(f"{COLOR_RED}Unknown server command:{COLOR_RESET} {action}\n")
+        sys.stdout.write(f"Usage: {COLOR_CYAN}lmms server [start|stop|restart|status] [--port 11435] [--engine 1|2|auto] [--foreground]{COLOR_RESET}\n")
+
