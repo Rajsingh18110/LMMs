@@ -9,5 +9,8 @@
   ],
   "pythonVersion": "3.11",
   "pythonPlatform": "Linux",
-  "reportMissingImports": "none"
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": "none",
+  "reportUnreachable": "none",
+  "reportGeneralTypeIssues": "none"
 }

@@ -111,3 +111,8 @@ class ModelfileParser:
             
         print(f"Success! Model '{model_name}' created from Modelfile.")
         return out_path
+
+    def compile(self, modelfile_path: str, model_name: str) -> str:
+        """Alias for create matching (modelfile_path, model_name) parameter ordering."""
+        return self.create(model_name=model_name, modelfile_path=modelfile_path)
+
