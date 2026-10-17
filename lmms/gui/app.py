@@ -66,6 +66,7 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         sys.path.insert(0, project_root)
 
     # Ensure engine server is accessible or auto-start it in the background
+    auto_started_server = False
     try:
         import urllib.request
         try:
@@ -73,8 +74,10 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         except Exception:
             from lmms.api.service import start_server_daemon, is_server_running
             if not is_server_running():
-                sys.stdout.write(f"ℹ {COLOR_DIM}Auto-starting local LMMs backend engine daemon...{COLOR_RESET}\n")
+                sys.stdout.write(f"  {COLOR_DIM}Auto-starting local LMMs workstation engine daemon...{COLOR_RESET}\n")
                 start_server_daemon()
+                auto_started_server = True
+                os.environ["LMMS_GUI_AUTO_SERVER"] = "1"
     except Exception:
         pass
 
@@ -83,6 +86,15 @@ def run_gui(args: Optional[List[str]] = None) -> None:
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QIcon
     from PyQt6.QtCore import QTimer
+
+    def cleanup_workstation_engine():
+        """When running in Workstation GUI mode, shut down auto-started engine on window close and purge GPU VRAM."""
+        if auto_started_server or os.environ.get("LMMS_GUI_AUTO_SERVER") == "1":
+            try:
+                from lmms.api.service import stop_server_daemon
+                stop_server_daemon()
+            except Exception:
+                pass
 
     # Force native GTK theme and disable noisy Qt platform warnings on Linux
     if sys.platform.startswith("linux"):
@@ -135,14 +147,21 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         except Exception as e:
             sys.stderr.write(f"[Theme] Warning: Could not fully apply theme overrides: {e}\n")
 
+    app.aboutToQuit.connect(cleanup_workstation_engine)
+
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
 
     # Defer window creation to after event loop starts
     QTimer.singleShot(0, lambda: launch_main_window(icon_path))
 
+    exit_code = 0
     with loop:
-        sys.exit(loop.run_forever())
+        try:
+            exit_code = loop.run_forever()
+        finally:
+            cleanup_workstation_engine()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

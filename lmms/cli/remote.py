@@ -263,7 +263,7 @@ class RemoteManager:
 
         sys.stdout.write(CURSOR_HIDE)
         sys.stdout.write(
-            f"🔍 {COLOR_BOLD_WHITE}LMMs LAN Discovery{COLOR_RESET} "
+            f"  {COLOR_BOLD_WHITE}LMMs LAN Discovery{COLOR_RESET} "
             f"{COLOR_DIM}(Subnet: {prefix}0/24 : {port}){COLOR_RESET}\n"
         )
         sys.stdout.flush()

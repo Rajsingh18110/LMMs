@@ -232,10 +232,10 @@ class LlamaCppRuntime(RuntimeContract):
                 err_msg = f"Context length exceeded! Prompt is ~{total_tokens} tokens, but model context (n_ctx) is {active_model.n_ctx()}."
                 if stream:
                     def err_stream():
-                        yield {"message": {"role": "assistant", "content": f"\n\n❌ **Engine Error**: {err_msg}"}}
+                        yield {"message": {"role": "assistant", "content": f"\n\n✖ **Engine Error**: {err_msg}"}}
                     return err_stream()
                 else:
-                    return {"message": {"content": f"\n\n❌ **Engine Error**: {err_msg}"}}
+                    return {"message": {"content": f"\n\n✖ **Engine Error**: {err_msg}"}}
         except Exception as e:
             pass # Tokenization failed, just proceed and let the engine handle it
         

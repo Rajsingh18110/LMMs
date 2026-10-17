@@ -1368,3 +1368,16 @@ class MainWindow(QMainWindow):
                             widget.bridge.registerExtension.emit(json.dumps(manifest))
                     except Exception as e:
                         print(f"Error sending extension manifest to JS: {e}")
+
+    def closeEvent(self, event):
+        try:
+            import os
+            if os.environ.get("LMMS_GUI_AUTO_SERVER") == "1":
+                try:
+                    from lmms.api.service import stop_server_daemon
+                    stop_server_daemon()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        super().closeEvent(event)
