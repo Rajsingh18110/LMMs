@@ -32,12 +32,16 @@ async def webhook_post(req: ChatRequest):
 
 
 @router.get("/ping")
+@router.post("/ping")
+@router.get("/v1/internal/ping")
+@router.post("/v1/internal/ping")
 async def ping():
-    """Ultra-fast probe for CLI remote scanner."""
+    """Ultra-fast probe for CLI remote scanner and persistent client keepalive."""
     return {
         "status": "pong",
         "engine": "lmms",
         "version": "2.5.0-native",
+        "mode": "persistent",
         "active_mode": engine_manager.active_mode,
         "models_count": len(engine_manager.get_loaded_models())
     }

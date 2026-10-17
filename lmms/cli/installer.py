@@ -191,26 +191,26 @@ def interactive_checkbox_wizard(action_verb: str = "Install") -> List[str]:
         while True:
             # Render menu
             lines: List[str] = []
-            lines.append(f"  ▲  {COLOR_BOLD_WHITE}LMMs Component {action_verb} Wizard{COLOR_RESET}")
-            lines.append(f"  {COLOR_DIM}{'─' * 65}{COLOR_RESET}")
+            lines.append(f"  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· component configuration wizard{COLOR_RESET}")
+            lines.append(f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
             lines.append(
-                f"  {COLOR_DIM}Controls: [↑/↓] Navigate · [SPACE] Toggle · [a] Toggle All · [ENTER] Confirm · [q] Cancel{COLOR_RESET}\n"
+                f"  {COLOR_DIM}keys: [↑/↓] navigate · [space] toggle · [a] all · [enter] confirm · [q] cancel{COLOR_RESET}\n"
             )
 
             for i, it in enumerate(items):
                 is_cursor = (i == cursor_idx)
                 prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cursor else " "
-                chk = f"{COLOR_BOLD_GREEN}[X]{COLOR_RESET}" if it["selected"] else f"{COLOR_DIM}[ ]{COLOR_RESET}"
+                chk = f"{COLOR_BOLD_CYAN}[x]{COLOR_RESET}" if it["selected"] else f"{COLOR_DIM}[ ]{COLOR_RESET}"
                 title_color = COLOR_BOLD_WHITE if is_cursor else COLOR_RESET
                 lines.append(
-                    f"  {prefix} {chk} {title_color}{it['title']:<24}{COLOR_RESET} {COLOR_DIM}{it['desc']}{COLOR_RESET}"
+                    f"  {prefix} {chk} {title_color}{it['title']:<22}{COLOR_RESET} {COLOR_DIM}{it['desc']}{COLOR_RESET}"
                 )
 
             selected_names = [it["title"] for it in items if it["selected"]]
-            sel_str = ", ".join(selected_names) if selected_names else f"{COLOR_YELLOW}None (select at least one){COLOR_RESET}"
-            lines.append(f"\n  {COLOR_DIM}{'─' * 65}{COLOR_RESET}")
-            lines.append(f"  {COLOR_BOLD_WHITE}Selected:{COLOR_RESET} {sel_str}")
-            lines.append(f"  {COLOR_CYAN}Press [ENTER] to proceed with {action_verb.lower()}...{COLOR_RESET}")
+            sel_str = ", ".join(selected_names) if selected_names else f"{COLOR_YELLOW}none (select at least one target){COLOR_RESET}"
+            lines.append(f"\n  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
+            lines.append(f"  {COLOR_DIM}targets:{COLOR_RESET} {COLOR_BOLD_WHITE}{sel_str}{COLOR_RESET}")
+            lines.append(f"  {COLOR_CYAN}press [enter] to proceed with {action_verb.lower()}...{COLOR_RESET}")
 
             # Clear screen and draw
             output = "\033[H\033[J" + "\n".join(lines) + "\n"
@@ -347,7 +347,7 @@ class CLIInstaller:
         action = "update" if self.is_update else "install"
         title = "Updater" if self.is_update else "Installer"
         sys.stdout.write(
-            f"📦 {COLOR_BOLD_WHITE}lmms {action}{COLOR_RESET} {COLOR_DIM}v1.0.0 (Component {title}){COLOR_RESET}\n\n"
+            f"{COLOR_BOLD_WHITE}lmms {action}{COLOR_RESET} {COLOR_DIM}v1.0.0 (Component {title}){COLOR_RESET}\n\n"
             f"Usage: lmms {action} [options]\n\n"
             f"Options:\n"
             f"  (no flags)    Interactive Multi-Select Checkbox Wizard (select components interactively)\n"
@@ -447,7 +447,7 @@ class CLIInstaller:
         components_label = ", ".join(sorted(list(self.selected_components))) if self.selected_components else "selected targets"
 
         # Phase 1: Header
-        sys.stdout.write(f"\n📦 {COLOR_BOLD_WHITE}lmms-engine{COLOR_RESET} {COLOR_DIM}v1.0.0{COLOR_RESET}\n")
+        sys.stdout.write(f"\n{COLOR_BOLD_WHITE}lmms-engine{COLOR_RESET} {COLOR_DIM}v1.0.0{COLOR_RESET}\n")
         sys.stdout.write(
             f"{COLOR_CYAN}ℹ{COLOR_RESET} {COLOR_DIM}{action_verb} dependencies for [{COLOR_BOLD_CYAN}{components_label}{COLOR_RESET}{COLOR_DIM}]...{COLOR_RESET}\n\n"
         )
@@ -481,7 +481,7 @@ class CLIInstaller:
         failed_count = sum(1 for t in self.packages if t.failed)
 
         action_word = "Updated" if self.is_update else "Installed"
-        summary_parts = [f"✨ {COLOR_BOLD_WHITE}Done!{COLOR_RESET} {action_word} {installed_count} packages"]
+        summary_parts = [f"{COLOR_BOLD_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}Done:{COLOR_RESET} {action_word} {installed_count} package(s)"]
         if skipped_count > 0:
             summary_parts.append(f"{COLOR_DIM}({skipped_count} skipped - already satisfied){COLOR_RESET}")
         if failed_count > 0:
