@@ -121,28 +121,8 @@ def main():
         return
         
     if args[0] in ["--install", "install", "rebuild"]:
-        branch = None
-        if "--all" in args:
-            branch = "main"
-        elif "--gui" in args:
-            branch = "gui"
-        elif "--cli" in args:
-            branch = "cli"
-            
-        if branch:
-            print(f"\033[96m[INFO]\033[0m Installing LMMs ecosystem from source (branch: {branch})...")
-            # Save the installed branch state
-            config["installed_branch"] = branch
-            save_config(config)
-            
-            lmms_dir = os.path.expanduser("~/.lmms/LMMs")
-            if not os.path.exists(lmms_dir):
-                print("\033[96m[INFO]\033[0m Cloning repository...")
-                subprocess.run(f"git clone https://github.com/Rajsingh18110/LMMs.git {lmms_dir}", shell=True)
-            
-            subprocess.run(f"cd {lmms_dir} && git fetch --all && git checkout {branch} && git pull origin {branch} && {sys.executable} setup.py install", shell=True)
-        else:
-            print("Usage: LMMs install --all | --gui | --cli")
+        from lmms.cli.installer import run_installer
+        run_installer(args[1:])
         return
         
     if args[0] in ["--stop", "stop"]:
