@@ -31,7 +31,7 @@ COLOR_BOLD_WHITE = "\033[1;37m"
 
 
 def print_banner() -> None:
-    sys.stdout.write(f"\n📦 {COLOR_BOLD_WHITE}lmms-cli{COLOR_RESET} {COLOR_DIM}v1.0.0 (Standalone Remote & Local Client){COLOR_RESET}\n\n")
+    sys.stdout.write(f"\n{COLOR_BOLD_WHITE}lmms-cli{COLOR_RESET} {COLOR_DIM}v1.0.0 (Standalone Remote & Local Client){COLOR_RESET}\n\n")
     sys.stdout.write(f"{COLOR_BOLD_WHITE}Commands:{COLOR_RESET}\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms server [start|stop|status]{COLOR_RESET} Local API engine service manager\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms gui                        {COLOR_RESET} Launch desktop GUI studio\n")
