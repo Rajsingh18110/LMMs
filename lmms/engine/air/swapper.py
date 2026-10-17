@@ -6,7 +6,7 @@ class AirSwapper:
     def get_max_vram(self) -> float:
         """Dynamically detect GPU VRAM capacity without hardcoded limits."""
         try:
-            import torch
+            import torch  # type: ignore
             if torch.cuda.is_available():
                 return torch.cuda.get_device_properties(0).total_memory / (1024**3)
         except Exception:

@@ -1,0 +1,13 @@
+{
+  "include": [
+    "."
+  ],
+  "extraPaths": [
+    "/home/kali/.local/lib/python3.11/site-packages",
+    "/usr/local/lib/python3.11/site-packages",
+    "/home/kali/Projects/LMMs"
+  ],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Linux",
+  "reportMissingImports": "none"
+}
