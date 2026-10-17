@@ -3,8 +3,6 @@ import json
 from typing import Optional, Any, Dict
 from lmms.engine.engine_1_llamacpp import AirLlamaCppRuntime
 from lmms.engine.engine_2_pytorch import AirPyTorchRuntime
-from lmms.engine.runtimes.llama_cpp import LlamaCppRuntime
-from lmms.engine.runtimes.universal_pytorch import UniversalPyTorchRuntime
 from lmms.engine.cache_manager import CacheManager
 from lmms.engine.air import AirScheduler, RamCache, AirSwapper
 
@@ -110,11 +108,25 @@ class EngineManager:
         # Fallback to Engine 2 (PyTorch) for HuggingFace / Safetensors / Multimodal
         return self.engine_2
 
+    def get_loaded_models(self) -> Dict[str, Any]:
+        """Returns unified dictionary of all currently loaded models across both engines."""
+        models: Dict[str, Any] = {}
+        if hasattr(self.engine_1, "_models") and isinstance(self.engine_1._models, dict):
+            models.update(self.engine_1._models)
+        if hasattr(self.engine_2, "_models") and isinstance(self.engine_2._models, dict):
+            models.update(self.engine_2._models)
+        return models
+
+    def is_model_loaded(self, model_name: str) -> bool:
+        loaded = self.get_loaded_models()
+        return model_name in loaded or f"{model_name}.gguf" in loaded
+
     def status(self) -> Dict[str, Any]:
         return {
             "active_mode": self.active_mode,
             "engine_1": self.engine_1.health(),
-            "engine_2": self.engine_2.health()
+            "engine_2": self.engine_2.health(),
+            "loaded_models": list(self.get_loaded_models().keys())
         }
 
 engine_manager = EngineManager()

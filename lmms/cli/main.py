@@ -16,6 +16,7 @@ from lmms.cli.commands import (
     cmd_ps,
     cmd_list,
     cmd_stats,
+    cmd_server,
 )
 
 # Typography
@@ -30,14 +31,15 @@ COLOR_BOLD_WHITE = "\033[1;37m"
 def print_banner() -> None:
     sys.stdout.write(f"\n📦 {COLOR_BOLD_WHITE}lmms-cli{COLOR_RESET} {COLOR_DIM}v1.0.0 (Standalone Remote & Local Client){COLOR_RESET}\n\n")
     sys.stdout.write(f"{COLOR_BOLD_WHITE}Commands:{COLOR_RESET}\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms connect [ip:port]{COLOR_RESET}     Connect to LAN engine or auto-discover\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms remote [status|scan|list|use|local]{COLOR_RESET} Wi-Fi/LAN engine manager\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms chat <model>{COLOR_RESET}          Interactive streaming conversation\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms run <model>{COLOR_RESET}           Run inference on active target\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms ps{COLOR_RESET}                    Active model memory inspection\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms list{COLOR_RESET}                  Available model catalog\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms stats{COLOR_RESET}                 Hardware & system telemetry\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--gui]{COLOR_RESET} Package resolver & installer\n\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms server [start|stop|status]{COLOR_RESET} Local API engine service manager\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms connect [ip:port]{COLOR_RESET}          Connect to LAN engine or auto-discover\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms remote [status|scan|list|use]{COLOR_RESET} Wi-Fi/LAN engine manager\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms chat <model>{COLOR_RESET}               Interactive streaming conversation\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms run <model>{COLOR_RESET}                Run inference on active target\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms ps{COLOR_RESET}                         Active model memory inspection\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms list{COLOR_RESET}                       Available model catalog\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms stats{COLOR_RESET}                      Hardware & system telemetry\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--gui]{COLOR_RESET}      Package resolver & installer\n\n")
     sys.stdout.flush()
 
 
@@ -54,6 +56,8 @@ def main(args: Optional[List[str]] = None) -> None:
 
     if cmd == "install":
         run_installer(sub_args)
+    elif cmd in ["server", "serve", "daemon"]:
+        cmd_server(sub_args)
     elif cmd == "connect":
         cmd_connect(sub_args)
     elif cmd == "remote":
