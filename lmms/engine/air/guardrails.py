@@ -1,5 +1,5 @@
 import os
-import psutil
+import psutil  # type: ignore
 from typing import Dict, Any, Optional
 
 class AirGuardrails:

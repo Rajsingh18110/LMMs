@@ -1,6 +1,6 @@
 import os
 import struct
-import psutil
+import psutil  # type: ignore
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 try:

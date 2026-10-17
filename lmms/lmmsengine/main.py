@@ -29,7 +29,10 @@ def is_root():
     if platform.system() == "Windows":
         try:
             import ctypes
-            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+            windll = getattr(ctypes, "windll", None)
+            if windll:
+                return windll.shell32.IsUserAnAdmin() != 0
+            return False
         except Exception:
             return False
     return os.geteuid() == 0
@@ -54,7 +57,7 @@ def ensure_server_running():
         import platform
         kwargs = {}
         if platform.system() == "Windows":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
         else:
             kwargs["start_new_session"] = True
         subprocess.Popen([sys.executable, engine_script, "server"], stdout=f, stderr=f, **kwargs)
@@ -71,8 +74,12 @@ def main():
     # replay the user's buffered input ('hello') as a shell command.
     if platform.system() == "Windows":
         try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+            reconfig_out = getattr(sys.stdout, "reconfigure", None)
+            if callable(reconfig_out):
+                reconfig_out(encoding="utf-8", errors="replace")
+            reconfig_err = getattr(sys.stderr, "reconfigure", None)
+            if callable(reconfig_err):
+                reconfig_err(encoding="utf-8", errors="replace")
         except AttributeError:
             # Python < 3.7 fallback
             import io
@@ -239,7 +246,6 @@ def main():
     if clean_args and clean_args[0] in ["gui", "-gui", "--gui", "-g"]:
         import gui
         gui.main()
-        sys.exit(0)
     
     # Engine CLI Commands Bypass
     if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]:
@@ -328,7 +334,7 @@ def main():
                     print(f"Error fetching repo info: {e}")
                     sys.exit(1)
                     
-                gguf_files = [f for f in repo_info.siblings if f.rfilename.endswith(".gguf")]
+                gguf_files = [f for f in (repo_info.siblings or []) if getattr(f, "rfilename", "").endswith(".gguf")]
                 if not gguf_files:
                     print(f"No GGUF file found in {repo_id}")
                     sys.exit(1)
@@ -469,7 +475,7 @@ def main():
                 except ImportError:
                     report["llama_cpp_python"] = False
                 report["python_version"] = platform.python_version()
-                import psutil
+                import psutil  # type: ignore
                 report["ram_available_gb"] = round(psutil.virtual_memory().available / (1024**3), 2)
                 report["disk_available_gb"] = round(shutil.disk_usage(models_dir).free / (1024**3), 2) if report["models_dir_exists"] else 0
 
@@ -721,7 +727,8 @@ def main():
                     
                     def take_screenshot():
                         import tempfile, subprocess, os
-                        out_path = tempfile.mktemp(suffix=".png")
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+                            out_path = tmp_file.name
                         if os.environ.get("WAYLAND_DISPLAY"):
                             try:
                                 subprocess.run(["gnome-screenshot", "-f", out_path], timeout=3, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -911,7 +918,8 @@ def main():
                                         img.thumbnail((1024, 1024))
                                         import tempfile
                                         import os
-                                        tf = tempfile.mktemp(suffix=".png")
+                                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+                                            tf = tmp_file.name
                                         img.save(tf, format="PNG")
                                         
                                     with open(tf, "rb") as image_file:
