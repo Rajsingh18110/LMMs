@@ -248,11 +248,16 @@ def main():
         gui.main()
     
     # Engine CLI Commands Bypass
-    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server"]:
+    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server", "install"]:
         import requests, json, sys, os
         cmd = clean_args[0]
         try:
-            if cmd == "list":
+            if cmd == "install":
+                from lmms.cli.installer import run_installer
+                run_installer(clean_args[1:])
+                sys.exit(0)
+
+            elif cmd == "list":
                 from lmms.engine.registry import RegistryManager
                 reg = RegistryManager()
                 reg.list_models()
