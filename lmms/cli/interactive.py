@@ -43,16 +43,16 @@ class InteractiveChat:
         status_color = COLOR_GREEN if online else COLOR_RED
 
         # Session Header
-        sys.stdout.write(f"\n💬 {COLOR_BOLD_WHITE}lmms-cli{COLOR_RESET} {COLOR_DIM}v1.0.0{COLOR_RESET}\n")
+        sys.stdout.write(f"\n{COLOR_BOLD_WHITE}lmms-cli{COLOR_RESET} {COLOR_DIM}v1.0.0{COLOR_RESET}\n")
         sys.stdout.write(
-            f"⚡ {COLOR_BOLD_WHITE}Target:{COLOR_RESET} {info['url']} "
+            f"  Target: {info['url']} "
             f"[{status_color}{info['mode'].upper()}{COLOR_RESET} · {COLOR_DIM}Ping: {lat_str}{COLOR_RESET}]\n"
         )
         sys.stdout.write(
-            f"🧠 {COLOR_BOLD_WHITE}Model:{COLOR_RESET} {COLOR_CYAN}{self.model_name}{COLOR_RESET} "
-            f"{COLOR_DIM}(Air Auto-Dispatch){COLOR_RESET}\n"
+            f"  Model:  {COLOR_CYAN}{self.model_name}{COLOR_RESET} "
+            f"{COLOR_DIM}(Auto-Dispatch){COLOR_RESET}\n"
         )
-        sys.stdout.write(f"{COLOR_DIM}ℹ Type /help for session controls, /exit to quit.{COLOR_RESET}\n\n")
+        sys.stdout.write(f"  {COLOR_DIM}Type /help for session controls, /exit to quit.{COLOR_RESET}\n\n")
         sys.stdout.flush()
 
         while True:
@@ -102,7 +102,7 @@ class InteractiveChat:
 
                 # Stream Metrics Bar (Node.js/Yarn Dim Style)
                 sys.stdout.write(
-                    f"\n\n{COLOR_DIM}⏱ {token_count} chunks · {tok_per_sec:.1f} tok/s · {elapsed:.2f}s{COLOR_RESET}\n\n"
+                    f"\n\n{COLOR_DIM}— {token_count} chunks · {tok_per_sec:.1f} tok/s · {elapsed:.2f}s{COLOR_RESET}\n\n"
                 )
                 sys.stdout.flush()
 
@@ -137,7 +137,7 @@ class InteractiveChat:
             online, lat, _ = self.remote_mgr.ping(info["url"])
             color = COLOR_GREEN if online else COLOR_RED
             status = "Online" if online else "Offline"
-            sys.stdout.write(f"⚡ {info['url']} -> {color}{status}{COLOR_RESET} ({lat}ms)\n\n")
+            sys.stdout.write(f"  {info['url']} -> {color}{status}{COLOR_RESET} ({lat}ms)\n\n")
 
         elif cmd == "/models":
             models = self.client.list_models()

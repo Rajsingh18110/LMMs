@@ -169,7 +169,7 @@ def cmd_ps(args: List[str]) -> None:
 
     try:
         ps_list = client.get_ps()
-        sys.stdout.write(f"⚡ {COLOR_BOLD_WHITE}Target:{COLOR_RESET} {info['url']} {COLOR_DIM}({info['mode'].upper()}){COLOR_RESET}\n")
+        sys.stdout.write(f"  {COLOR_BOLD_WHITE}Target:{COLOR_RESET} {info['url']} {COLOR_DIM}({info['mode'].upper()}){COLOR_RESET}\n")
         if not ps_list:
             sys.stdout.write(f"{COLOR_DIM}No models currently active or loaded in memory.{COLOR_RESET}\n")
             return
@@ -191,7 +191,7 @@ def cmd_list(args: List[str]) -> None:
 
     try:
         models = client.list_models()
-        sys.stdout.write(f"⚡ {COLOR_BOLD_WHITE}Target:{COLOR_RESET} {info['url']} {COLOR_DIM}({info['mode'].upper()}){COLOR_RESET}\n")
+        sys.stdout.write(f"  {COLOR_BOLD_WHITE}Target:{COLOR_RESET} {info['url']} {COLOR_DIM}({info['mode'].upper()}){COLOR_RESET}\n")
         if not models:
             sys.stdout.write(f"{COLOR_DIM}No models available on target engine.{COLOR_RESET}\n")
             return
@@ -213,7 +213,7 @@ def cmd_stats(args: List[str]) -> None:
 
     try:
         stats = client.get_stats()
-        sys.stdout.write(f"⚡ {COLOR_BOLD_WHITE}Engine Telemetry ({info['url']}):{COLOR_RESET}\n")
+        sys.stdout.write(f"  {COLOR_BOLD_WHITE}Engine Telemetry ({info['url']}):{COLOR_RESET}\n")
         for k, v in stats.items():
             sys.stdout.write(f"  {COLOR_CYAN}{k:<22}{COLOR_RESET} : {COLOR_DIM}{v}{COLOR_RESET}\n")
     except Exception as e:
@@ -311,5 +311,12 @@ def cmd_tui(args: List[str]) -> None:
     """Launch the interactive terminal user interface."""
     from lmms.tui.main import launch_tui
     launch_tui(args)
+
+
+def cmd_engine(args: List[str]) -> None:
+    """Launch the standalone Dual-Engine console and runtime manager."""
+    from lmms.engine.main import run_engine
+    run_engine(args)
+
 
 

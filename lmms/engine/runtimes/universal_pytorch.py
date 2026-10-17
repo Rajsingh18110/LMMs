@@ -111,7 +111,7 @@ class UniversalPyTorchRuntime:
         if self._kokoro_pipeline:
             try:
                 import soundfile as sf  # type: ignore
-                console.print("\n[dim magenta]🎙️ Generating Audio (Kokoro)...[/dim magenta]")
+                console.print("\n[dim magenta]Generating Audio (Kokoro)...[/dim magenta]")
                 # Generate audio
                 generator = self._kokoro_pipeline(
                     user_text, voice='af_heart', # Default voice
@@ -184,7 +184,7 @@ class UniversalPyTorchRuntime:
                 img_data = base64.b64decode(b64_data)
                 pil_img = Image.open(BytesIO(img_data)).convert("RGB")
                 
-                console.print("\n[dim magenta]👁️ Processing Image...[/dim magenta]")
+                console.print("\n[dim magenta]Processing Image...[/dim magenta]")
                 # The pipeline generally accepts (image, prompt) or just image depending on the specific VLM
                 # We try passing both
                 pipe_fn: Any = self._pipe
@@ -200,7 +200,7 @@ class UniversalPyTorchRuntime:
             elif task == "text-to-speech":
                 # Generic TTS fallback for non-Kokoro models
                 import soundfile as sf  # type: ignore
-                console.print("\n[dim magenta]🎙️ Generating Audio...[/dim magenta]")
+                console.print("\n[dim magenta]Generating Audio...[/dim magenta]")
                 res_tts: Any = self._pipe(user_text)
                 
                 out_path = "/tmp/lmms_audio_response.wav"
@@ -227,7 +227,7 @@ class UniversalPyTorchRuntime:
                 import io
                 import soundfile as sf  # type: ignore
                 
-                console.print("\n[dim magenta]🎧 Transcribing Audio...[/dim magenta]")
+                console.print("\n[dim magenta]Transcribing Audio...[/dim magenta]")
                 b64_data = user_audio.split("base64,")[-1]
                 audio_bytes = base64.b64decode(b64_data)
                 
