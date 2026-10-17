@@ -54,7 +54,7 @@ class AirGuardrails:
     def check_live_vram_headroom(min_headroom_gb: float = 0.40) -> bool:
         """Called before memory-intensive steps to protect against external app memory spikes."""
         try:
-            import torch
+            import torch  # type: ignore
             if torch.cuda.is_available():
                 free_b, total_b = torch.cuda.mem_get_info()
                 free_gb = free_b / (1024**3)

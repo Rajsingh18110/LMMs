@@ -2,8 +2,8 @@ from typing import Optional, Dict, Any
 from lmms.engine.air.loader import ModelProfile
 
 try:
-    import llama_cpp
-    from llama_cpp import Llama, LlamaState
+    import llama_cpp  # type: ignore
+    from llama_cpp import Llama, LlamaState  # type: ignore
 except ImportError:
     llama_cpp = None
     Llama = None
@@ -98,7 +98,7 @@ class AirPager:
             import gc
             gc.collect()
             try:
-                import torch
+                import torch  # type: ignore
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except ImportError:

@@ -151,7 +151,7 @@ class AirLoader:
         
         if vram_total_gb <= 0:
             try:
-                import torch
+                import torch  # type: ignore
                 if torch.cuda.is_available():
                     vram_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                     vram_available_gb = vram_total_gb - (torch.cuda.memory_allocated(0) / (1024**3))
