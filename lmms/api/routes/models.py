@@ -140,9 +140,17 @@ def download_model_task(model_name: str):
 
 @router.post("/load")
 async def load_model(req: LoadRequest):
-    path = req.model_path or os.path.join(MODELS_DIR, f"{req.model_name}.gguf")
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Model file not found")
+    path = req.model_path
+    if not path or not os.path.exists(path):
+        candidate = os.path.join(MODELS_DIR, f"{req.model_name}.gguf")
+        if os.path.exists(candidate):
+            path = candidate
+        elif os.path.exists(os.path.join(MODELS_DIR, req.model_name)):
+            path = os.path.join(MODELS_DIR, req.model_name)
+        elif os.path.exists(req.model_name):
+            path = req.model_name
+        else:
+            raise HTTPException(status_code=404, detail=f"Model file not found: {req.model_name}")
 
     size_gb = os.path.getsize(path) / (1024**3)
 
@@ -151,7 +159,12 @@ async def load_model(req: LoadRequest):
 
     engine_manager.cache.load_model(req.model_name, size_gb)
     runtime = engine_manager.get_runtime(req.model_name)
-    success = runtime.load_model(path)
+    try:
+        success = runtime.load_model(path)
+    except Exception as e:
+        engine_manager.cache.unload_model(req.model_name)
+        raise HTTPException(status_code=500, detail=f"Failed to initialize runtime: {e}")
+
     if not success:
         engine_manager.cache.unload_model(req.model_name)
         raise HTTPException(status_code=500, detail="Failed to initialize runtime")

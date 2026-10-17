@@ -13,7 +13,8 @@ MODELS_DIR = os.path.expanduser("~/.lmms/models")
 
 
 class ChatRequest(BaseModel):
-    model_name: str
+    model_name: Optional[str] = None
+    model: Optional[str] = None
     messages: List[Dict[str, Any]]
     stream: bool = True
     mode: Optional[str] = "deep"
@@ -39,6 +40,15 @@ def fuzzy_match_model(req_name: str, loaded_keys: List[str]) -> Optional[str]:
 
 @router.post("/completions")
 async def chat_completions(req: ChatRequest):
+    req_name = req.model_name or req.model or ""
+    if not req_name:
+        loaded = engine_manager.get_loaded_models()
+        if loaded:
+            req_name = list(loaded.keys())[0]
+        else:
+            raise HTTPException(status_code=400, detail="Missing 'model_name' or 'model' in request.")
+    req.model_name = req_name
+
     runtime = None
     loaded_models = engine_manager.get_loaded_models()
 
@@ -91,10 +101,18 @@ async def chat_completions(req: ChatRequest):
             if not success:
                 raise HTTPException(status_code=404, detail=f"Model '{req.model_name}' could not be loaded into Engine 1 or Engine 2.")
 
+    context = {
+        "messages": req.messages,
+        "model": req.model_name,
+        "model_name": req.model_name,
+        "mode": req.mode,
+        "think": req.think
+    }
+
     if req.stream:
         async def event_generator():
             try:
-                generator = runtime.generate({"messages": req.messages, "mode": req.mode, "think": req.think}, stream=True)
+                generator = runtime.generate(context, stream=True)
                 for chunk in generator:
                     msg = chunk.get("message", chunk)
                     yield f"data: {json.dumps(msg)}\n\n"
@@ -104,5 +122,5 @@ async def chat_completions(req: ChatRequest):
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     else:
-        response = runtime.generate({"messages": req.messages, "mode": req.mode, "think": req.think}, stream=False)
+        response = runtime.generate(context, stream=False)
         return response

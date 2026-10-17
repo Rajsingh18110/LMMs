@@ -43,6 +43,29 @@ def is_server_running() -> Optional[int]:
         return None
 
 
+def get_ai_python_executable() -> str:
+    """Finds the Python interpreter that has AI engine dependencies (llama_cpp, torch) installed."""
+    venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
+    if os.path.exists(venv_py):
+        return venv_py
+
+    try:
+        import llama_cpp
+        return sys.executable
+    except ImportError:
+        pass
+
+    for cand in ["python3.11", "/usr/local/bin/python3.11", "python3.12", "python3.10"]:
+        try:
+            res = subprocess.run([cand, "-c", "import llama_cpp"], capture_output=True)
+            if res.returncode == 0:
+                return cand
+        except Exception:
+            pass
+
+    return sys.executable
+
+
 def start_server_daemon(port: int = 11435, host: str = "0.0.0.0", engine_mode: str = "auto") -> Dict[str, Any]:
     """Starts the LMMs API Server as a detached background process."""
     _ensure_dirs()
@@ -60,9 +83,15 @@ def start_server_daemon(port: int = 11435, host: str = "0.0.0.0", engine_mode: s
     if engine_mode:
         env["LMMS_ENGINE_MODE"] = engine_mode
 
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    curr_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{project_root}:{curr_pp}" if curr_pp else project_root
+
+    python_exe = get_ai_python_executable()
+
     # Run `python -m lmms.api.server` in background detached
     cmd = [
-        sys.executable,
+        python_exe,
         "-m", "lmms.api.server",
         "--host", host,
         "--port", str(port)
