@@ -199,6 +199,8 @@ def cmd_engine_run(args: List[str]) -> None:
 
         elapsed = max(0.01, time.time() - t0)
         sys.stdout.write(f"\n\n{COLOR_DIM}Completed {token_count} tokens in {elapsed:.2f}s ({token_count/elapsed:.1f} tok/s){COLOR_RESET}\n")
+    except KeyboardInterrupt:
+        sys.stdout.write(f"\n\n{COLOR_YELLOW}[Inference interrupted by user]{COLOR_RESET}\n")
     except Exception as e:
         sys.stdout.write(f"\n{COLOR_RED}✖ Generation error:{COLOR_RESET} {e}\n")
     sys.stdout.flush()
@@ -246,12 +248,34 @@ def run_engine(args: Optional[List[str]] = None) -> None:
     if args is None:
         args = sys.argv[1:]
 
+    # Parse and strip --air / -air flags
+    force_air = False
+    clean_args = []
+    for a in args:
+        if a in ["--air", "-air"]:
+            force_air = True
+        else:
+            clean_args.append(a)
+    args = clean_args
+
+    if force_air:
+        engine_manager.set_engine_mode("1")
+
     if not args or args[0] in ["-h", "--help", "help"]:
         print_engine_banner()
         return
 
     subcmd = args[0].lower()
     sub_args = args[1:]
+
+    if subcmd in ["air", "--air", "-air"]:
+        engine_manager.set_engine_mode("1")
+        if sub_args:
+            subcmd = sub_args[0].lower()
+            sub_args = sub_args[1:]
+        else:
+            print_engine_banner()
+            return
 
     if subcmd in ["status", "info"]:
         cmd_engine_status()

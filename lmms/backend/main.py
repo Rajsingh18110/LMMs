@@ -386,7 +386,7 @@ class ObservationProcessor:
 
 
 class ContextManager:
-    def __init__(self, context_limit=4096, reserve=700, safety=200):
+    def __init__(self, context_limit=8192, reserve=700, safety=200):
         self.context_limit = context_limit
         self.reserve = reserve
         self.safety = safety
@@ -1206,9 +1206,9 @@ def run_cli():
             elif base_cmd == "/doctor":
                 render_doctor(console, collect_doctor_report(current_workspace, ENGINE_URL))
 
-            elif base_cmd in ["/pull", "/run", "/stop", "/ps", "/rm", "/list", "/info", "/search"] or base_cmd == "-e" or base_cmd == "-air" or base_cmd == "--air":
-                if base_cmd == "-e":
-                    engine_cmd = parts[1] if len(parts) > 1 else ""
+            elif base_cmd in ["/pull", "/run", "/stop", "/ps", "/rm", "/list", "/info", "/search"] or base_cmd in ["-e", "-air", "--air"]:
+                if base_cmd in ["-e", "-air", "--air"]:
+                    engine_cmd = parts[1] if len(parts) > 1 else "status"
                 elif base_cmd.startswith("/"):
                     engine_cmd = base_cmd[1:]
                 else:
@@ -1463,14 +1463,16 @@ def run_cli():
                     choice = Prompt.ask("Select model number", choices=[str(i+1) for i in range(len(models))])
                     if choice:
                         selected_model = models[int(choice)-1]
-                        console.print(f"[dim]Loading {selected_model}...[/dim]")
                         try:
-                            r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_model})
+                            with console.status(f"[bold cyan]Loading {selected_model}... (Press Ctrl+C to cancel)[/bold cyan]", spinner="dots"):
+                                r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_model}, timeout=180)
                             if r.status_code == 200:
                                 current_model = selected_model
                                 console.print(f"[bold green]✓ Active model switched to: {current_model}[/bold green]")
                             else:
                                 console.print(f"[red]Failed to load: {r.json()}[/red]")
+                        except KeyboardInterrupt:
+                            console.print("\n[yellow]Model loading cancelled by user.[/yellow]")
                         except Exception as e:
                             console.print(f"[red]Error loading model: {e}[/red]")
 
@@ -1661,26 +1663,20 @@ def run_cli():
                         pass
                 elif "nano" in current_model.lower():
                     is_small_model = True
-                is_fast_mode = (current_mode == "/fast")
-                # Bug A Fix: full_prompt should ONLY depend on model capability, not mode.
-                # /fast mode controls verbosity/think-tags, NOT whether agentic tools/autonomy
-                # instructions are included. A capable 8B model in /fast mode still needs them.
-                full_prompt = not is_small_model
+                is_tool_query = should_force_tool_mode(cmd)
+                full_prompt = (not is_small_model) and (is_tool_query or current_mode in ["/code", "/research"])
 
-                if current_mode == "/fast" or not show_thoughts:
-                    if should_force_tool_mode(cmd):
-                        system_prompt += (
-                            "\\n## STRICT DIRECTIVE: CONCISE EXECUTION\\n"
-                            "The user explicitly asked for a tool-driven task, so you may use tools to inspect the real data before answering.\\n"
-                            "Do not output internal thoughts, <think> tags, or 'Let me check...' phrases. If a tool is needed, output a raw JSON tool call in <tool_call> tags.\\n\\n"
-                        )
-                    else:
-                        system_prompt += (
-                            "\\n## DIRECT CHAT MODE\\n"
-                            "This is a normal conversational request. Answer naturally in plain text without forcing tool usage.\\n"
-                            "Do not output internal thoughts, <think> tags, or 'Let me check...' phrases. Output your final answer directly.\\n"
-                            "Only use <tool_call> when the user explicitly asks for browsing, searching, file reading, or command execution.\\n\\n"
-                        )
+                if not is_tool_query:
+                    system_prompt += (
+                        "\n## DIRECT CONVERSATION MODE\n"
+                        "This is a normal conversational request. Answer naturally and concisely in plain text.\n"
+                        "Do not output internal thoughts or verbose disclaimers. Give your response directly.\n\n"
+                    )
+                else:
+                    system_prompt += (
+                        "\n## TOOL-DRIVEN TASK MODE\n"
+                        "The user asked for a tool-driven action. Inspect real data using tools and return results cleanly.\n\n"
+                    )
 
                 if full_prompt:
                     system_prompt += (

@@ -168,7 +168,7 @@ def main():
 
     # Engine commands should be routed directly to the engine
     engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create"]
-    if args[0] in engine_commands or args[0] in ["--air", "-air"]:
+    if any(a in ["--air", "-air"] for a in args) or args[0] in engine_commands:
         launch("engine", args)
         return
 
@@ -183,6 +183,9 @@ def launch(mode, forward_args=None, ensure_engine=True):
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
 
+    from lmms.api.service import get_ai_python_executable
+    py_exe = get_ai_python_executable()
+
     # In a compiled environment, this calls ./lmms-backend or ./lmms-engine
     while True:
         engine_proc = None
@@ -195,17 +198,17 @@ def launch(mode, forward_args=None, ensure_engine=True):
                 if getattr(sys, 'frozen', False):
                     cmd = [sys.executable, "--internal-gui"]
                 else:
-                    cmd = [sys.executable, os.path.abspath(__file__), "--internal-gui"]
+                    cmd = [py_exe, os.path.abspath(__file__), "--internal-gui"]
             elif mode == "tui":
                 if getattr(sys, 'frozen', False):
                     cmd = [sys.executable, "--internal-backend"]
                 else:
-                    cmd = [sys.executable, "-m", "lmms.tui.main"]
+                    cmd = [py_exe, "-m", "lmms.tui.main"]
             else:
                 if getattr(sys, 'frozen', False):
                     cmd = [sys.executable, "--internal-backend"]
                 else:
-                    cmd = [sys.executable, "-m", "lmms.backend.main"]
+                    cmd = [py_exe, "-m", "lmms.backend.main"]
                     
             if forward_args:
                 cmd.extend(forward_args)
@@ -213,7 +216,7 @@ def launch(mode, forward_args=None, ensure_engine=True):
             if getattr(sys, 'frozen', False):
                 cmd = [sys.executable, "--internal-engine"]
             else:
-                cmd = [sys.executable, "-m", "lmms.engine.main"]
+                cmd = [py_exe, "-m", "lmms.engine.main"]
             
             if forward_args:
                 cmd.extend(forward_args)

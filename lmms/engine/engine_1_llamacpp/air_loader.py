@@ -152,8 +152,9 @@ class AirLoader:
 
         # 2. Hardware Profiling (GPU VRAM + System RAM + CPU P-Cores)
         stats = backend_manager.cache.get_stats() if backend_manager and hasattr(backend_manager, "cache") else {}
-        vram_total_gb = stats.get("total_gb", 0.0)
-        vram_available_gb = stats.get("available_gb", 0.0)
+        is_cuda = str(stats.get("device", "")).lower() == "cuda"
+        vram_total_gb = stats.get("total_gb", 0.0) if is_cuda else 0.0
+        vram_available_gb = stats.get("available_gb", 0.0) if is_cuda else 0.0
         
         if vram_total_gb <= 0:
             try:
@@ -161,6 +162,20 @@ class AirLoader:
                 if torch.cuda.is_available():
                     vram_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                     vram_available_gb = vram_total_gb - (torch.cuda.memory_allocated(0) / (1024**3))
+            except Exception:
+                pass
+
+        if vram_total_gb <= 0:
+            try:
+                import subprocess
+                smi_out = subprocess.check_output(
+                    ['nvidia-smi', '--query-gpu=memory.total,memory.free', '--format=csv,nounits,noheader'],
+                    text=True, timeout=4.0
+                ).strip()
+                if smi_out:
+                    parts = smi_out.splitlines()[0].split(',')
+                    vram_total_gb = float(parts[0].strip()) / 1024.0
+                    vram_available_gb = float(parts[1].strip()) / 1024.0
             except Exception:
                 pass
 
@@ -204,6 +219,8 @@ class AirLoader:
         m_working_total = size_gb + kv_total_gb + compute_scratch_gb
 
         # 5. Tri-Regime Selection Architecture
+        total_sys_capacity_gb = v_usable_gb + ram_total_gb - r_reserve_gb
+
         if vram_available_gb > 0 and m_working_gpu <= v_usable_gb:
             # REGIME 1: PURE GPU OFFLOAD
             regime = 1
@@ -215,18 +232,18 @@ class AirLoader:
             expected_decode_tps = min(120.0, 140.0 / max(size_gb, 0.5))
             expected_prefill_tps = expected_decode_tps * 4.0
 
-        elif (v_usable_gb + r_usable_gb) >= m_working_total and vram_available_gb > 0:
-            # REGIME 2: DYNAMIC HYBRID PARTITIONING
+        elif total_sys_capacity_gb >= m_working_total or size_gb <= 35.0:
+            # REGIME 2: DYNAMIC HYBRID PARTITIONING (GPU VRAM + DDR5 System RAM with mmap)
             regime = 2
             v_layer_budget_gb = max(0.0, v_usable_gb - w_embed_gb - compute_scratch_gb)
             s_layer_gpu = w_layer_gb + kv_layer_gb
             
-            allocated_gpu_layers = int(v_layer_budget_gb / s_layer_gpu) if s_layer_gpu > 0 else 0
+            allocated_gpu_layers = int(v_layer_budget_gb / s_layer_gpu) if (s_layer_gpu > 0 and vram_available_gb > 0) else 0
             allocated_gpu_layers = max(0, min(total_layers, allocated_gpu_layers))
             
             optimal_gpu_layers = allocated_gpu_layers
             cpu_layers = total_layers - allocated_gpu_layers
-            gpu_pct = (allocated_gpu_layers / total_layers) * 100.0
+            gpu_pct = (allocated_gpu_layers / total_layers) * 100.0 if total_layers > 0 else 0.0
             cpu_pct = 100.0 - gpu_pct
             
             # Hybrid throughput model: bounded by slowest layer (CPU DDR5 throughput)
