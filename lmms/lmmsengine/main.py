@@ -248,7 +248,7 @@ def main():
         gui.main()
     
     # Engine CLI Commands Bypass
-    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server", "install"]:
+    if clean_args and clean_args[0] in ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create", "server", "-server", "--server", "install", "connect", "remote", "chat"]:
         import requests, json, sys, os
         cmd = clean_args[0]
         try:
@@ -257,7 +257,30 @@ def main():
                 run_installer(clean_args[1:])
                 sys.exit(0)
 
+            elif cmd == "connect":
+                from lmms.cli.commands import cmd_connect
+                cmd_connect(clean_args[1:])
+                sys.exit(0)
+
+            elif cmd == "remote":
+                from lmms.cli.commands import cmd_remote
+                cmd_remote(clean_args[1:])
+                sys.exit(0)
+
+            elif cmd == "chat" or (cmd == "run" and len(clean_args) > 1 and clean_args[1] not in ["--help", "-h"]):
+                from lmms.cli.remote import RemoteManager
+                rm = RemoteManager()
+                if rm.config.get("mode") == "remote" or cmd == "chat":
+                    from lmms.cli.commands import cmd_chat
+                    cmd_chat(clean_args[1:])
+                    sys.exit(0)
+
             elif cmd == "list":
+                from lmms.cli.remote import RemoteManager
+                if RemoteManager().config.get("mode") == "remote":
+                    from lmms.cli.commands import cmd_list
+                    cmd_list(clean_args[1:])
+                    sys.exit(0)
                 from lmms.engine.registry import RegistryManager
                 reg = RegistryManager()
                 reg.list_models()
