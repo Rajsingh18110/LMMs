@@ -63,7 +63,11 @@ def _patched_ask(message, choices=None, default=None, **kwargs):
 Prompt.ask = staticmethod(_patched_ask)
 
 
-ENGINE_URL = "http://localhost:11435"
+try:
+    from lmms.common.discovery import get_engine_url
+    ENGINE_URL = get_engine_url(interactive=False)
+except Exception:
+    ENGINE_URL = os.environ.get("LMMS_ENGINE_URL", "http://localhost:11435")
 
 
 def extract_active_model_from_stats(stats: dict) -> str | None:

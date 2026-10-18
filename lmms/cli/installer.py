@@ -228,9 +228,21 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
         if selected_persona == "individual":
             comp_items = [
                 {
+                    "id": "engine1",
+                    "title": "Engine 1 (Fast & Light)",
+                    "desc": "llama.cpp + AirEngine (GGUF, Low RAM, Port 11435) for Continue.dev/Cursor/Zero-GUI",
+                    "components": ["engine1"],
+                },
+                {
+                    "id": "engine2",
+                    "title": "Engine 2 (PyTorch native)",
+                    "desc": "PyTorch + Transformers + AirLLM (Full Precision safetensors)",
+                    "components": ["engine2"],
+                },
+                {
                     "id": "engine",
-                    "title": "Standalone Engine (llama.cpp + PyTorch + Air)",
-                    "desc": "Pure API daemon (Port 11435) for Continue.dev/Open-WebUI (Zero GUI)",
+                    "title": "Super Engine (All 3)",
+                    "desc": "llama.cpp + PyTorch + AirEngine (Teeno ek sath local machine par)",
                     "components": ["engine"],
                 },
                 {
@@ -245,37 +257,49 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
                     "desc": "Interactive AI Shell + Coding Tools + Auto-linked Central Engine",
                     "components": ["cli", "engine"],
                 },
+                {
+                    "id": "all",
+                    "title": "Complete Suite (All-in-One)",
+                    "desc": "Everything: Desktop GUI, Terminal CLI, Voice & Super Engine",
+                    "components": ["gui", "cli", "engine", "voice"],
+                },
             ]
-            prompt_q = "Kya download karna hai?"
+            prompt_q = "Kya setup karna hai?"
         else:
             comp_items = [
                 {
-                    "id": "host",
-                    "title": "Dedicated Host Server (Engine 2: PyTorch + AirLLM)",
-                    "desc": "High-throughput server node serving remote teams on LAN/VPC",
+                    "id": "super_host",
+                    "title": "Dedicated Enterprise Super Host Server (All 3 Engines)",
+                    "desc": "Teeno ek sath (llama.cpp + PyTorch + AirEngine) serving Team on LAN/VPC 0.0.0.0:11435",
+                    "components": ["engine"],
+                },
+                {
+                    "id": "host_node",
+                    "title": "PyTorch / AirLLM Node Server (Engine 2)",
+                    "desc": "Dedicated heavy cluster inference node (PyTorch + AirLLM)",
                     "components": ["engine2"],
                 },
                 {
                     "id": "client_gui",
-                    "title": "Client GUI (guicode/ + backend)",
-                    "desc": "Desktop Studio client configured to connect to Host IP:port",
+                    "title": "Enterprise Client GUI (Desktop Studio)",
+                    "desc": "Desktop client (guicode/) configured with Local->LAN->Global auto-discovery",
                     "components": ["gui"],
                 },
                 {
                     "id": "client_cli",
-                    "title": "Client CLI (clicode/ + backend)",
-                    "desc": "Terminal Shell client configured to connect to Host IP:port",
+                    "title": "Enterprise Client CLI (Terminal Studio)",
+                    "desc": "Terminal client (clicode/) configured with Local->LAN->Global auto-discovery",
                     "components": ["cli"],
                 },
             ]
-            prompt_q = "Host ya Client?"
+            prompt_q = "Enterprise Role: Host Server ya Remote Client?"
 
         cursor_2 = 0
         while True:
             lines = [
                 f"\n  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· {selected_persona.capitalize()} setup{COLOR_RESET}",
                 f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}",
-                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1/2/3] quick select · [q] cancel{COLOR_RESET}\n",
+                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1-{len(comp_items)}] quick select · [q] cancel{COLOR_RESET}\n",
                 f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}",
             ]
             for i, it in enumerate(comp_items):
@@ -294,15 +318,11 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
             key = read_single_key()
             if key in ("up", "down"):
                 cursor_2 = (cursor_2 + (1 if key == "down" else -1)) % len(comp_items)
-            elif key == "1":
-                cursor_2 = 0
-                break
-            elif key == "2":
-                cursor_2 = 1
-                break
-            elif key == "3":
-                cursor_2 = 2
-                break
+            elif key in ("1", "2", "3", "4", "5", "6"):
+                idx = int(key) - 1
+                if idx < len(comp_items):
+                    cursor_2 = idx
+                    break
             elif key == "enter":
                 break
             elif key in ("quit", "esc"):

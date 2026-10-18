@@ -49,6 +49,9 @@ def run_server(host: str = "0.0.0.0", port: int = 11435, reload: bool = False) -
     print(" Enter this OTP in the dashboard to unlock credentials.")
     print("===========================================================")
 
+    from lmms.common.discovery import start_lan_beacon
+    start_lan_beacon(port=port)
+
     uvicorn.run(app, host=host, port=port, log_level="warning", reload=reload)
 
 

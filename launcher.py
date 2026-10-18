@@ -30,7 +30,16 @@ CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
 
 def ensure_engine_running():
     try:
-        # Ping the engine to see if it's already running
+        from lmms.common.discovery import get_engine_url, is_engine_alive
+        active_url = get_engine_url(interactive=False)
+        if is_engine_alive(active_url, timeout=0.5):
+            return {"status": "connected", "url": active_url}
+        if not ("127.0.0.1" in active_url or "localhost" in active_url):
+            print(f"\033[1;33m[LMMs]\033[0m Configured remote engine at {active_url} is not responding.")
+    except Exception:
+        pass
+
+    try:
         urllib.request.urlopen("http://localhost:11435/webhook", timeout=1)
     except Exception:
         print("Starting LMMs Engine in the background...")
@@ -46,7 +55,7 @@ def ensure_engine_running():
         
         try:
             from lmms.api.service import start_server_daemon
-            res = start_server_daemon()
+            res = start_server_daemon(host="0.0.0.0", port=11435)
             time.sleep(1.0)
             return res
         except Exception:
