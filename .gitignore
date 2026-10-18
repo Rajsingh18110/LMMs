@@ -12,6 +12,8 @@ test_*.py
 !tests/test_diagnostics.py
 !tests/test_review.py
 !tests/test_smart_context.py
+!tests/eval_router.py
+!tests/bench_e2e.py
 patch_*.py
 build_*.py
 download_*.py

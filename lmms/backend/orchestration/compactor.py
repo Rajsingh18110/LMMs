@@ -185,15 +185,44 @@ class ContextCompactor:
         return "Tool completed."
 
     def _build_turn_summary(self, turns: List[Dict[str, Any]]) -> str:
-        """Constructs a deterministic executive summary of historical turns."""
+        """Constructs a deterministic executive summary preserving key facts (paths, URLs, values, decisions)."""
         summary_bullets = []
         for t in turns:
             role = t.get("role", "unknown")
             content = str(t.get("content", "")).strip()
-            # Truncate long content
+
+            # Extract key facts to preserve across compaction
+            paths = re.findall(r"(?:/[\w.-]+)+\.[a-zA-Z0-9]+|\b\w+\.(?:py|json|md|txt|html|js|ts|cpp|h|sh|log)\b", content)
+            urls = re.findall(r"https?://[^\s)\]'\"]+", content)
+            identifiers = re.findall(r"\b(?:port\s+\d+|pid\s+\d+|\d+\.\d+(?:gb|mb|s|ms)?|cve-\d{4}-\d+|#\d+|\b\d{4,5}\b)\b", content, re.IGNORECASE)
+            
+            decisions = []
+            for dec_kw in ["decided", "agreed", "must not", "always use", "never", "selected", "chose", "confirmed", "require"]:
+                if dec_kw in content.lower():
+                    sentences = re.split(r"[.!?\n]", content)
+                    for s in sentences:
+                        if dec_kw in s.lower() and len(s.strip()) > 5:
+                            decisions.append(s.strip()[:100])
+                            break
+
+            facts = []
+            if paths:
+                facts.append(f"files: {', '.join(sorted(set(paths))[:4])}")
+            if urls:
+                facts.append(f"urls: {', '.join(sorted(set(urls))[:2])}")
+            if identifiers:
+                facts.append(f"values: {', '.join(sorted(set(identifiers))[:3])}")
+            if decisions:
+                facts.append(f"decision: '{decisions[0]}'")
+
             snippet = content.replace("\n", " ")[:120]
-            summary_bullets.append(f"- {role.capitalize()}: {snippet}")
-        return "\n".join(summary_bullets[:8])
+            if facts:
+                bullet = f"- {role.capitalize()}: {snippet} [{'; '.join(facts)}]"
+            else:
+                bullet = f"- {role.capitalize()}: {snippet}"
+            summary_bullets.append(bullet)
+
+        return "\n".join(summary_bullets[:12])
 
     def _estimate_tokens(self, messages: List[Dict[str, Any]], model_name: str) -> int:
         if self.token_count_fn:

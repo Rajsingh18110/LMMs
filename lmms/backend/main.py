@@ -1732,60 +1732,60 @@ def run_cli():
                 auto_extract_persona(cmd, current_model)
 
                 # Smart Context & Dynamic Tool Orchestration Pipeline
-                req_t0 = time.time()
-                assembled_ctx, intent_res, selection_res, budget = orchestration_pipeline.prepare_request(
-                    model_name=current_model,
-                    user_query=cmd,
-                    conversation_history=chat_history[-10:],
-                    current_workspace=current_workspace,
-                    permission_level=current_permission_level,
-                    active_mode=current_mode
-                )
+                try:
+                    req_t0 = time.time()
+                    assembled_ctx, intent_res, selection_res, budget = orchestration_pipeline.prepare_request(
+                        model_name=current_model,
+                        user_query=cmd,
+                        conversation_history=chat_history[-10:],
+                        current_workspace=current_workspace,
+                        permission_level=current_permission_level,
+                        active_mode=current_mode
+                    )
 
-                n_ctx = budget.context_limit
-                reserve = budget.output_reserve
-                available_for_input = budget.usable_context
+                    n_ctx = budget.context_limit
+                    reserve = budget.output_reserve
+                    available_for_input = budget.usable_context
 
-                # Multimodal parsing
-                valid_img_paths = []
-                potential_path = cmd.strip("'\" ")
-                if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                    valid_img_paths.append(potential_path)
-                else:
-                    img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
-                    if not img_paths:
-                        img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
-                    for p in img_paths:
-                        if os.path.exists(p.strip()):
-                            valid_img_paths.append(p.strip())
+                    # Multimodal parsing
+                    valid_img_paths = []
+                    potential_path = cmd.strip("'\" ")
+                    if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                        valid_img_paths.append(potential_path)
+                    else:
+                        img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
+                        if not img_paths:
+                            img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
+                        for p in img_paths:
+                            if os.path.exists(p.strip()):
+                                valid_img_paths.append(p.strip())
 
-                user_content = cmd
-                if valid_img_paths:
-                    user_content = [{"type": "text", "text": cmd}]
-                    for p in valid_img_paths:
-                        try:
-                            with open(p, "rb") as img_file:
-                                b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-                        except Exception:
-                            pass
+                    user_content = cmd
+                    if valid_img_paths:
+                        user_content = [{"type": "text", "text": cmd}]
+                        for p in valid_img_paths:
+                            try:
+                                with open(p, "rb") as img_file:
+                                    b64 = base64.b64encode(img_file.read()).decode("utf-8")
+                                    user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+                            except Exception:
+                                pass
 
-                # Assembled context contains minimal base instructions + selected tools + history + user query
-                messages = list(assembled_ctx.messages)
-                if valid_img_paths and messages and messages[-1]["role"] == "user":
-                    messages[-1]["content"] = user_content
+                    # Assembled context contains minimal base instructions + selected tools + history + user query
+                    messages = list(assembled_ctx.messages)
+                    if valid_img_paths and messages and messages[-1]["role"] == "user":
+                        messages[-1]["content"] = user_content
 
-                # Calculate iteration limits based on verified token budget
-                avg_iter_cost = 600
-                max_possible = max(1, budget.remaining_tokens // avg_iter_cost)
-                MIN_ITERATIONS = 5
-                if current_mode == "/fast":
-                    MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
-                else:
-                    MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
+                    # Calculate iteration limits based on verified token budget
+                    avg_iter_cost = 600
+                    max_possible = max(1, budget.remaining_tokens // avg_iter_cost)
+                    MIN_ITERATIONS = 5
+                    if current_mode == "/fast":
+                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
+                    else:
+                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
 
-                iter_count = 0
-
+                    iter_count = 0
                 except Exception as e:
                     console.print(f"[red]Error preparing messages: {e}[/red]")
                     continue

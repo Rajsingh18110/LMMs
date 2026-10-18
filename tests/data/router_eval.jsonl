@@ -1,0 +1,191 @@
+{"query": "hello", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "hi there!", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "hey", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "Good morning!", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "good evening", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "how are you doing today?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "who are you?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "what can you do?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "thank you so much", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "thanks a lot", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "ok great", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "cool, nice!", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "goodbye", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "bye, see you later", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "namaste", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "kaise ho bhai?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "kya haal hai", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "kya chal raha hai", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "what is browser automation?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "explain how web search works conceptually", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "how does an internal combustion engine work?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "tell me about quantum computing", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "describe the theory of relativity", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "define recursion in simple terms", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "why is the sky blue?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "give me an overview of modern machine learning architectures", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "difference between process and thread in operating systems", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "compare TCP and UDP protocols", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what is the capital of France?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "who wrote Hamlet?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what are neural networks and how do they learn?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "explain the solar system", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "Explain how Python decorators work.", "expected_intent": "coding", "expected_tools": false}
+{"query": "what is a closure in javascript?", "expected_intent": "coding", "expected_tools": false}
+{"query": "how does rust ownership and borrowing work?", "expected_intent": "coding", "expected_tools": false}
+{"query": "explain the difference between list and tuple in python", "expected_intent": "coding", "expected_tools": false}
+{"query": "how do generators work in python?", "expected_intent": "coding", "expected_tools": false}
+{"query": "explain asyncio event loop in python", "expected_intent": "coding", "expected_tools": false}
+{"query": "what is method resolution order (MRO) in python?", "expected_intent": "coding", "expected_tools": false}
+{"query": "how does quicksort work with code example?", "expected_intent": "coding", "expected_tools": false}
+{"query": "explain binary search algorithm", "expected_intent": "coding", "expected_tools": false}
+{"query": "how to implement a singleton pattern in python?", "expected_intent": "coding", "expected_tools": false}
+{"query": "what is the difference between synchronous and asynchronous programming?", "expected_intent": "coding", "expected_tools": false}
+{"query": "explain typescript interface vs type alias", "expected_intent": "coding", "expected_tools": false}
+{"query": "my script fails, check why and fix it", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "fix the bug in this project", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "debug the syntax error in main.py in this repo", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "refactor the authentication handler in this repo", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "write unit tests for the auth module in this project", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "implement error handling for the router in this workspace", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "check the code in src/ and optimize it", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "bhai script me error aa raha hai theek karo", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "code me bug hai check aur fix karo", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "read file lmms/backend/main.py", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "cat package.json", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "inspect contents of README.md", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "list files in src/ directory", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "list all files in this repo", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "git status", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "git diff", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "git log -n 5", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "show git diff on main branch", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "delete file temp_cache.log", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "edit file config.json to update port", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "create file test_output.txt with hello world", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "save contents of report into summary.md", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "ls -la", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "status", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "diff", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "ye file open karo aur check karo", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "folder me kya hai dikhao", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "fiel main.py ko read karo", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "opn file launcher.py", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "chekc git status", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "Search for the latest Python documentation about a feature.", "expected_intent": "web_search", "expected_tools": true}
+{"query": "search the web for fastapi release notes", "expected_intent": "web_search", "expected_tools": true}
+{"query": "find online what is the current price of bitcoin", "expected_intent": "web_search", "expected_tools": true}
+{"query": "look up online the documentation for pydantic v2", "expected_intent": "web_search", "expected_tools": true}
+{"query": "search online for weather in San Francisco", "expected_intent": "web_search", "expected_tools": true}
+{"query": "who won the recent super bowl? search online", "expected_intent": "web_search", "expected_tools": true}
+{"query": "latest news on artificial intelligence models", "expected_intent": "web_search", "expected_tools": true}
+{"query": "latest release of llama.cpp", "expected_intent": "web_search", "expected_tools": true}
+{"query": "find latest documentation for PyTorch 2.5", "expected_intent": "web_search", "expected_tools": true}
+{"query": "google pe search karo latest AI news", "expected_intent": "web_search", "expected_tools": true}
+{"query": "net pe dhundo python documentation", "expected_intent": "web_search", "expected_tools": true}
+{"query": "kuch naya information search karo online", "expected_intent": "web_search", "expected_tools": true}
+{"query": "serach latest news on tech", "expected_intent": "web_search", "expected_tools": true}
+{"query": "sreach online for documentation", "expected_intent": "web_search", "expected_tools": true}
+{"query": "search for documentation", "expected_intent": "web_search", "expected_tools": true}
+{"query": "Open this website, navigate to its documentation, and summarize a specified page.", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "open python.org and tell me the headline", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "open https://news.ycombinator.com and list top stories", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "navigate to https://github.com/trending and extract top repos", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "browse to www.wikipedia.org and search for Alan Turing", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "visit https://docs.python.org and scrape the tutorial page", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "click on the login button on the webpage", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "fill the username field and submit the form", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "take a screenshot of the current website", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "get interactive dom of the opened page", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "scrape the live dom of this website", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "website kholo browser me aur dekho", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "browser me open karo https://example.com", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "opn https://python.org in brower", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "plot cpu usage over time in terminal", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "plot memory consumption using plotext", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "generate a bar chart of sales data in terminal", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "create a terminal graph showing latency trends", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "visualize distribution of tokens with a terminal plot", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "chart the error rate across time", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "plot a histogram of inference times", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "terminal me graph banao latency ka", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "plot chart of response times", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "Research three solutions, compare their capabilities, and generate a report.", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "investigate different vector databases, compare performance, and synthesize a summary", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "compare llama.cpp vs vllm vs ollama and write a comprehensive report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "analyze three open-source models, compare their benchmark scores, and compile a report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "research security vulnerabilities in log4j, compare mitigations, and prepare a findings report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "multi-step audit of repository dependencies and produce a security report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "research solutions for caching, compare redis vs memcached, and generate a report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "repot banao teen models ko compare karke", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "cve-2024-3094 vulnerability details", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "lookup cve-2023-4863 details and affected versions", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "kali tool nmap options and syntax", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "wireshark filter for dns queries", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "metasploit module for smb vulnerability lookup", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "sqlmap commands reference and cheatsheet", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "nmap options explain karo", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "yes", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "should I delete this file?"}, {"role": "assistant", "content": "Do you want to proceed with deleting temp.log?"}]}
+{"query": "go ahead", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "search for documentation"}, {"role": "assistant", "content": "Found 3 results. Should I fetch the page content?"}]}
+{"query": "proceed", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "open https://python.org"}, {"role": "assistant", "content": "Page opened. Proceed with extracting links?"}]}
+{"query": "next step", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "execute the patch"}, {"role": "assistant", "content": "Step 1 complete. Ready for next step."}]}
+{"query": "continue", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "read logs"}, {"role": "assistant", "content": "Displaying first 100 lines. Continue?"}]}
+{"query": "do it", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "run the test suite"}, {"role": "assistant", "content": "Ready to execute pytest."}]}
+{"query": "confirm", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "save file"}, {"role": "assistant", "content": "Please confirm write to disk."}]}
+{"query": "now click on the login link", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "open website"}, {"role": "assistant", "content": "Website loaded."}]}
+{"query": "now read that file", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "list files"}, {"role": "assistant", "content": "Found main.py and config.py."}]}
+{"query": "ha karo", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "kya mai ye file delete karu?"}, {"role": "assistant", "content": "Confirm delete?"}]}
+{"query": "aage badho", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "check script"}, {"role": "assistant", "content": "First step done."}]}
+{"query": "check this", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "run it", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "fix it", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "open it", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "find where user auth is defined", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "search for auth tokens in the codebase", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "install dependencies", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "send an email to team@example.com", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "delete the temporary files", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "create a new python file named math_utils.py", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "edit settings to enable debug mode", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "logs", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "help", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "who am i talking to?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "are you an ai?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "good night", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "yo", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "hola", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "great job, thanks!", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "what is git status?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what does git diff do?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "explain how web scrapers extract data", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what is an exploit database?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "how do terminal plotting libraries work?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what is the difference between grep and find?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "why do programmers use virtual environments?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "tell me about the history of linux", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "check git status right now", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "find all .py files in tests", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "grep for TODO in the codebase", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "read lines 50 to 100 of main.py", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "search online for latest rust 2024 edition features", "expected_intent": "web_search", "expected_tools": true}
+{"query": "open https://google.com in browser and search for weather", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "visit https://en.wikipedia.org/wiki/Main_Page and click today featured article", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "create a terminal line chart showing 10 data points", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "investigate three database alternatives, compare them, and generate a report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "cve-2021-44228 log4shell details lookup", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "check disk space in terminal", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "run python script test.py", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "terminal chalao aur ls karo", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "naya directory banao scratch naam se", "expected_intent": "workspace_file_ops", "expected_tools": true}
+{"query": "ye code debug karo aur fix karo", "expected_intent": "coding", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "google par search karo best coding practices", "expected_intent": "web_search", "expected_tools": true}
+{"query": "brower me wikipedia kholo", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "plotext se chart dikhao", "expected_intent": "data_analysis", "expected_tools": true}
+{"query": "cve details search karo", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "theek hai aage badho", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "check status"}, {"role": "assistant", "content": "Status is clean. Next step?"}]}
+{"query": "haan proceed karo", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "run test"}, {"role": "assistant", "content": "Ready to run."}]}
+{"query": "yes please proceed", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "edit file"}, {"role": "assistant", "content": "Apply edit?"}]}
+{"query": "sure, go ahead", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "patch file"}, {"role": "assistant", "content": "Ready to patch."}]}
+{"query": "step 2 execute karo", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "step 1 done"}, {"role": "assistant", "content": "Step 1 complete."}]}
+{"query": "now summarize that", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "fetch web page"}, {"role": "assistant", "content": "Fetched 5000 chars."}]}
+{"query": "what about that other file?", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "inspect main.py"}, {"role": "assistant", "content": "main.py inspected."}]}

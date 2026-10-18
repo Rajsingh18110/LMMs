@@ -177,3 +177,99 @@ class ContextBuilder:
                 "user_query": user_query
             }
         )
+
+    def assemble_legacy(
+        self,
+        model_name: str,
+        user_query: str,
+        all_tools: List[DynamicToolDefinition],
+        conversation_history: List[Dict[str, Any]],
+        current_workspace: Optional[str] = None,
+        active_mode: str = "/fast"
+    ) -> AssembledContext:
+        """
+        Reconstructs the original monolithic prompt (4,139 tokens) for A/B benchmarking.
+        Injects all 22 tool schemas, few-shot browser examples, persona rules, and search guidelines.
+        """
+        base_prompt = (
+            f"You are {model_name}, an AI assistant running inside LMMs.\n"
+            "Respond naturally, concisely, and directly.\n"
+        )
+        if current_workspace and current_workspace != "None":
+            base_prompt += f"\nActive Workspace Directory: {current_workspace}\n"
+
+        tool_schemas = self.format_tool_schemas(all_tools)
+
+        few_shots = (
+            "## Few-Shot Examples (How to use tools)\n"
+            "Example 1 - Launch Desktop App:\n"
+            "User: open calculator / launch chrome\n"
+            "Assistant: <tool_call>{\"tool\": \"app.launch\", \"kwargs\": {\"app_name_or_target\": \"calculator\"}}</tool_call>\n"
+            "Observation: [SUCCESS] Launched 'gnome-calculator' successfully (PID: 12345).\n"
+            "Assistant: I have launched the calculator application for you.\n\n"
+            "Example 2 - Live Web Navigation, DOM Elements & Form Login:\n"
+            "User: open github and login\n"
+            "Assistant: <tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://github.com/login\", \"headless\": False}}</tool_call>\n"
+            "Observation: [Page Loaded: Sign in to GitHub]\n[ID 1] <input name='login' type='text'>\n[ID 2] <input name='password' type='password'>\n[ID 3] <input type='submit' value='Sign in'>\n"
+            "Assistant: <tool_call>{\"tool\": \"browser.fill_form\", \"kwargs\": {\"fields\": {\"1\": \"user@example.com\", \"2\": \"secretpassword\"}}}</tool_call>\n"
+            "Observation: [FILL_SUCCESS] Filled fields: [data-lmms-id='1'], [data-lmms-id='2'].\n"
+            "Assistant: <tool_call>{\"tool\": \"browser.click_element\", \"kwargs\": {\"selector\": \"3\"}}</tool_call>\n"
+            "Observation: [CLICK_SUCCESS] Clicked '3'.\n"
+            "Assistant: I have filled in your credentials and clicked Sign In.\n\n"
+            "Example 3 - Send Desktop Notification or Telegram Alert:\n"
+            "User: notify me that the build finished\n"
+            "Assistant: <tool_call>{\"tool\": \"message.send\", \"kwargs\": {\"platform\": \"desktop\", \"message\": \"Build completed successfully!\", \"recipient\": \"Build Alert\"}}</tool_call>\n"
+            "Observation: [SUCCESS] Desktop notification displayed: 'Build Alert: Build completed successfully!'.\n"
+            "Assistant: I have sent a desktop notification to alert you.\n\n"
+            "Example 4 - Web Search & Info Extraction:\n"
+            "User: search what is current gold price\n"
+            "Assistant: <tool_call>{\"tool\": \"web_search\", \"kwargs\": {\"query\": \"current gold price\"}}</tool_call>\n"
+            "Observation: [Search Results...]\n"
+            "Assistant: The current gold price is...\n\n"
+        )
+
+        persona_rules = (
+            "\n## Principal Software Engineer Persona (Claude Code Killer)\n"
+            "You are an elite, autonomous software engineer capable of full-repo management. Do not just act like a chatbot; act like a lead developer.\n"
+            "1. **Full Autonomy**: If asked to build a project, clone repositories (`git clone`), compile binaries, and install dependencies autonomously using `terminal.run`.\n"
+            "2. **Architectural Understanding**: Before writing code, map out the workspace using AST parsing or grep.\n"
+            "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First write a test using `files.write`, run it with `terminal.run`, fix code, and run it until passing.\n"
+            "4. **Iterative Loops**: Never ask user to test your code if you can test it yourself. Loop your tools until 100% done.\n"
+            "5. **CRITICAL ANTI-ADVICE RULE**: NEVER write instructions for the user to run manually. If you know what command needs to run, run it yourself.\n"
+            "6. **Error Recovery**: If a command fails with a missing module, immediately install it and retry.\n"
+            "7. **Docker awareness**: ALWAYS prefer docker compose over docker-compose.\n"
+            "8. **Python projects**: Check for requirements.txt and run pip install before starting.\n"
+        )
+
+        search_rules = (
+            "\n## Anti-Hallucination & Web Search Rules\n"
+            "1. DO NOT GUESS OR HALLUCINATE numbers, prices, APIs, or facts. You MUST use tools to find them.\n"
+            "2. If `web_search` returns summaries that DO NOT contain exact numbers, use `browser.open_url` to read full page content.\n"
+        )
+
+        full_system = f"{base_prompt}\n\n{tool_schemas}\n\n{few_shots}\n\n{persona_rules}\n\n{search_rules}"
+
+        final_messages: List[Dict[str, Any]] = [{"role": "system", "content": full_system}]
+        for msg in conversation_history:
+            if msg.get("role") != "system":
+                final_messages.append(dict(msg))
+        final_messages.append({"role": "user", "content": user_query})
+
+        import hashlib
+        prefix_hash = hashlib.sha256(full_system.encode("utf-8")).hexdigest()
+
+        return AssembledContext(
+            messages=final_messages,
+            base_system_prompt=base_prompt,
+            task_instructions=few_shots + persona_rules + search_rules,
+            tool_schemas_str=tool_schemas,
+            selected_tool_ids=[t.id for t in all_tools],
+            prefix_hash=prefix_hash,
+            section_breakdown={
+                "base_prompt": base_prompt,
+                "workspace": current_workspace or "",
+                "task_instructions": few_shots + persona_rules + search_rules,
+                "tool_schemas": tool_schemas,
+                "user_query": user_query
+            }
+        )

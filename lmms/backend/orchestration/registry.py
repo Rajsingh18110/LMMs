@@ -493,3 +493,30 @@ class ToolRegistry:
                 }
             )
         )
+
+        # 9. Dynamic Discovery Meta-Tool
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="discover_additional_tool",
+                    name="Discover Additional Tool",
+                    category="meta",
+                    summary="Request and dynamically load an additional tool capability into your active context at runtime.",
+                    tags=["meta", "discover", "tools", "capability"],
+                    risk_level="low",
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "capability": {
+                            "type": "string",
+                            "description": "Name or capability of the missing tool required (e.g., 'browser.open_url', 'web_search', 'files.read', 'terminal.run')."
+                        }
+                    },
+                    "required": ["capability"]
+                }
+            ),
+            aliases=["discover_tool", "request_tool", "load_tool"]
+        )
+

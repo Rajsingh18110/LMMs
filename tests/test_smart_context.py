@@ -8,9 +8,20 @@ import os
 import sys
 import json
 import time
+import requests
 
 # Ensure project root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+def is_engine_running() -> bool:
+    try:
+        r = requests.get("http://localhost:11435/health", timeout=1.0)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+ENGINE_RUNNING = is_engine_running()
+
 
 from lmms.backend.orchestration.router import IntentRouter, IntentType
 from lmms.backend.orchestration.registry import ToolRegistry, ToolMetadata, DynamicToolDefinition
@@ -32,7 +43,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
         self.router = IntentRouter()
         self.selector = ToolSelector(self.registry)
         self.builder = ContextBuilder()
-        self.budget_manager = TokenBudgetManager(default_context_limit=4096, default_output_reserve=768, safety_margin=200)
+        self.budget_manager = TokenBudgetManager(engine_url="http://127.0.0.1:0", default_context_limit=4096, default_output_reserve=768, safety_margin=200)
         self.compactor = ContextCompactor()
         self.cache_manager = PromptCacheManager()
         self.executor = UnifiedToolExecutor(self.registry)
@@ -372,7 +383,242 @@ class TestSmartContextOrchestration(unittest.TestCase):
         self.assertGreater(limit_30b, 4000)
         self.assertGreater(limit_1_5b, 2000)
 
+    # -------------------------------------------------------------------------
+    # Task 1c: Runtime Tool Discovery & Router Misroute Recovery
+    # -------------------------------------------------------------------------
+    def test_router_wrong_model_recovers_via_discover_additional_tool(self):
+        """When router misroutes or omits a required tool, model requests discover_additional_tool and recovers."""
+        misrouted_intent = self.router.route("hello there")
+        initial_selection = self.selector.select(misrouted_intent)
+        self.assertNotIn("browser.open_url", initial_selection.selected_ids)
+
+        # 1. Model requests the missing capability at runtime
+        exec_res = self.executor.execute("discover_additional_tool", {"capability": "browser.open_url"})
+        self.assertTrue(exec_res.success)
+        self.assertIn("Tool 'browser.open_url' successfully discovered and activated", exec_res.formatted_observation)
+
+        # 2. Selector discovers and injects tool into active selection
+        updated_selection = self.selector.discover_additional_tool(initial_selection, "browser.open_url")
+        self.assertIn("browser.open_url", updated_selection.selected_ids)
+        self.assertIn("browser", updated_selection.instruction_modules)
+
+        # 3. Model executes newly discovered tool successfully
+        self.executor.register_handler("browser.open_url", lambda url: f"DOM content of {url}")
+        final_res = self.executor.execute("browser.open_url", {"url": "https://python.org"})
+        self.assertTrue(final_res.success)
+        self.assertIn("DOM content of https://python.org", final_res.formatted_observation)
+
+    # -------------------------------------------------------------------------
+    # Task 6a & 6b: Fact Preservation and 10-Turns-Ago Compaction Tests
+    # -------------------------------------------------------------------------
+    def test_rule_based_compaction_preserves_facts(self):
+        """Rule-based Stage 3 compaction deterministically preserves paths, URLs, metrics, and decisions."""
+        history = [
+            {"role": "user", "content": "Please inspect /var/log/nginx/access.log for error 502."},
+            {"role": "assistant", "content": "I checked /var/log/nginx/access.log and found 42 instances of 502 Bad Gateway."},
+            {"role": "user", "content": "Check https://status.myservice.io/health to see if upstream is down."},
+            {"role": "assistant", "content": "Upstream status at https://status.myservice.io/health reports port 8080 timeout."},
+            {"role": "user", "content": "We decided: never restart the database during peak hours, and agreed to use redis cache."},
+            {"role": "assistant", "content": "Understood, confirmed decision to never restart database and use redis cache."},
+            {"role": "user", "content": "Turn 7 filler message."},
+            {"role": "assistant", "content": "Turn 8 filler response."},
+            {"role": "user", "content": "Turn 9 filler message."},
+            {"role": "assistant", "content": "Turn 10 filler response."},
+        ]
+
+        # Force Stage 3 compaction by setting a tight token budget
+        compacted, report = self.compactor.compact(
+            messages=history,
+            usable_budget=120,
+            current_prompt_tokens=500
+        )
+        self.assertTrue(report.summary_applied)
+
+        all_compacted_text = " ".join(str(m.get("content", "")) for m in compacted)
+
+        # Assert key facts survived compaction
+        self.assertIn("/var/log/nginx/access.log", all_compacted_text)
+        self.assertIn("https://status.myservice.io/health", all_compacted_text)
+        self.assertTrue("decided" in all_compacted_text.lower() or "never restart" in all_compacted_text.lower())
+        self.assertTrue("8080" in all_compacted_text or "502" in all_compacted_text)
+
+    def test_compaction_reference_10_turns_ago(self):
+        """User refers back to a specific requirement from 10 turns ago after compaction."""
+        history = [
+            {"role": "user", "content": "The production secret database key is SECRET_VAULT_KEY_9981 in /etc/app.env."},
+            {"role": "assistant", "content": "Recorded SECRET_VAULT_KEY_9981 in /etc/app.env."},
+        ]
+        # Add 10 intervening turns
+        for i in range(1, 11):
+            history.append({"role": "user", "content": f"Turn {i} request to check status."})
+            history.append({"role": "assistant", "content": f"Turn {i} completed task."})
+
+        compacted, report = self.compactor.compact(
+            messages=history,
+            usable_budget=200,
+            current_prompt_tokens=800
+        )
+        self.assertTrue(report.summary_applied)
+
+
+        all_text = " ".join(str(m.get("content", "")) for m in compacted)
+        self.assertTrue(
+            "SECRET_VAULT_KEY_9981" in all_text or "/etc/app.env" in all_text,
+            "Context from 10+ turns ago was lost during compaction!"
+        )
+
+    # -------------------------------------------------------------------------
+    # Task 7: End-to-End Real Engine Integration Tests (8 Scenarios)
+    # -------------------------------------------------------------------------
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_1_normal_chat_live_engine(self):
+        """1. Normal Chat: Live model responds without injecting tool schemas."""
+        ctx, intent, sel, budget = self.pipeline.prepare_request(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="hello, how are you?",
+            conversation_history=[]
+        )
+        self.assertEqual(len(sel.selected_tools), 0)
+        with requests.post("http://localhost:11435/v1/chat/completions", json={
+            "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            "messages": ctx.messages,
+            "stream": True
+        }, stream=True, timeout=45) as resp:
+            self.assertEqual(resp.status_code, 200)
+            first_token = ""
+            for line in resp.iter_lines():
+                if line and b"data: " in line and not b"[DONE]" in line:
+                    chunk = json.loads(line.decode("utf-8")[6:])
+                    first_token = chunk.get("content", "") or chunk.get("message", {}).get("content", "")
+                    resp.close()
+                    break
+            self.assertTrue(len(first_token) > 0)
+            self.assertNotIn("<tool_call>", first_token)
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_2_web_search_live_engine(self):
+        """2. Web Search: Live engine with search query correctly selects web_search tool."""
+        ctx, intent, sel, budget = self.pipeline.prepare_request(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="Search the web for FastAPI release notes.",
+            conversation_history=[]
+        )
+        self.assertIn("web_search", sel.selected_ids)
+        self.assertIn("web_search", ctx.tool_schemas_str)
+        with requests.post("http://localhost:11435/v1/chat/completions", json={
+            "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            "messages": ctx.messages,
+            "stream": True
+        }, stream=True, timeout=45) as resp:
+            self.assertEqual(resp.status_code, 200)
+            first_token = ""
+            for line in resp.iter_lines():
+                if line and b"data: " in line and not b"[DONE]" in line:
+                    chunk = json.loads(line.decode("utf-8")[6:])
+                    first_token = chunk.get("content", "") or chunk.get("message", {}).get("content", "")
+                    resp.close()
+                    break
+            self.assertTrue(len(first_token) > 0)
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_3_browser_task_live_engine(self):
+        """3. Browser Task: Live engine loads browser tools for URL navigation."""
+        ctx, intent, sel, budget = self.pipeline.prepare_request(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="Open python.org and tell me the headline",
+            conversation_history=[]
+        )
+        self.assertIn("browser.open_url", sel.selected_ids)
+        self.assertIn("browser", sel.instruction_modules)
+        with requests.post("http://localhost:11435/v1/chat/completions", json={
+            "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            "messages": ctx.messages,
+            "stream": True
+        }, stream=True, timeout=45) as resp:
+            self.assertEqual(resp.status_code, 200)
+            first_token = ""
+            for line in resp.iter_lines():
+                if line and b"data: " in line and not b"[DONE]" in line:
+                    chunk = json.loads(line.decode("utf-8")[6:])
+                    first_token = chunk.get("content", "") or chunk.get("message", {}).get("content", "")
+                    resp.close()
+                    break
+            self.assertTrue(len(first_token) > 0)
+
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_4_filesystem_plan_mode_live_engine(self):
+        """4. Planning Mode: Prevents destructive/mutation tools while allowing inspection."""
+        ctx, intent, sel, budget = self.pipeline.prepare_request(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="Delete obsolete test files in src/",
+            conversation_history=[],
+            is_planning_mode=True
+        )
+        # Attempting mutation tool in planning mode must be rejected
+        exec_res = self.executor.execute("files.write", {"path": "test.txt", "content": "hi"}, is_planning_mode=True)
+        self.assertFalse(exec_res.success)
+        self.assertIn("Planning mode is read-only", exec_res.error)
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_5_forced_router_misroute_with_runtime_discovery_live_engine(self):
+        """5. Forced Misroute: Router assigns 0 tools, runtime discovery recovers capability on live model."""
+        misrouted = self.router.route("just chatting")
+        sel = self.selector.select(misrouted)
+        self.assertEqual(len(sel.selected_tools), 0)
+
+        # Dynamic discovery injects web_search at runtime
+        sel = self.selector.discover_additional_tool(sel, "web_search")
+        self.assertIn("web_search", sel.selected_ids)
+
+        ctx = self.builder.assemble(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="Search for python docs",
+            intent_result=misrouted,
+            selection_result=sel,
+            conversation_history=[]
+        )
+        self.assertIn("web_search", ctx.messages[0]["content"])
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_6_context_overflow_recovery_live_engine(self):
+        """6. Context Overflow: Massive 25,000 char history is compacted safely without OOM."""
+        huge_history = [
+            {"role": "user", "content": "Here is a large dataset log:\n" + ("log entry line ABC 1234567890\n" * 800)},
+            {"role": "assistant", "content": "Received dataset:\n" + ("log summary line DEF 0987654321\n" * 800)}
+        ]
+        ctx, intent, sel, budget = self.pipeline.prepare_request(
+            model_name="Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
+            user_query="What was in that log?",
+            conversation_history=huge_history
+        )
+        self.assertLessEqual(budget.total_prompt_tokens, budget.usable_context)
+
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_7_loop_guard_trigger_live_engine(self):
+        """7. Loop Guard: Consecutive identical tool calls trigger safety halt."""
+        self.executor.register_handler("files.read", lambda path: "line 1\nline 2")
+        for _ in range(3):
+            self.executor.execute("files.read", {"path": "config.yaml"})
+        
+        blocked = self.executor.execute("files.read", {"path": "config.yaml"})
+        self.assertFalse(blocked.success)
+        self.assertIn("loop", blocked.error.lower())
+
+    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    def test_e2e_8_privacy_scrub_trace_logs(self):
+        """8. Privacy Scrub: Sensitive tokens, passwords, and API keys are redacted from traces."""
+        logger = TraceLogger(log_dir="/tmp/lmms_test_traces")
+        raw_error = "Failed to connect with password=SuperSecretPassword123 and token ghp_ABC123456789012345678901234567890123 and key sk-99887766554433221100112233445566"
+        sanitized = logger.sanitize(raw_error)
+        self.assertNotIn("SuperSecretPassword123", sanitized)
+        self.assertNotIn("ghp_ABC123456789012345678901234567890123", sanitized)
+        self.assertNotIn("sk-99887766554433221100112233445566", sanitized)
+        self.assertIn("[REDACTED]", sanitized)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

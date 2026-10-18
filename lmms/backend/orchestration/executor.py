@@ -186,6 +186,40 @@ class UnifiedToolExecutor:
         # 5. Execute handler
         handler = self._custom_handlers.get(tool.id) or tool.callback
         if not handler:
+            if tool.id == "discover_additional_tool":
+                cap = kwargs.get("capability") or kwargs.get("tool_name") or ""
+                discovered = self.registry.get(cap)
+                if not discovered:
+                    for t in self.registry._tools.values():
+                        if cap.lower() in t.id.lower() or any(cap.lower() in tag.lower() for tag in t.metadata.tags):
+                            discovered = t
+                            break
+                duration_ms = int((time.time() - t0) * 1000)
+                if discovered:
+                    obs = (
+                        f"<observation>\n[TOOL_DISCOVERED] Tool '{discovered.id}' successfully discovered and activated.\n"
+                        f"Summary: {discovered.metadata.summary}\n"
+                        f"Parameters: {json.dumps(discovered.parameters)}\n"
+                        f"You may now invoke '{discovered.id}' in your next step.\n</observation>"
+                    )
+                    return ExecutionResult(
+                        tool_name=tool.id,
+                        success=True,
+                        data={"tool_id": discovered.id, "parameters": discovered.parameters},
+                        duration_ms=duration_ms,
+                        formatted_observation=obs
+                    )
+                else:
+                    obs = f"<observation>\n[ERROR] Capability '{cap}' not found among registered tools.\n</observation>"
+                    return ExecutionResult(
+                        tool_name=tool.id,
+                        success=False,
+                        data=None,
+                        error=f"Capability '{cap}' not found",
+                        duration_ms=duration_ms,
+                        formatted_observation=obs
+                    )
+
             duration_ms = int((time.time() - t0) * 1000)
             obs = f"<observation>\n[ERROR] No execution handler attached for tool '{tool.id}'.\n</observation>"
             return ExecutionResult(
@@ -196,6 +230,7 @@ class UnifiedToolExecutor:
                 duration_ms=duration_ms,
                 formatted_observation=obs
             )
+
 
         data = None
         error_msg = ""

@@ -4,6 +4,7 @@ Unifies Intent Routing, Dynamic Tool Injection, Context Assembly,
 Precise Budgeting, Cache Telemetry, Compaction, and Execution.
 """
 
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -66,12 +67,16 @@ class OrchestrationPipeline:
         current_workspace: Optional[str] = None,
         permission_level: str = "medium",
         active_mode: str = "/fast",
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        is_planning_mode: bool = False
     ) -> tuple[AssembledContext, IntentResult, SelectionResult, BudgetBreakdown]:
         """
         Runs Intent Routing -> Dynamic Tool Selection -> Context Assembly -> Budget Enforcement.
         Guarantees that normal chat injects 0 tools, and prompt does not overflow the model context.
         """
+        if is_planning_mode and active_mode == "/fast":
+            active_mode = "/plan"
+
         # 1. Intent Routing (Fast deterministic check)
         t_route_start = time.time()
         intent_res = self.router.route(
@@ -82,25 +87,48 @@ class OrchestrationPipeline:
         )
         routing_ms = int((time.time() - t_route_start) * 1000)
 
-        # 2. Dynamic Tool Selection (Inject only sufficient tools)
-        selection_res = self.selector.select(
-            intent_result=intent_res,
-            current_workspace=current_workspace,
-            permission_level=permission_level
-        )
 
-        # 3. Context Assembly (Modular assembly without bloating)
-        t_asm_start = time.time()
-        assembled_ctx = self.builder.assemble(
-            model_name=model_name,
-            user_query=user_query,
-            intent_result=intent_res,
-            selection_result=selection_res,
-            conversation_history=conversation_history,
-            current_workspace=current_workspace,
-            active_mode=active_mode
-        )
-        assembly_ms = int((time.time() - t_asm_start) * 1000)
+        # 2. Tool Selection & Context Assembly
+        if os.environ.get("LMMS_LEGACY_PROMPT") == "1":
+            all_tools = list(self.registry._tools.values())
+            selection_res = SelectionResult(
+                selected_tools=all_tools,
+                selected_ids=[t.id for t in all_tools],
+                rejected_ids=[],
+                rationale={"legacy": "LMMS_LEGACY_PROMPT=1 forced all tools"},
+                total_estimated_tokens=sum(t.metadata.estimated_tokens for t in all_tools),
+                instruction_modules=set(["browser", "files", "search", "terminal"])
+            )
+            t_asm_start = time.time()
+            assembled_ctx = self.builder.assemble_legacy(
+                model_name=model_name,
+                user_query=user_query,
+                all_tools=all_tools,
+                conversation_history=conversation_history,
+                current_workspace=current_workspace,
+                active_mode=active_mode
+            )
+            assembly_ms = int((time.time() - t_asm_start) * 1000)
+        else:
+            # Dynamic Tool Selection (Inject only sufficient tools)
+            selection_res = self.selector.select(
+                intent_result=intent_res,
+                current_workspace=current_workspace,
+                permission_level=permission_level
+            )
+
+            # Context Assembly (Modular assembly without bloating)
+            t_asm_start = time.time()
+            assembled_ctx = self.builder.assemble(
+                model_name=model_name,
+                user_query=user_query,
+                intent_result=intent_res,
+                selection_result=selection_res,
+                conversation_history=conversation_history,
+                current_workspace=current_workspace,
+                active_mode=active_mode
+            )
+            assembly_ms = int((time.time() - t_asm_start) * 1000)
 
         # 4. Token Budget Calculation & Pre-inference Protection
         budget = self.budget_manager.calculate_budget(
