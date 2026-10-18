@@ -98,8 +98,26 @@ class AirLoader:
     def _analyze(self, model_name: str, target_context: int = 4096) -> Optional[ModelProfile]:
         path = os.path.join(self.models_dir, f"{model_name}.gguf")
         if not os.path.exists(path):
+            manifest_candidate = os.path.expanduser(f"~/.lmms/manifests/{model_name}.json")
+            if os.path.exists(manifest_candidate):
+                try:
+                    import json
+                    with open(manifest_candidate, "r") as mf:
+                        base = json.load(mf).get("base_model")
+                        if base:
+                            cand = os.path.join(self.models_dir, base if base.endswith(".gguf") else f"{base}.gguf")
+                            if os.path.exists(cand):
+                                path = cand
+                            elif os.path.exists(os.path.join(self.models_dir, base)):
+                                path = os.path.join(self.models_dir, base)
+                except Exception:
+                    pass
+
+        if not os.path.exists(path):
             if os.path.exists(model_name):
                 path = model_name
+            elif os.path.exists(os.path.join(self.models_dir, model_name)):
+                path = os.path.join(self.models_dir, model_name)
             else:
                 return None
 
@@ -156,6 +174,22 @@ class AirLoader:
         vram_total_gb = stats.get("total_gb", 0.0) if is_cuda else 0.0
         vram_available_gb = stats.get("available_gb", 0.0) if is_cuda else 0.0
         
+        # Check nvidia-smi first (clean, fast, directly from driver without PyTorch CUDA driver mismatch warnings)
+        if vram_total_gb <= 0:
+            try:
+                import subprocess
+                smi_out = subprocess.check_output(
+                    ['nvidia-smi', '--query-gpu=memory.total,memory.free', '--format=csv,nounits,noheader'],
+                    text=True, timeout=2.0
+                ).strip()
+                if smi_out:
+                    parts = smi_out.splitlines()[0].split(',')
+                    vram_total_gb = float(parts[0].strip()) / 1024.0
+                    vram_available_gb = float(parts[1].strip()) / 1024.0
+            except Exception:
+                pass
+
+        # Fallback to torch only if nvidia-smi not available
         if vram_total_gb <= 0:
             try:
                 import torch  # type: ignore
@@ -165,41 +199,47 @@ class AirLoader:
             except Exception:
                 pass
 
-        if vram_total_gb <= 0:
-            try:
-                import subprocess
-                smi_out = subprocess.check_output(
-                    ['nvidia-smi', '--query-gpu=memory.total,memory.free', '--format=csv,nounits,noheader'],
-                    text=True, timeout=4.0
-                ).strip()
-                if smi_out:
-                    parts = smi_out.splitlines()[0].split(',')
-                    vram_total_gb = float(parts[0].strip()) / 1024.0
-                    vram_available_gb = float(parts[1].strip()) / 1024.0
-            except Exception:
-                pass
-
         sys_ram = psutil.virtual_memory()
         ram_total_gb = sys_ram.total / (1024**3)
         ram_available_gb = sys_ram.available / (1024**3)
-        p_cores = psutil.cpu_count(logical=False) or 4
+
+        # Detect physical Performance Cores (P-cores) on hybrid CPUs (Intel 12th-14th Gen)
+        # Only P-cores have hyperthreading (thread siblings). Restricting threads to P-cores
+        # avoids thread barrier stalls on slower E-cores.
+        p_cores = 4
+        try:
+            import glob
+            p_core_set = set()
+            for sib_path in glob.glob('/sys/devices/system/cpu/cpu[0-9]*/topology/thread_siblings_list'):
+                try:
+                    with open(sib_path, 'r') as sf:
+                        sibs = sf.read().strip()
+                    if ',' in sibs or '-' in sibs:
+                        cid_path = sib_path.replace('thread_siblings_list', 'core_id')
+                        with open(cid_path, 'r') as cf:
+                            p_core_set.add(cf.read().strip())
+                except Exception:
+                    pass
+            if p_core_set:
+                p_cores = len(p_core_set)
+            else:
+                p_cores = min(psutil.cpu_count(logical=False) or 4, 6)
+        except Exception:
+            p_cores = min(psutil.cpu_count(logical=False) or 4, 6)
 
         # 3. Dynamic Safety Reserves Formulation
-        # V_reserve = max(0.60 GB, 10% of V_total)
-        # R_reserve = max(2.00 GB, 15% of R_total)
-        v_reserve_gb = max(0.60, 0.10 * vram_total_gb) if vram_total_gb > 0 else 0.0
-        r_reserve_gb = max(2.00, 0.15 * ram_total_gb)
+        # Tailored VRAM reserve: 300MB headroom is sufficient for OS display server
+        v_reserve_gb = max(0.30, 0.05 * vram_total_gb) if vram_total_gb > 0 else 0.0
+        r_reserve_gb = max(1.50, 0.10 * ram_total_gb)
         
         v_usable_gb = max(0.0, vram_available_gb - v_reserve_gb)
         r_usable_gb = max(0.0, ram_available_gb - r_reserve_gb)
 
         # 4. Weight & Buffer Decomposition
-        # Embedding weights: Small models (1.5B-8B) with 152k vocab allocate ~14-15% to embeddings.
-        # 70B models allocate ~3%.
         if size_gb < 10.0:
             w_embed_gb = 0.145 * size_gb
         else:
-            w_embed_gb = 0.030 * size_gb
+            w_embed_gb = 0.015 * size_gb  # MoE architecture has small embed/head relative to expert layers
             
         w_layers_total_gb = max(0.0, size_gb - w_embed_gb)
         w_layer_gb = w_layers_total_gb / total_layers
@@ -211,8 +251,8 @@ class AirLoader:
         kv_total_gb = kv_total_bytes / (1024**3)
         kv_layer_gb = kv_total_gb / total_layers
 
-        # Compute & Context Workspace: CUDA runtime context + scratch graph + FlashAttention buffers
-        compute_scratch_gb = 0.35
+        # Compute & Context Workspace: CUDA runtime context + scratch graph + buffers
+        compute_scratch_gb = 0.25
 
         # Total working memory if 100% on GPU
         m_working_gpu = size_gb + kv_total_gb + compute_scratch_gb
@@ -239,6 +279,9 @@ class AirLoader:
             s_layer_gpu = w_layer_gb + kv_layer_gb
             
             allocated_gpu_layers = int(v_layer_budget_gb / s_layer_gpu) if (s_layer_gpu > 0 and vram_available_gb > 0) else 0
+            # Cap at safe limit for 6GB VRAM (max 18 layers to prevent OOM)
+            if vram_total_gb <= 6.5:
+                allocated_gpu_layers = min(18, allocated_gpu_layers)
             allocated_gpu_layers = max(0, min(total_layers, allocated_gpu_layers))
             
             optimal_gpu_layers = allocated_gpu_layers
@@ -287,8 +330,9 @@ class AirLoader:
         print(f"[AirPlanner] Performance Estimate: Decode: ~{expected_decode_tps:.2f} tok/s | Prefill: ~{expected_prefill_tps:.1f} tok/s")
         print(f"[AirPlanner] ==================================================================\n")
 
+        clean_model_name = os.path.splitext(os.path.basename(model_name))[0]
         return ModelProfile(
-            model_name=model_name,
+            model_name=clean_model_name,
             file_path=path,
             size_gb=size_gb,
             total_layers=total_layers,

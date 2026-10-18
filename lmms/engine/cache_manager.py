@@ -65,23 +65,33 @@ class CacheManager:
 
     def _get_cuda_info(self) -> tuple[float, float, float]:
         """Returns (total, used, available) in GB for CUDA."""
-        if torch and torch.cuda.is_available():
-            # For simplicity, we just check device 0
-            device = 0
-            total_bytes = torch.cuda.get_device_properties(device).total_memory
-            used_bytes = torch.cuda.memory_allocated(device)
-            # torch.cuda.memory_reserved can also be checked, but we'll use allocated
-            # Actually, to get true available VRAM, we should use torch.cuda.mem_get_info()
+        try:
+            import subprocess
+            smi_out = subprocess.check_output(
+                ['nvidia-smi', '--query-gpu=memory.total,memory.free', '--format=csv,nounits,noheader'],
+                text=True, timeout=2.0
+            ).strip()
+            if smi_out:
+                parts = smi_out.splitlines()[0].split(',')
+                total = float(parts[0].strip()) / 1024.0
+                available = float(parts[1].strip()) / 1024.0
+                used = max(0.0, total - available)
+                return total, used, available
+        except Exception:
+            pass
+
+        if torch:
             try:
-                free_bytes, true_total_bytes = torch.cuda.mem_get_info(device)
-                used_bytes = true_total_bytes - free_bytes
-                total_bytes = true_total_bytes
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    if torch.cuda.is_available():
+                        device = 0
+                        free_bytes, true_total_bytes = torch.cuda.mem_get_info(device)
+                        gb = 1024**3
+                        return true_total_bytes / gb, (true_total_bytes - free_bytes) / gb, free_bytes / gb
             except Exception:
-                # Fallback if mem_get_info is not available in older torch
                 pass
-            
-            gb = 1024**3
-            return total_bytes / gb, used_bytes / gb, (total_bytes - used_bytes) / gb
         return 0.0, 0.0, 0.0
 
     def _get_ram_info(self) -> tuple[float, float, float]:
@@ -92,8 +102,8 @@ class CacheManager:
 
     def get_stats(self) -> Dict[str, Any]:
         """Return real memory statistics and loaded models."""
-        if torch and torch.cuda.is_available():
-            total, used, available = self._get_cuda_info()
+        total, used, available = self._get_cuda_info()
+        if total > 0:
             device_type = "CUDA"
         else:
             total, used, available = self._get_ram_info()

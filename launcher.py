@@ -167,8 +167,16 @@ def main():
         return
 
     # Engine commands should be routed directly to the engine
-    engine_commands = ["run", "list", "ps", "pull", "info", "benchmark", "rm", "delete", "stop", "search", "doctor", "cache", "air", "registry", "downloads", "create"]
-    if any(a in ["--air", "-air"] for a in args) or args[0] in engine_commands:
+    engine_commands = [
+        "run", "list", "ls", "ps", "pull", "info", "benchmark", "bench",
+        "rm", "delete", "stop", "search", "doctor", "cache", "air",
+        "registry", "downloads", "create", "package", "packages"
+    ]
+    if any(a in ["--air", "-air"] for a in args) or (len(args) > 0 and args[0] in engine_commands):
+        if not getattr(sys, 'frozen', False):
+            from lmms.engine.main import run_engine
+            run_engine(args)
+            return
         launch("engine", args)
         return
 
@@ -234,8 +242,16 @@ def launch(mode, forward_args=None, ensure_engine=True):
                     print("\n\033[96m[INFO]\033[0m Rebooting system (Engine & CLI)...")
                 else:
                     print("\n\033[96m[INFO]\033[0m Shutting down auto-started Engine...")
-                engine_proc.terminate()
-                
+                if hasattr(engine_proc, "terminate"):
+                    try:
+                        engine_proc.terminate()
+                    except Exception:
+                        pass
+                elif isinstance(engine_proc, dict) and "pid" in engine_proc:
+                    try:
+                        os.kill(engine_proc["pid"], 15)
+                    except Exception:
+                        pass
         if not should_reboot:
             break
 

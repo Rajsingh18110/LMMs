@@ -1,10 +1,6 @@
 import os
 import json
 from typing import Optional, Any, Dict
-from lmms.engine.engine_1_llamacpp import AirLlamaCppRuntime
-from lmms.engine.engine_2_pytorch import AirPyTorchRuntime
-from lmms.engine.cache_manager import CacheManager
-from lmms.engine.air import AirScheduler, RamCache, AirSwapper
 
 class EngineManager:
     """
@@ -23,24 +19,63 @@ class EngineManager:
         
     def __init__(self):
         if not self._initialized:
-            # Engine 1: Air + Llama.cpp
-            self.engine_1 = AirLlamaCppRuntime()
-            # Engine 2: Air + PyTorch
-            self.engine_2 = AirPyTorchRuntime()
-            
-            # Backwards compatibility handles
-            self.runtime = self.engine_1
-            self.pytorch_runtime = self.engine_2
-            
-            self.cache = CacheManager()
-            self.air_scheduler = self.engine_1.scheduler
-            self.air_ram_cache = RamCache()
-            self.air_swapper = AirSwapper(self.air_scheduler, self.air_ram_cache)
+            self._engine_1 = None
+            self._engine_2 = None
+            self._cache = None
+            self._air_ram_cache = None
+            self._air_swapper = None
             
             # Active mode: "auto" | "1" (llamacpp) | "2" (pytorch)
             self.active_mode = "auto"
             self._load_saved_mode()
             self._initialized = True
+
+    @property
+    def engine_1(self):
+        if self._engine_1 is None:
+            from lmms.engine.engine_1_llamacpp import AirLlamaCppRuntime
+            self._engine_1 = AirLlamaCppRuntime()
+        return self._engine_1
+
+    @property
+    def runtime(self):
+        return self.engine_1
+
+    @property
+    def engine_2(self):
+        if self._engine_2 is None:
+            from lmms.engine.engine_2_pytorch import AirPyTorchRuntime
+            self._engine_2 = AirPyTorchRuntime()
+        return self._engine_2
+
+    @property
+    def pytorch_runtime(self):
+        return self.engine_2
+
+    @property
+    def cache(self):
+        if self._cache is None:
+            from lmms.engine.cache_manager import CacheManager
+            self._cache = CacheManager()
+        return self._cache
+
+    @property
+    def air_scheduler(self):
+        return self.engine_1.scheduler
+
+    @property
+    def air_ram_cache(self):
+        if self._air_ram_cache is None:
+            from lmms.engine.air import RamCache
+            self._air_ram_cache = RamCache()
+        return self._air_ram_cache
+
+    @property
+    def air_swapper(self):
+        if self._air_swapper is None:
+            from lmms.engine.air import AirSwapper
+            self._air_swapper = AirSwapper(self.air_scheduler, self.air_ram_cache)
+        return self._air_swapper
 
     def _load_saved_mode(self):
         config_path = os.path.expanduser("~/.lmms/config.json")
@@ -111,21 +146,34 @@ class EngineManager:
     def get_loaded_models(self) -> Dict[str, Any]:
         """Returns unified dictionary of all currently loaded models across both engines."""
         models: Dict[str, Any] = {}
-        if hasattr(self.engine_1, "_models") and isinstance(self.engine_1._models, dict):
-            models.update(self.engine_1._models)
-        if hasattr(self.engine_2, "_models") and isinstance(self.engine_2._models, dict):
-            models.update(self.engine_2._models)
+        if self._engine_1 is not None and hasattr(self._engine_1, "_models") and isinstance(self._engine_1._models, dict):
+            models.update(self._engine_1._models)
+        if self._engine_2 is not None and hasattr(self._engine_2, "_models") and isinstance(self._engine_2._models, dict):
+            models.update(self._engine_2._models)
         return models
 
     def is_model_loaded(self, model_name: str) -> bool:
         loaded = self.get_loaded_models()
-        return model_name in loaded or f"{model_name}.gguf" in loaded
+        clean = os.path.splitext(os.path.basename(model_name))[0]
+        return model_name in loaded or f"{model_name}.gguf" in loaded or clean in loaded
+
+    def unload_all(self):
+        if self._engine_1 is not None and hasattr(self._engine_1, "unload_model"):
+            try:
+                self._engine_1.unload_model()
+            except Exception:
+                pass
+        if self._engine_2 is not None and hasattr(self._engine_2, "unload_model"):
+            try:
+                self._engine_2.unload_model()
+            except Exception:
+                pass
 
     def status(self) -> Dict[str, Any]:
         return {
             "active_mode": self.active_mode,
-            "engine_1": self.engine_1.health(),
-            "engine_2": self.engine_2.health(),
+            "engine_1": self._engine_1.health() if self._engine_1 is not None else {"status": "idle"},
+            "engine_2": self._engine_2.health() if self._engine_2 is not None else {"status": "idle"},
             "loaded_models": list(self.get_loaded_models().keys())
         }
 

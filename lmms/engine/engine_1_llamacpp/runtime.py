@@ -26,9 +26,14 @@ class AirLlamaCppRuntime(RuntimeContract):
         """Dictionary of currently loaded active models for backward compatibility."""
         models: Dict[str, Any] = {}
         if getattr(self, "pager", None) and self.pager.active_profile and self.pager.active_model:
-            models[self.pager.active_profile.model_name] = self.pager.active_model
+            name = self.pager.active_profile.model_name
+            clean_name = os.path.splitext(os.path.basename(name))[0]
+            models[name] = self.pager.active_model
+            models[clean_name] = self.pager.active_model
         elif self.active_model_name:
+            clean_name = os.path.splitext(os.path.basename(self.active_model_name))[0]
             models[self.active_model_name] = getattr(self.pager, "active_model", None)
+            models[clean_name] = getattr(self.pager, "active_model", None)
         return models
 
     @property
@@ -42,8 +47,28 @@ class AirLlamaCppRuntime(RuntimeContract):
         """
         # Resolve path
         path = model_id
+        models_dir = os.path.expanduser("~/.lmms/models")
+        manifests_dir = os.path.expanduser("~/.lmms/manifests")
+
+        # 1. Check manifests first
+        manifest_candidate = os.path.join(manifests_dir, f"{model_id}.json")
+        if os.path.exists(manifest_candidate):
+            try:
+                import json
+                with open(manifest_candidate, "r") as mf:
+                    mdata = json.load(mf)
+                    base = mdata.get("base_model")
+                    if base:
+                        cand = os.path.join(models_dir, base if base.endswith(".gguf") else f"{base}.gguf")
+                        if os.path.exists(cand):
+                            path = cand
+                        elif os.path.exists(os.path.join(models_dir, base)):
+                            path = os.path.join(models_dir, base)
+            except Exception:
+                pass
+
+        # 2. Check direct model file
         if not os.path.exists(path):
-            models_dir = os.path.expanduser("~/.lmms/models")
             candidate = os.path.join(models_dir, f"{model_id}.gguf")
             if os.path.exists(candidate):
                 path = candidate

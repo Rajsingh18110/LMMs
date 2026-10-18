@@ -53,8 +53,11 @@ class AirPager:
                 "verbose": False
             }
 
-            # Enable Quantized KV Cache (Q8_0) and FlashAttention
-            if llama_cpp is not None:
+            # Enable Quantized KV Cache (Q8_0)
+            # FlashAttention is only enabled if architecture is standard dense (not MoE), as MoE kernels require standard attn
+            arch = getattr(profile, "architecture", "").lower()
+            is_moe = "moe" in arch
+            if llama_cpp is not None and not is_moe:
                 if hasattr(llama_cpp, "GGML_TYPE_Q8_0"):
                     init_kwargs["type_k"] = llama_cpp.GGML_TYPE_Q8_0
                     init_kwargs["type_v"] = llama_cpp.GGML_TYPE_Q8_0
@@ -64,19 +67,26 @@ class AirPager:
                 raise RuntimeError("llama_cpp runtime is not available.")
 
             llama_factory: Any = Llama
-            try:
-                self.active_model = llama_factory(**init_kwargs)
-            except Exception as flag_err:
-                print(f"[AirPager] Info: Retrying with standard KV parameters: {flag_err}")
-                init_kwargs.pop("flash_attn", None)
-                init_kwargs.pop("type_k", None)
-                init_kwargs.pop("type_v", None)
+            while True:
                 try:
                     self.active_model = llama_factory(**init_kwargs)
-                except Exception as cuda_err:
-                    print(f"[AirPager] Info: GPU/CUDA initialization failed, falling back to CPU DDR5 mmap: {cuda_err}")
-                    init_kwargs["n_gpu_layers"] = 0
-                    self.active_model = llama_factory(**init_kwargs)
+                    break
+                except Exception as err:
+                    curr_gpu = init_kwargs.get("n_gpu_layers", 0)
+                    if "flash_attn" in init_kwargs or "type_k" in init_kwargs:
+                        print(f"[AirPager] Info: Retrying without experimental KV flags: {err}")
+                        init_kwargs.pop("flash_attn", None)
+                        init_kwargs.pop("type_k", None)
+                        init_kwargs.pop("type_v", None)
+                        continue
+                    elif curr_gpu > 0:
+                        reduced_gpu = max(0, curr_gpu - 2)
+                        print(f"[AirPager] Info: Stepping down GPU layers from {curr_gpu} to {reduced_gpu} to fit VRAM: {err}")
+                        init_kwargs["n_gpu_layers"] = reduced_gpu
+                        continue
+                    else:
+                        print(f"[AirPager] Fatal: Model instantiation failed even at 0 GPU layers: {err}")
+                        raise err
 
             self.active_profile = profile
             
@@ -123,9 +133,9 @@ class AirPager:
             gc.collect()
             try:
                 import torch  # type: ignore
-                if torch.cuda.is_available():
+                if torch.cuda.is_initialized():
                     torch.cuda.empty_cache()
-            except ImportError:
+            except Exception:
                 pass
 
     def execute_stream(self, messages: list):

@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Dict, Any, Optional
 from lmms.engine.engine_1_llamacpp.air_loader import AirLoader
@@ -28,7 +29,17 @@ class AirScheduler:
         model_name = group.get(target_role)
         if not model_name:
             model_name = list(group.values())[0] if group else "default"
-            
+
+        clean_name = os.path.splitext(os.path.basename(model_name))[0]
+
+        # Fast path: If the requested model is already active and loaded in AirPager,
+        # reuse it directly without re-reading binary GGUF headers or recalculating schedules.
+        if self.pager.active_profile and self.pager.active_model is not None:
+            active_clean = os.path.splitext(os.path.basename(self.pager.active_profile.model_name))[0]
+            if active_clean == clean_name or self.pager.active_profile.model_name == model_name:
+                self.update_state(self.pager.active_profile.model_name, "Active Generating")
+                return self.pager.execute_stream(messages)
+
         profile = self.loader.analyze_model(model_name)
         if not profile:
             raise FileNotFoundError(f"Model '{model_name}' could not be analyzed or found by AirLoader.")
