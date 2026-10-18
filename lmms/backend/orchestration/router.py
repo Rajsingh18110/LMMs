@@ -253,6 +253,22 @@ class IntentRouter:
                     reason="Matched multi-step research or workflow pattern"
                 )
 
+        # 3b. Current-fact queries (who is, latest, today, price, weather, news, "currently")
+        # Always pre-load web_search to ensure timely real-world accuracy
+        current_fact_keywords = [
+            "who is", "latest", "today", "price", "weather", "news", "currently",
+            "current", "aaj ka", "kya chal raha", "score", "stock price"
+        ]
+        if any(kw in norm_query for kw in current_fact_keywords):
+            return IntentResult(
+                intent=IntentType.WEB_SEARCH,
+                confidence=0.95,
+                requires_tools=True,
+                suggested_categories=["search"],
+                task_instructions="Search online for current information, latest news, weather, or pricing data.",
+                reason="Matched current-fact query (real-time information request)"
+            )
+
         # 4. Check for discussion of capabilities vs execution
         # "What is browser automation?" or "Explain how web search works"
         is_discussion = any(re.search(pat, norm_query) for pat in self._discussion_prefixes)

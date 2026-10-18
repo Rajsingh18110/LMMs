@@ -155,6 +155,7 @@ def run_benchmark():
 
     tool_success_new = 0
     total_tool_prompts = 0
+    scenario_stats = {}
 
     for item in BENCHMARK_PROMPTS:
         pid = item["id"]
@@ -188,58 +189,83 @@ def run_benchmark():
 
         # 2. Run Runs 1, 2, 3 for Legacy
         legacy_ttfts = []
+        leg_tool_eval = None
         for r_idx, history in enumerate(HISTORY_VARIATIONS):
+            if r_idx == 0:
+                llm.reset()  # Guarantee 100% cold KV cache for Run 1
             os.environ["LMMS_LEGACY_PROMPT"] = "1"
             ctx, _, _, _ = pipeline.prepare_request(
                 model_name="Qwen3-8B-Q4_K_M",
                 user_query=prompt_query,
                 conversation_history=history
             )
-            t0 = time.perf_counter()
-            ttft = None
+            max_tok = 60 if (r_idx == 0 and needs_tool) else 15
             stream = llm.create_chat_completion(
                 messages=ctx.messages,
-                max_tokens=15,
+                max_tokens=max_tok,
                 stream=True,
                 temperature=0.0
             )
-            for chunk in stream:
-                if "choices" in chunk and len(chunk["choices"]) > 0:
-                    token = chunk["choices"][0].get("delta", {}).get("content", "")
-                    if token:
-                        ttft = time.perf_counter() - t0
-                        break
-            legacy_ttfts.append(ttft if ttft is not None else (time.perf_counter() - t0))
+            stream_iter = iter(stream)
+            t0 = time.perf_counter()
+            first_chunk = next(stream_iter, None)
+            ttft = time.perf_counter() - t0
+            
+            gen_text = ""
+            if first_chunk and "choices" in first_chunk and len(first_chunk["choices"]) > 0:
+                tok = first_chunk["choices"][0].get("delta", {}).get("content", "")
+                gen_text += tok
+                
+            if r_idx == 0 and needs_tool:
+                for chunk in stream_iter:
+                    if "choices" in chunk and len(chunk["choices"]) > 0:
+                        tok = chunk["choices"][0].get("delta", {}).get("content", "")
+                        gen_text += tok
+                leg_tool_eval = evaluate_tool_output(gen_text, target_tool)
+            elif r_idx == 0 and not needs_tool:
+                leg_tool_eval = evaluate_tool_output(gen_text, None)
+                
+            legacy_ttfts.append(ttft)
 
         # 3. Run Runs 1, 2, 3 for New
         new_ttfts = []
         new_tool_eval = None
         for r_idx, history in enumerate(HISTORY_VARIATIONS):
+            if r_idx == 0:
+                llm.reset()  # Guarantee 100% cold KV cache for Run 1
             os.environ.pop("LMMS_LEGACY_PROMPT", None)
             ctx, _, _, _ = pipeline.prepare_request(
                 model_name="Qwen3-8B-Q4_K_M",
                 user_query=prompt_query,
                 conversation_history=history
             )
-            t0 = time.perf_counter()
-            ttft = None
-            generated_text = ""
+            max_tok = 60 if (r_idx == 0 and needs_tool) else 15
             stream = llm.create_chat_completion(
                 messages=ctx.messages,
-                max_tokens=25 if needs_tool else 15,
+                max_tokens=max_tok,
                 stream=True,
                 temperature=0.0
             )
-            for chunk in stream:
-                if "choices" in chunk and len(chunk["choices"]) > 0:
-                    token = chunk["choices"][0].get("delta", {}).get("content", "")
-                    if token:
-                        if ttft is None:
-                            ttft = time.perf_counter() - t0
-                        generated_text += token
-            new_ttfts.append(ttft if ttft is not None else (time.perf_counter() - t0))
-            if r_idx == 0:
-                new_tool_eval = evaluate_tool_output(generated_text, target_tool)
+            stream_iter = iter(stream)
+            t0 = time.perf_counter()
+            first_chunk = next(stream_iter, None)
+            ttft = time.perf_counter() - t0
+            
+            gen_text = ""
+            if first_chunk and "choices" in first_chunk and len(first_chunk["choices"]) > 0:
+                tok = first_chunk["choices"][0].get("delta", {}).get("content", "")
+                gen_text += tok
+                
+            if r_idx == 0 and needs_tool:
+                for chunk in stream_iter:
+                    if "choices" in chunk and len(chunk["choices"]) > 0:
+                        tok = chunk["choices"][0].get("delta", {}).get("content", "")
+                        gen_text += tok
+                new_tool_eval = evaluate_tool_output(gen_text, target_tool)
+            elif r_idx == 0 and not needs_tool:
+                new_tool_eval = evaluate_tool_output(gen_text, None)
+                
+            new_ttfts.append(ttft)
 
         cold_leg = legacy_ttfts[0]
         cold_new = new_ttfts[0]
@@ -254,6 +280,28 @@ def run_benchmark():
         all_warm2_new.append(warm2_new)
         all_warm3_legacy.append(warm3_leg)
         all_warm3_new.append(warm3_new)
+
+        if scenario not in scenario_stats:
+            scenario_stats[scenario] = {
+                "total": 0,
+                "leg_emitted": 0, "leg_valid": 0, "leg_correct": 0,
+                "new_emitted": 0, "new_valid": 0, "new_correct": 0
+            }
+        sc = scenario_stats[scenario]
+        sc["total"] += 1
+        if leg_tool_eval and leg_tool_eval["emitted"]:
+            sc["leg_emitted"] += 1
+        if leg_tool_eval and leg_tool_eval["valid"]:
+            sc["leg_valid"] += 1
+        if leg_tool_eval and leg_tool_eval["correct"]:
+            sc["leg_correct"] += 1
+
+        if new_tool_eval and new_tool_eval["emitted"]:
+            sc["new_emitted"] += 1
+        if new_tool_eval and new_tool_eval["valid"]:
+            sc["new_valid"] += 1
+        if new_tool_eval and new_tool_eval["correct"]:
+            sc["new_correct"] += 1
 
         if needs_tool:
             total_tool_prompts += 1
@@ -289,6 +337,17 @@ def run_benchmark():
     print("-" * 80)
     print(f"Tool Action Success Rate:          {tool_success_new}/{total_tool_prompts} ({(tool_success_new/total_tool_prompts)*100:.1f}%)")
     print("=" * 80)
+
+    print("\n" + "=" * 95)
+    print("       SCENARIO TOOL ACCURACY BREAKDOWN: LEGACY vs NEW PIPELINE (ALL 31 PROMPTS)")
+    print("=" * 95)
+    print(f"{'Scenario':<22} | {'Prompts':<7} | {'Legacy: Emitted / Valid / Correct':<32} | {'New: Emitted / Valid / Correct'}")
+    print("-" * 95)
+    for sc_name, sc in scenario_stats.items():
+        leg_str = f"{sc['leg_emitted']}/{sc['total']} ({sc['leg_emitted']/sc['total']*100:.0f}%) | {sc['leg_valid']}/{sc['total']} | {sc['leg_correct']}/{sc['total']}"
+        new_str = f"{sc['new_emitted']}/{sc['total']} ({sc['new_emitted']/sc['total']*100:.0f}%) | {sc['new_valid']}/{sc['total']} | {sc['new_correct']}/{sc['total']}"
+        print(f"{sc_name:<22} | {sc['total']:<7} | {leg_str:<32} | {new_str}")
+    print("=" * 95)
 
 if __name__ == "__main__":
     run_benchmark()

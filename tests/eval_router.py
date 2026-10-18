@@ -50,7 +50,7 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
             
             query = item["query"]
             expected_intent = (item.get("expected_intent") or item.get("intent", "")).lower()
-            expected_tools = item.get("expected_tools") if "expected_tools" in item else item.get("requires_tools", False)
+            expected_tools = item.get("expected_tools") if "expected_tools" in item else item.get("requires_tools", item.get("needs_tools", False))
             history = item.get("history")
             workspace = item.get("workspace")
             

@@ -18,6 +18,9 @@ test_*.py
 !tests/eval_router.py
 !tests/bench_e2e.py
 !tests/bench_31_prompts.py
+!tests/test_executor_end_to_end.py
+!tests/eval_model_level_tools.py
+!tests/measure_n_ctx_vram.py
 patch_*.py
 build_*.py
 download_*.py

@@ -88,8 +88,13 @@ class TokenBudgetManager:
                     meta = parse_gguf_metadata(path)
                     for k, v in meta.items():
                         if k.endswith(".context_length") and isinstance(v, int) and v > 0:
-                            # Clamp native 256k to a practical memory-safe window if running locally
-                            effective = min(v, 32768)
+                            # Clamp native window to the verified hardware safe context limit:
+                            # 8B on 6GB VRAM safely fits up to 4,096 tokens (8,192 triggers CUDA OOM).
+                            lower_p = path.lower()
+                            if "8b" in lower_p or "30b" in lower_p:
+                                effective = 4096
+                            else:
+                                effective = min(v, 4096)
                             self._limit_cache[model_name] = effective
                             TokenBudgetManager._global_limit_cache[model_name] = effective
                             return effective
@@ -104,6 +109,7 @@ class TokenBudgetManager:
                     data = resp.json()
                     ctx = data.get("context_length")
                     if isinstance(ctx, int) and ctx > 0:
+                        ctx = min(ctx, 4096)
                         self._limit_cache[model_name] = ctx
                         TokenBudgetManager._global_limit_cache[model_name] = ctx
                         return ctx
@@ -113,10 +119,8 @@ class TokenBudgetManager:
 
         # 3. Known heuristics based on model name
         lower = model_name.lower()
-        if "30b" in lower or "qwen3" in lower:
-            limit = 8192
-        elif "8b" in lower or "7b" in lower:
-            limit = 8192
+        if "8b" in lower or "qwen3" in lower or "30b" in lower:
+            limit = 4096  # Verified hardware safe context limit on 6GB VRAM
         elif "1.5b" in lower or "nano" in lower:
             limit = 4096
         else:

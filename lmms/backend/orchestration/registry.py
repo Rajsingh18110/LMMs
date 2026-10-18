@@ -313,6 +313,76 @@ class ToolRegistry:
             )
         )
 
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.scroll",
+                    name="Browser Scroll",
+                    category="browser",
+                    summary="Scroll the browser viewport up or down by a specified pixel amount.",
+                    tags=["browser", "scroll", "view"],
+                    risk_level="low",
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "direction": {"type": "string", "description": "Scroll direction: 'up' or 'down'", "default": "down"},
+                        "amount": {"type": "integer", "description": "Pixel scroll amount", "default": 1000},
+                        "url": {"type": "string", "description": "Optional page URL"}
+                    }
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.press_key",
+                    name="Browser Press Key",
+                    category="browser",
+                    summary="Press a keyboard key (Enter, Tab, Escape, Backspace) on the active page.",
+                    tags=["browser", "keyboard", "key"],
+                    risk_level="low",
+                    estimated_tokens=35
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "key": {"type": "string", "description": "Key name (e.g. 'Enter', 'Tab', 'Escape')", "default": "Enter"}
+                    }
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.open_authenticated",
+                    name="Browser Open Authenticated",
+                    category="browser",
+                    summary="Open a browser session using existing saved user profile or session cookies.",
+                    tags=["browser", "auth", "session", "profile"],
+                    risk_level="high",
+                    requires_confirmation=True,
+                    estimated_tokens=50
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Web address to open"},
+                        "user_data_dir": {"type": "string", "description": "Path to user browser data directory", "default": "~/.lmms/browser_profile"},
+                        "profile_name": {"type": "string", "description": "Profile directory name", "default": "Default"},
+                        "headless": {"type": "boolean", "description": "Run in background", "default": True}
+                    },
+                    "required": ["url"]
+                },
+                instruction_module="browser"
+            )
+        )
+
         # 3. File Operations
         self.register(
             DynamicToolDefinition(
@@ -357,6 +427,51 @@ class ToolRegistry:
                 }
             ),
             aliases=["file.write", "write_file"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="files.list",
+                    name="File List",
+                    category="files",
+                    summary="List files and folder tree structure within the workspace directory.",
+                    tags=["files", "list", "fs", "ls"],
+                    risk_level="low",
+                    estimated_tokens=35
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to directory to list", "default": "."}
+                    }
+                }
+            ),
+            aliases=["files.list_folder", "list_folder", "file.list", "fs.list"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="files.delete",
+                    name="File Delete",
+                    category="files",
+                    summary="Safely delete a file or directory within workspace boundary (requires confirm=True).",
+                    tags=["files", "delete", "rm"],
+                    risk_level="high",
+                    requires_confirmation=True,
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "File or folder path to delete"},
+                        "confirm": {"type": "boolean", "description": "Explicit confirmation flag", "default": False}
+                    },
+                    "required": ["path"]
+                }
+            ),
+            aliases=["file.delete", "delete_file"]
         )
 
         # 4. Terminal Commands
@@ -424,6 +539,28 @@ class ToolRegistry:
                     }
                 }
             )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="app.close",
+                    name="App Close",
+                    category="apps",
+                    summary="Terminate or close a running desktop application by name or window title.",
+                    tags=["app", "desktop", "close", "kill"],
+                    risk_level="medium",
+                    estimated_tokens=35
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "app_name": {"type": "string", "description": "Application process or window name to terminate"}
+                    },
+                    "required": ["app_name"]
+                }
+            ),
+            aliases=["close_app", "kill_app"]
         )
 
         # 6. Messaging & Alerts

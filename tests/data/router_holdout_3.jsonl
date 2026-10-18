@@ -1,0 +1,60 @@
+{"id": 1, "query": "Who is the CEO of Microsoft currently?", "expected_intent": "web_search", "needs_tools": true}
+{"id": 2, "query": "What is the latest score of India vs Pakistan cricket match today?", "expected_intent": "web_search", "needs_tools": true}
+{"id": 3, "query": "Aaj ka weather kaisa hai Mumbai me?", "expected_intent": "web_search", "needs_tools": true}
+{"id": 4, "query": "Find the current stock price of Tesla today", "expected_intent": "web_search", "needs_tools": true}
+{"id": 5, "query": "Latest AI news in 2026", "expected_intent": "web_search", "needs_tools": true}
+{"id": 6, "query": "Who is the president of France currently?", "expected_intent": "web_search", "needs_tools": true}
+{"id": 7, "query": "Current price of Ethereum today in USD", "expected_intent": "web_search", "needs_tools": true}
+{"id": 8, "query": "Search online for fastapi 0.115 migration guide", "expected_intent": "web_search", "needs_tools": true}
+{"id": 9, "query": "Google pe search karo python free threading documentation", "expected_intent": "web_search", "needs_tools": true}
+{"id": 10, "query": "What is happening today in tech news?", "expected_intent": "web_search", "needs_tools": true}
+{"id": 11, "query": "Read the contents of pyproject.toml", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 12, "query": "Open file lmms/backend/orchestration/builder.py and check imports", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 13, "query": "Git status check karo workspace me", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 14, "query": "List all python files in tests directory", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 15, "query": "Show git diff for staged files", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 16, "query": "Cat README.md to view project overview", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 17, "query": "Ye file kholo aur line 40 dekho: lmms/backend/main.py", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 18, "query": "Delete temporary log file /tmp/debug.log with confirmation", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 19, "query": "Save new content into tests/data/sample.txt", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 20, "query": "Find where TokenBudgetManager is defined in lmms/", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 21, "query": "Run terminal command: nvidia-smi", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 22, "query": "Terminal pe top chalao aur cpu usage dekho", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 23, "query": "Execute bash script build.sh in terminal", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 24, "query": "Run pytest on tests/test_smart_context.py in terminal", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 25, "query": "Check disk space using df -h in terminal", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 26, "query": "Open browser and navigate to https://github.com", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 27, "query": "Browser me https://huggingface.com open karo", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 28, "query": "Click on login button with id 5 on the webpage", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 29, "query": "Fill form with username testuser and password secret", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 30, "query": "Take a screenshot of the active browser tab", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 31, "query": "Scroll down 500 pixels in the webpage", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 32, "query": "Scrape live table data from https://news.ycombinator.com", "expected_intent": "browser_automation", "needs_tools": true}
+{"id": 33, "query": "Launch calculator desktop application", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 34, "query": "Open chrome browser app on desktop", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 35, "query": "List all installed desktop applications", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 36, "query": "Send desktop notification: Backup finished successfully", "expected_intent": "workspace_file_ops", "needs_tools": true}
+{"id": 37, "query": "Research three local LLM runtimes, compare performance, and generate a markdown report", "expected_intent": "multi_step_workflow", "needs_tools": true}
+{"id": 38, "query": "Multi-step security audit of Python dependencies and produce an executive summary", "expected_intent": "multi_step_workflow", "needs_tools": true}
+{"id": 39, "query": "Compare llama.cpp vs vLLM vs Ollama and write a comprehensive report", "expected_intent": "multi_step_workflow", "needs_tools": true}
+{"id": 40, "query": "Investigate vector databases Milvus vs Qdrant vs Chroma and draft a comparison report", "expected_intent": "multi_step_workflow", "needs_tools": true}
+{"id": 41, "query": "Hello! Good morning.", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 42, "query": "Hi, how are you doing today?", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 43, "query": "Thank you so much for the assistance!", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 44, "query": "Namaste, kya haal hai?", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 45, "query": "Awesome work, that was very helpful.", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 46, "query": "Goodbye, have a great day!", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 47, "query": "What is your primary function?", "expected_intent": "normal_chat", "needs_tools": false}
+{"id": 48, "query": "Explain how Python generators and yield statements work internally.", "expected_intent": "coding", "needs_tools": false}
+{"id": 49, "query": "What is the difference between a mutex and a spinlock?", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 50, "query": "How does Raft consensus algorithm handle leader election?", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 51, "query": "Write a Python function to compute Fibonacci numbers using dynamic programming.", "expected_intent": "coding", "needs_tools": false}
+{"id": 52, "query": "Explain how garbage collection works in Go.", "expected_intent": "coding", "needs_tools": false}
+{"id": 53, "query": "What is dependency injection and why is it useful?", "expected_intent": "coding", "needs_tools": false}
+{"id": 54, "query": "Tell me about the history of the Linux kernel.", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 55, "query": "How do B-trees work in relational database indexes?", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 56, "query": "Explain TCP three-way handshake in detail.", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 57, "query": "What is tail recursion and how do compilers optimize it?", "expected_intent": "coding", "needs_tools": false}
+{"id": 58, "query": "Describe the architecture of convolutional neural networks.", "expected_intent": "general_knowledge", "needs_tools": false}
+{"id": 59, "query": "Why does Python have a Global Interpreter Lock (GIL)?", "expected_intent": "coding", "needs_tools": false}
+{"id": 60, "query": "Difference between synchronous and asynchronous I/O in Node.js.", "expected_intent": "coding", "needs_tools": false}

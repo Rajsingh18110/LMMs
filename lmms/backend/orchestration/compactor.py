@@ -140,13 +140,36 @@ class ContextCompactor:
             new_messages.extend(compacted[end_idx:])
 
             tokens_saved += 400
-            return new_messages, CompactionReport(
-                original_turns=original_turns,
-                compacted_turns=len(new_messages),
-                observations_pruned=obs_pruned,
-                tokens_saved_estimate=tokens_saved,
-                summary_applied=True
-            )
+            current_tokens = self._estimate_tokens(new_messages, model_name)
+            if current_tokens <= usable_budget:
+                return new_messages, CompactionReport(
+                    original_turns=original_turns,
+                    compacted_turns=len(new_messages),
+                    observations_pruned=obs_pruned,
+                    tokens_saved_estimate=tokens_saved,
+                    summary_applied=True
+                )
+            compacted = new_messages
+
+        # Stage 4: Aggressive truncation of oversized history messages if still overflowing
+        current_tokens = self._estimate_tokens(compacted, model_name)
+        if current_tokens > usable_budget and len(compacted) > 2:
+            excess_tokens = current_tokens - usable_budget + 100
+            chars_to_cut = excess_tokens * 4
+            for idx in range(1, len(compacted) - 1):
+                msg_content = str(compacted[idx].get("content", ""))
+                if len(msg_content) > 1000:
+                    cut = min(chars_to_cut, len(msg_content) - 500)
+                    if cut > 0:
+                        compacted[idx]["content"] = (
+                            msg_content[:500]
+                            + f"\n... [Truncated {cut} characters to prevent context overflow] ...\n"
+                            + msg_content[-200:]
+                        )
+                        chars_to_cut -= cut
+                        tokens_saved += cut // 3
+                        if chars_to_cut <= 0:
+                            break
 
         return compacted, CompactionReport(
             original_turns=original_turns,

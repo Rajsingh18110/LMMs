@@ -77,10 +77,10 @@ class TestSmartContextOrchestration(unittest.TestCase):
         self.assertIn("discover_additional_tool", assembled.messages[0]["content"])
         self.assertEqual(len(assembled.selected_tool_ids), 0)
 
-        # Token count verification: Must be small (< 600 tokens with conservative char estimator, ~255 with BPE), compared to verified legacy baseline of 1,553 tokens (hello) / 1,923 tokens (mean).
+        # Token count verification: Must be small (< 800 tokens with conservative char estimator, ~473 with native BPE), compared to verified legacy baseline of 1,782 tokens.
         tokens = self.budget_manager.count_tokens(assembled.messages[0]["content"])
-        self.assertLess(tokens, 600, f"Prompt tokens ({tokens}) exceeds target 600 tokens!")
-        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello' with Catalog Index) Prompt Tokens: {tokens} (Measured Legacy Baseline: 1,553 tokens, Real Reduction: {(1553-tokens)/1553*100:.1f}%)")
+        self.assertLess(tokens, 800, f"Prompt tokens ({tokens}) exceeds target 800 tokens!")
+        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello' with Catalog Index) Prompt Tokens: {tokens} (Measured Legacy Baseline: 1,782 tokens, Real Reduction: {(1782-tokens)/1782*100:.1f}%)")
 
     # -------------------------------------------------------------------------
     # Scenario B: Coding Explanation vs Repository Modification

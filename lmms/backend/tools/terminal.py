@@ -40,10 +40,16 @@ def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]
         if isinstance(command, str):
             command_args = shlex.split(command)
         else:
-            command_args = command
+            command_args = list(command)
+
+        # Automatically convert interactive commands to batch mode
+        if command_args and command_args[0] == "top" and "-b" not in command_args:
+            command_args = ["top", "-b", "-n", "1"]
+        if command_args and command_args[0] == "sudo" and "-n" not in command_args:
+            command_args.insert(1, "-n")
 
         result = subprocess.run(
-            command_args, shell=False, capture_output=True, text=True, timeout=120, cwd=target_cwd
+            command_args, shell=False, capture_output=True, text=True, timeout=15, cwd=target_cwd, stdin=subprocess.DEVNULL
         )
         return {
             "stdout": result.stdout,
