@@ -77,10 +77,10 @@ class TestSmartContextOrchestration(unittest.TestCase):
         self.assertNotIn("browser.open_url", assembled.messages[0]["content"])
         self.assertNotIn("terminal.run", assembled.messages[0]["content"])
 
-        # Token count verification: Must be small (< 200 tokens), NOT 4,139 tokens!
+        # Token count verification: Must be small (< 200 tokens), compared to verified legacy baseline of 1,553 tokens (hello) / 1,923 tokens (mean).
         tokens = self.budget_manager.count_tokens(assembled.messages[0]["content"])
         self.assertLess(tokens, 200, f"Prompt tokens ({tokens}) exceeds target 200 tokens!")
-        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello') Prompt Tokens: {tokens} (Original: 4,139)")
+        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello') Prompt Tokens: {tokens} (Measured Legacy Baseline: 1,553 tokens, Real Reduction: {(1553-tokens)/1553*100:.1f}%)")
 
     # -------------------------------------------------------------------------
     # Scenario B: Coding Explanation vs Repository Modification

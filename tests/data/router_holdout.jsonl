@@ -1,0 +1,60 @@
+{"query": "hello bro, how have you been?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "kya haal chaal hai bhai?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "thanks for the quick help earlier!", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "good evening, are you feeling smart today?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "bhai aaj bohot thak gaya hu office me", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "tell me a funny programmer joke please", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "can you check if you understand my humor?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "find me some peace and quiet, just talk to me softly", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "open your imagination and describe a sunset in the mountains", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "run me through what you like to do in your free time", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "create a short bedtime story about a curious kitten", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "kya tum mujhe ek motivation quote de sakte ho?", "expected_intent": "normal_chat", "expected_tools": false}
+{"query": "who was the first prime minister of UK?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what is the difference between mass and weight?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "gravity kaise kaam karti hai simple shabdo me batao", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "explain what is an event loop in Node.js conceptually", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "what causes rain and clouds to form in the sky?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "dna aur rna me kya farak hota hai?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "why do leaves turn yellow in autumn?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "how does RSA public key cryptography work in theory?", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "explain quicksort partitioning algorithm on whiteboard", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "check if 17 is a prime number and why", "expected_intent": "general_knowledge", "expected_tools": false}
+{"query": "git status chala ke dekho kya modified hai", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "cat lmms/backend/orchestration/router.py", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "wrkspace me package.json read kro", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "tests directory me konsi files hain list krdo", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "grep karo TokenBudgetManager across all files in orchestration", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "terminal pe check karo disk space df -h", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "run pytest on test_smart_context.py in tests folder", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "ek naya test file bna do tests/scratch.py", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "project ke git log last 3 commits show karo", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "read the content of lmms/engine/cache_manager.py", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "pkill python command run karo terminal me", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "check if requirements.txt exists in this folder", "expected_intent": "workspace_file_ops", "expected_tools": true, "workspace": "/home/kali/Projects/LMMs"}
+{"query": "search online for latest updates on llama.cpp vulkan support", "expected_intent": "web_search", "expected_tools": true}
+{"query": "google pe search karo current weather in new delhi", "expected_intent": "web_search", "expected_tools": true}
+{"query": "online search for qwen 2.5 coder benchmarks", "expected_intent": "web_search", "expected_tools": true}
+{"query": "find on the internet what is the price of nvidia rtx 4090", "expected_intent": "web_search", "expected_tools": true}
+{"query": "web pe dhoondho python 3.13 free threading documentation", "expected_intent": "web_search", "expected_tools": true}
+{"query": "search online for recent release of pytorch 2.6", "expected_intent": "web_search", "expected_tools": true}
+{"query": "internet par search karo who won champions league 2025", "expected_intent": "web_search", "expected_tools": true}
+{"query": "browse to https://news.ycombinator.com and list top 3 titles", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "browser me open karo https://github.com/trending", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "take a screenshot of the current page in browser", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "webpage pe click karo button #submit", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "browser kholo aur https://wikipedia.org load karo", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "scrape the price from https://books.toscrape.com", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "form me fill karo username 'testuser' on the browser", "expected_intent": "browser_automation", "expected_tools": true}
+{"query": "compare sqlite vs postgresql vs duckdb, analyze pros and cons, and write a summary report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "research 3 state-of-the-art vector databases, compare performance, and draft a final report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "multi-step audit of repository code quality and generate security report", "expected_intent": "multi_step_workflow", "expected_tools": true}
+{"query": "cve-2023-38606 kernel exploit analysis", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "nmap scan syntax for scanning subnet without ping", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "explain hydra ssh brute force syntax and options", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "cve-2024-3094 xz backdoor technical breakdown", "expected_intent": "tool_research", "expected_tools": true}
+{"query": "aage badho aur next command chala do", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "git status"}, {"role": "assistant", "content": "Changes are ready."}]}
+{"query": "yes proceed with running the tests", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "should we run the test suite?"}, {"role": "assistant", "content": "I am ready."}]}
+{"query": "haa theek hai wahi karo", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "shall I delete the temporary file?"}, {"role": "assistant", "content": "Waiting for confirmation."}]}
+{"query": "now do the same thing for test_builder.py", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "run tests for test_router.py"}, {"role": "assistant", "content": "Completed."}]}
+{"query": "okay continue with step 3", "expected_intent": "follow_up", "expected_tools": true, "history": [{"role": "user", "content": "let's do step 1 and 2"}, {"role": "assistant", "content": "Step 2 done."}]}

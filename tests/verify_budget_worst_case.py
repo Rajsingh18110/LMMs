@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-Worst-case Browser Turn Budget Verification (Task 5b):
-Calculates exact real budget breakdown for:
-system + tools (all browser capabilities) + history + user + 768 output reserve + 200 margin.
-Confirms it fits within the 4,096 hardware context window (3,196 usable input budget),
-and demonstrates exactly what the compactor drops when a turn exceeds the budget.
+True Worst-Case Context Budget & Compaction Verification:
+Calculates exact real budget breakdown for the maximum conceivable context load:
+- Hardware Context Window (clamped for 16GB RAM): 4,096 tokens
+- Output Generation Reserve: 768 tokens
+- System Safety Margin: 200 tokens (unified across budget.py, pipeline, and tests)
+- Usable Input Context Budget: exactly 3,128 tokens (4096 - 768 - 200)
+
+Simulates the True Worst Case:
+1. The largest tool suite (all 16 tools in ToolRegistry: browser, terminal, files, search, security, discovery)
+2. A long multi-turn history near the context limit (~2,500+ tokens of DOM, git logs, code outputs)
+3. Demonstrates how ContextCompactor stages compress history to guarantee zero context overflow.
 """
 
 import os
@@ -20,121 +26,164 @@ from lmms.backend.orchestration.builder import ContextBuilder
 from lmms.backend.orchestration.budget import TokenBudgetManager
 from lmms.backend.orchestration.compactor import ContextCompactor
 
-def run_worst_case_budget_analysis():
+def run_true_worst_case_analysis():
     registry = ToolRegistry()
     router = IntentRouter()
     selector = ToolSelector(registry)
     builder = ContextBuilder()
-    budget_mgr = TokenBudgetManager(engine_url="http://127.0.0.1:0", default_context_limit=4096, default_output_reserve=768, safety_margin=200)
+    
+    # Unified margin: safety_margin=200, reserve=768, limit=4096 -> usable=3128
+    SAFETY_MARGIN = 200
+    OUTPUT_RESERVE = 768
+    CONTEXT_LIMIT = 4096
+    USABLE_BUDGET = CONTEXT_LIMIT - OUTPUT_RESERVE - SAFETY_MARGIN  # 3,128
+
+    budget_mgr = TokenBudgetManager(
+        engine_url="http://127.0.0.1:0",
+        default_context_limit=CONTEXT_LIMIT,
+        default_output_reserve=OUTPUT_RESERVE,
+        safety_margin=SAFETY_MARGIN
+    )
+    budget_mgr._limit_cache["Qwen3-Coder-30B-A3B-Instruct"] = CONTEXT_LIMIT
     compactor = ContextCompactor()
 
-    # 1. Realistic Worst-Case Browser Turn (Active execution with full browser tool suite)
-    query = "Open https://app.datadoghq.com/dashboard/kpi, authenticate, click element #export-pdf, and save to workspace"
+    # 1. Inject the LARGEST TOOL SET: All 16 tools registered in ToolRegistry
+    all_tool_ids = list(registry._tools.keys())
+    query = "Open https://app.datadoghq.com/dashboard/kpi, inspect the DOM, read main.py, check git status, search online for FastAPI release notes, and generate a security report"
     intent_res = router.route(query)
-    
-    # Request all browser suite tools to simulate maximum worst-case tool injection
-    browser_tool_ids = ["browser.open_url", "browser.click_element", "browser.fill_form", "browser.screenshot", "browser.get_interactive_dom"]
-    selection_res = selector.select(intent_res, additional_requested_tools=browser_tool_ids)
+    selection_res = selector.select(intent_res, additional_requested_tools=all_tool_ids)
 
-    # 3 turns of active browser navigation history including DOM observation
-    sample_dom_observation = (
+    # 2. Build a LONG, HEAVY multi-turn history near the context limit (~2,500+ tokens)
+    heavy_dom_observation = (
         "<observation>\n"
         "[DOM Snapshot for https://app.datadoghq.com]\n"
-        "<div id='root'>\n"
+        "<div id='root' class='app-container'>\n"
         "  <header><nav><a href='/home'>Dashboard</a> <button id='export-pdf'>Export PDF</button></nav></header>\n"
         "  <main>\n"
         "    <div class='metric-card' id='cpu'>CPU: 42%</div>\n"
         "    <div class='metric-card' id='mem'>Memory: 68%</div>\n"
-        "    <table class='log-table'><tr><td>2026-10-18 06:00</td><td>HTTP 200 OK</td></tr></table>\n"
+        "    <table class='log-table'>\n"
+        + "".join(f"      <tr><td>2026-10-18 06:{i:02d}</td><td>GET /api/v1/metrics</td><td>200 OK</td><td>latency=42ms</td></tr>\n" for i in range(25))
+        + "    </table>\n"
         "  </main>\n"
         "</div>\n"
         "</observation>"
     )
 
-    history = [
-        {"role": "user", "content": "Navigate to Datadog KPI dashboard"},
+    heavy_git_log = (
+        "<observation>\n"
+        "commit 4333b78 (HEAD -> main, backendcode) feat(orchestration): harden router\n"
+        "commit 4cd29e0 feat: implement smart context management\n"
+        "commit 24544c0 fix(engine): optimize AirPlanner Regime 2\n"
+        + "".join(f"commit a1b2c3{i:02d} chore: internal update for module {i}\n" for i in range(20))
+        + "</observation>"
+    )
+
+    heavy_file_content = (
+        "<observation>\n"
+        "# File: lmms/backend/orchestration/budget.py\n"
+        + "".join(f"def helper_method_{i}(self, value: int) -> int:\n    '''Calculates token offset {i}'''\n    return value * {i} + 10\n" for i in range(20))
+        + "</observation>"
+    )
+
+    raw_history = [
+        {"role": "user", "content": "Let's begin auditing the system and dashboard."},
         {"role": "assistant", "content": "<tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://app.datadoghq.com/dashboard/kpi\"}}</tool_call>"},
-        {"role": "user", "content": sample_dom_observation},
-        {"role": "assistant", "content": "Dashboard loaded. Looking for the export button."}
+        {"role": "user", "content": heavy_dom_observation},
+        {"role": "assistant", "content": "Dashboard loaded. Now inspecting repository git history."},
+        {"role": "user", "content": "Check recent commits."},
+        {"role": "assistant", "content": "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"git log -n 25\"}}</tool_call>"},
+        {"role": "user", "content": heavy_git_log},
+        {"role": "assistant", "content": "Git history retrieved. Now inspecting budget manager implementation."},
+        {"role": "user", "content": "Read budget.py implementation."},
+        {"role": "assistant", "content": "<tool_call>{\"tool\": \"files.read\", \"kwargs\": {\"path\": \"lmms/backend/orchestration/budget.py\"}}</tool_call>"},
+        {"role": "user", "content": heavy_file_content},
+        {"role": "assistant", "content": "Budget manager code reviewed. Now ready for final action."}
     ]
 
-    assembled = builder.assemble(
+    # Pre-compaction calculation
+    assembled_uncompacted = builder.assemble(
         model_name="Qwen3-Coder-30B-A3B-Instruct",
         user_query=query,
         intent_result=intent_res,
         selection_result=selection_res,
-        conversation_history=history,
+        conversation_history=raw_history,
         current_workspace="/home/kali/Projects/LMMs"
     )
 
-    # Set context limit to 4096 (enforced on 16GB RAM machines)
-    budget_mgr._limit_cache["Qwen3-Coder-30B-A3B-Instruct"] = 4096
-    budget = budget_mgr.calculate_budget(
+    budget_uncompacted = budget_mgr.calculate_budget(
         model_name="Qwen3-Coder-30B-A3B-Instruct",
-        base_prompt=assembled.base_system_prompt,
-        task_instructions=assembled.task_instructions,
-        tool_schemas=assembled.tool_schemas_str,
-        history_messages=history,
+        base_prompt=assembled_uncompacted.base_system_prompt,
+        task_instructions=assembled_uncompacted.task_instructions,
+        tool_schemas=assembled_uncompacted.tool_schemas_str,
+        history_messages=raw_history,
         user_query=query
     )
 
+    print("=" * 85)
+    print("      TRUE WORST-CASE CONTEXT ANALYSIS (Max Tools + Deep Multi-Turn History)")
+    print("=" * 85)
+    print(f"Hardware Context Window (n_ctx):       {budget_uncompacted.context_limit:>6} tokens")
+    print(f"Output Generation Reserve:             {budget_uncompacted.output_reserve:>6} tokens")
+    print(f"Unified System Safety Margin:          {budget_uncompacted.safety_margin:>6} tokens")
+    print(f"---------------------------------------------------------------------")
+    print(f"Usable Input Budget:                   {budget_uncompacted.usable_context:>6} tokens (4096 - 768 - 200)")
+    print(f"=====================================================================")
+    print(f"UNCOMPACTED COMPONENT BREAKDOWN:")
+    print(f"  1. Base System Prompt:               {budget_uncompacted.base_prompt_tokens:>6} tokens")
+    print(f"  2. Task Instructions:                {budget_uncompacted.task_instructions_tokens:>6} tokens")
+    print(f"  3. Tool Schemas (All 16 tools):      {budget_uncompacted.tool_schemas_tokens:>6} tokens")
+    print(f"  4. Heavy Multi-Turn History:         {budget_uncompacted.history_tokens:>6} tokens")
+    print(f"  5. User Query & Workspace:           {budget_uncompacted.user_query_tokens:>6} tokens")
+    print(f"---------------------------------------------------------------------")
+    print(f"TOTAL UNCOMPACTED INPUT TOKENS:        {budget_uncompacted.total_prompt_tokens:>6} tokens")
+    print(f"USABLE BUDGET OVERFLOW:                {budget_uncompacted.is_overflow} (Exceeds by {budget_uncompacted.total_prompt_tokens - budget_uncompacted.usable_context} tokens!)")
+    print("=" * 85)
 
-
-    print("=" * 80)
-    print("           REAL BUDGET BREAKDOWN: WORST-CASE BROWSER TURN")
-    print("=" * 80)
-    print(f"Hardware Context Window (n_ctx):       {budget.context_limit:>6} tokens")
-    print(f"Output Generation Reserve:             {budget.output_reserve:>6} tokens")
-    print(f"System Safety Margin:                  {budget.safety_margin:>6} tokens")
-    print(f"----------------------------------------------------------------")
-    print(f"Usable Input Budget:                   {budget.usable_context:>6} tokens")
-    print(f"================================================================")
-    print(f"COMPONENT BREAKDOWN:")
-    print(f"  1. Base System Prompt:               {budget.base_prompt_tokens:>6} tokens")
-    print(f"  2. Task Instructions (Browser):      {budget.task_instructions_tokens:>6} tokens")
-    print(f"  3. Tool Schemas (5 browser tools):   {budget.tool_schemas_tokens:>6} tokens")
-    print(f"  4. Conversation History (w/ DOM):    {budget.history_tokens:>6} tokens")
-    print(f"  5. User Query & Workspace Context:   {budget.user_query_tokens:>6} tokens")
-    print(f"----------------------------------------------------------------")
-    print(f"TOTAL INPUT PROMPT TOKENS:             {budget.total_prompt_tokens:>6} tokens")
-    print(f"REMAINING HEADROOM BEFORE COMPACTION:  {budget.remaining_tokens:>6} tokens")
-    print(f"Overflow Condition Detected:           {budget.is_overflow}")
-    print("=" * 80)
-
-    # 2. What happens when history contains an oversized DOM dump (e.g. 15,000 characters)?
-    print("\n" + "=" * 80)
-    print("      COMPACTOR OVERFLOW RECOVERY TEST (15,000-char DOM Dump)")
-    print("=" * 80)
-    huge_dom = "<observation>\n" + ("<div class='node'>DOM entry line " * 500) + "\n</observation>"
-    overflow_history = [
-        {"role": "user", "content": "Navigate to initial web portal"},
-        {"role": "assistant", "content": "<tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://huge.page\"}}</tool_call>"},
-        {"role": "user", "content": huge_dom},
-        {"role": "assistant", "content": "Page rendered with heavy DOM."},
-        {"role": "user", "content": "Now click on button #export"},
-        {"role": "assistant", "content": "<tool_call>{\"tool\": \"browser.click_element\", \"kwargs\": {\"element_id\": 42}}</tool_call>"},
-        {"role": "user", "content": "<observation>Clicked button #export successfully.</observation>"},
-        {"role": "assistant", "content": "Export initiated. What is the next step?"}
-    ]
-
-    tokens_before = budget_mgr.count_tokens(" ".join(str(m['content']) for m in overflow_history))
-    print(f"Oversized History Tokens Before Compaction: {tokens_before:>6} tokens")
-
-    compacted_msgs, report = compactor.compact(
-        messages=overflow_history,
-        usable_budget=1500,
-        current_prompt_tokens=tokens_before
+    # 3. ENGAGE CONTEXT COMPACTOR (Multi-stage compression)
+    # Available budget for history = Usable Budget - mandatory prompt overhead
+    mandatory_overhead = (
+        budget_uncompacted.base_prompt_tokens +
+        budget_uncompacted.task_instructions_tokens +
+        budget_uncompacted.tool_schemas_tokens +
+        budget_uncompacted.user_query_tokens
     )
-    tokens_after = budget_mgr.count_tokens(" ".join(str(m['content']) for m in compacted_msgs))
+    history_target_budget = budget_uncompacted.usable_context - mandatory_overhead
 
+    compacted_history, report = compactor.compact(
+        messages=raw_history,
+        usable_budget=history_target_budget,
+        current_prompt_tokens=budget_uncompacted.total_prompt_tokens
+    )
 
-    print(f"Compacted History Tokens After Compaction:  {tokens_after} tokens")
-    print(f"Tokens Saved by Compactor:                  {tokens_before - tokens_after} tokens")
-    print(f"Observations Pruned/Truncated:              {report.observations_pruned}")
-    print(f"Stage 3 Executive Summary Applied:          {report.summary_applied}")
-    print(f"Exact Content Dropped by Compactor:         Truncated middle of <observation> DOM body")
-    print(f"                                            Retained: First {compactor.max_observation_chars*2//3} chars (head) + Last {compactor.max_observation_chars//3} chars (tail)")
-    print("=" * 80)
+    # Recalculate post-compaction budget
+    budget_compacted = budget_mgr.calculate_budget(
+        model_name="Qwen3-Coder-30B-A3B-Instruct",
+        base_prompt=assembled_uncompacted.base_system_prompt,
+        task_instructions=assembled_uncompacted.task_instructions,
+        tool_schemas=assembled_uncompacted.tool_schemas_str,
+        history_messages=compacted_history,
+        user_query=query
+    )
+
+    print("\n" + "=" * 85)
+    print("           COMPACTOR RECOVERY & COMPRESSION RESULTS")
+    print("=" * 85)
+    print(f"History Tokens Before Compaction:      {budget_uncompacted.history_tokens:>6} tokens")
+    print(f"History Tokens After Compaction:       {budget_compacted.history_tokens:>6} tokens")
+    print(f"Tokens Saved by Compactor:             {budget_uncompacted.history_tokens - budget_compacted.history_tokens:>6} tokens")
+    print(f"Observations Pruned/Truncated:         {report.observations_pruned}")
+    print(f"Stage 3 Rule-Based Summary Applied:    {report.summary_applied}")
+    print(f"---------------------------------------------------------------------")
+    print(f"FINAL ASSEMBLED INPUT PROMPT TOKENS:   {budget_compacted.total_prompt_tokens:>6} tokens")
+    print(f"FINAL REMAINING HEADROOM:              {budget_compacted.remaining_tokens:>6} tokens")
+    print(f"Overflow Condition Detected:           {budget_compacted.is_overflow}")
+    print("=" * 85)
+
+    # 4. Strict Budget Assertion
+    budget_mgr.verify_or_raise(budget_compacted)
+    print("\n[VERIFIED] budget_mgr.verify_or_raise() passed cleanly! Context window 100% protected.")
+    print(f"Unified Margin Verified: safety_margin={budget_compacted.safety_margin}, output_reserve={budget_compacted.output_reserve}, usable={budget_compacted.usable_context}.")
 
 if __name__ == "__main__":
-    run_worst_case_budget_analysis()
+    run_true_worst_case_analysis()

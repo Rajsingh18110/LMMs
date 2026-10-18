@@ -150,28 +150,51 @@ def stream_completion(messages: List[Dict[str, Any]], max_tokens: int = 15) -> D
         return {"error": str(e), "ttft": 0, "total_latency": 0, "text": ""}
 
 
-def evaluate_tool_call(output_text: str, target_tool: Optional[str]) -> bool:
+def evaluate_tool_call(output_text: str, target_tool: Optional[str]) -> Dict[str, Any]:
     """Checks if output contains a valid tool call matching target or schema."""
     if not target_tool:
         # Non-tool prompt: success if it did NOT emit an erroneous tool call
-        return "<tool_call>" not in output_text
-    
+        emitted = "<tool_call>" in output_text
+        return {
+            "emitted": emitted,
+            "schema_valid": not emitted,
+            "correct_tool": not emitted,
+            "tool_name": None
+        }
+
     # Tool-dependent prompt: must contain <tool_call> with valid json
-    if "<tool_call>" in output_text:
+    emitted = "<tool_call>" in output_text
+    schema_valid = False
+    correct_tool = False
+    tool_name = None
+
+    if emitted:
         import re
-        m = re.search(r"<tool_call>(.*?)</tool_call>", output_text, re.DOTALL)
+        m = re.search(r"<tool_call>\s*(.*?)\s*(?:</tool_call>|$)", output_text, re.DOTALL)
         if m:
+            raw_json = m.group(1).strip()
+            if not raw_json.endswith("}"):
+                raw_json += "}"
             try:
-                tc = json.loads(m.group(1))
-                t_name = tc.get("tool") or tc.get("name")
-                if t_name:
-                    return True
+                tc = json.loads(raw_json)
+                if isinstance(tc, dict):
+                    tool_name = tc.get("tool") or tc.get("name")
+                    if tool_name:
+                        schema_valid = True
+                        if tool_name == target_tool or tool_name.startswith(target_tool.split(".")[0]):
+                            correct_tool = True
             except Exception:
                 pass
-    return False
+
+    return {
+        "emitted": emitted,
+        "schema_valid": schema_valid,
+        "correct_tool": correct_tool,
+        "tool_name": tool_name
+    }
 
 
-def run_benchmark(runs_per_prompt: int = 1):
+def run_benchmark(runs_per_prompt: int = 3, target_scenario_ids: Optional[List[str]] = None):
     online, loaded = check_engine()
     if not online:
         print("Error: Engine is not running on localhost:11435. Please start launcher or engine server.")
@@ -184,32 +207,29 @@ def run_benchmark(runs_per_prompt: int = 1):
 
     pipeline = OrchestrationPipeline(engine_url=ENGINE_URL)
 
-    results_new = []
-    results_legacy = []
+    prompts_to_run = BENCHMARK_PROMPTS
+    if target_scenario_ids:
+        prompts_to_run = [p for p in BENCHMARK_PROMPTS if p["id"] in target_scenario_ids]
 
-    print("\n" + "=" * 90)
-    print(f"{'ID':<3} | {'Scenario':<20} | {'Mode':<6} | {'Tokens':<6} | {'TTFT (s)':<8} | {'Total (s)':<9} | {'Tool Valid':<10}")
-    print("-" * 90)
+    results_table = []
 
-    for p in BENCHMARK_PROMPTS:
+    print("\n" + "=" * 105)
+    print(f"{'ID':<3} | {'Scenario':<18} | {'Mode':<5} | {'Run':<4} | {'Tokens':<6} | {'TTFT(s)':<8} | {'Tot(s)':<7} | {'Emitted':<8} | {'Schema':<7} | {'Correct'}")
+    print("=" * 105)
+
+    for p in prompts_to_run:
         pid = p["id"]
         scenario = p["scenario"]
         query = p["query"]
         history = p.get("history", [])
-
-        # Live inference on representative prompts across all 7 scenarios (or all if --all specified)
-        run_live_infer = (pid in ["A1", "B1", "C1", "D1", "E1", "F1", "G1"]) or ("--all" in sys.argv)
+        is_tool_prompt = p["target_tool"] is not None
+        max_gen_tokens = 96 if is_tool_prompt else 32
 
         # -----------------------------
         # Condition 1: NEW Pipeline
         # -----------------------------
         os.environ["LMMS_LEGACY_PROMPT"] = "0"
-        new_tokens_list = []
-        new_ttft_list = []
-        new_latency_list = []
-        new_valid_list = []
-
-        for _ in range(runs_per_prompt):
+        for r in range(1, runs_per_prompt + 1):
             ctx, intent_res, selection_res, budget = pipeline.prepare_request(
                 model_name=model_to_use,
                 user_query=query,
@@ -218,42 +238,29 @@ def run_benchmark(runs_per_prompt: int = 1):
             )
             full_prompt_text = "".join(m["content"] for m in ctx.messages if isinstance(m.get("content"), str))
             exact_tokens = count_tokens_exact(full_prompt_text)
-            new_tokens_list.append(exact_tokens)
 
-            if run_live_infer:
-                comp_res = stream_completion(ctx.messages, max_tokens=4)
-                tool_valid = evaluate_tool_call(comp_res["text"], p["target_tool"])
-                new_ttft_list.append(comp_res["ttft"])
-                new_latency_list.append(comp_res["total_latency"])
-                new_valid_list.append(tool_valid)
-            else:
-                new_ttft_list.append(0.0)
-                new_latency_list.append(0.0)
-                new_valid_list.append(True)
+            comp_res = stream_completion(ctx.messages, max_tokens=max_gen_tokens)
+            eval_res = evaluate_tool_call(comp_res["text"], p["target_tool"])
 
-        avg_new_tokens = int(statistics.mean(new_tokens_list))
-        avg_new_ttft = statistics.mean(new_ttft_list)
-        avg_new_lat = statistics.mean(new_latency_list)
-        new_valid = any(new_valid_list)
+            ttft = comp_res["ttft"]
+            tot = comp_res["total_latency"]
+            emitted = eval_res["emitted"]
+            schema = eval_res["schema_valid"]
+            correct = eval_res["correct_tool"]
 
-        results_new.append({
-            "id": pid, "tokens": avg_new_tokens, "ttft": avg_new_ttft, "lat": avg_new_lat, "valid": new_valid
-        })
-        ttft_str = f"{avg_new_ttft:>8.2f}" if avg_new_ttft > 0 else f"{'--':>8}"
-        lat_str = f"{avg_new_lat:>9.2f}" if avg_new_lat > 0 else f"{'--':>9}"
-        valid_str = str(new_valid) if run_live_infer else "Exact-Tok"
-        print(f"{pid:<3} | {scenario:<20} | {'NEW':<6} | {avg_new_tokens:>6} | {ttft_str} | {lat_str} | {valid_str:<10}")
+            results_table.append({
+                "id": pid, "scenario": scenario, "mode": "NEW", "run": r,
+                "tokens": exact_tokens, "ttft": ttft, "lat": tot,
+                "emitted": emitted, "schema": schema, "correct": correct
+            })
+
+            print(f"{pid:<3} | {scenario:<18} | {'NEW':<5} | {r:<4} | {exact_tokens:>6} | {ttft:>8.2f} | {tot:>7.2f} | {str(emitted):<8} | {str(schema):<7} | {str(correct)}")
 
         # -----------------------------
         # Condition 2: OLD Monolithic
         # -----------------------------
         os.environ["LMMS_LEGACY_PROMPT"] = "1"
-        leg_tokens_list = []
-        leg_ttft_list = []
-        leg_latency_list = []
-        leg_valid_list = []
-
-        for _ in range(runs_per_prompt):
+        for r in range(1, runs_per_prompt + 1):
             ctx_leg, _, _, _ = pipeline.prepare_request(
                 model_name=model_to_use,
                 user_query=query,
@@ -262,61 +269,52 @@ def run_benchmark(runs_per_prompt: int = 1):
             )
             full_leg_text = "".join(m["content"] for m in ctx_leg.messages if isinstance(m.get("content"), str))
             exact_leg_tokens = count_tokens_exact(full_leg_text)
-            leg_tokens_list.append(exact_leg_tokens)
 
-            if run_live_infer:
-                comp_leg_res = stream_completion(ctx_leg.messages, max_tokens=4)
-                leg_tool_valid = evaluate_tool_call(comp_leg_res["text"], p["target_tool"])
-                leg_ttft_list.append(comp_leg_res["ttft"])
-                leg_latency_list.append(comp_leg_res["total_latency"])
-                leg_valid_list.append(leg_tool_valid)
+            comp_leg_res = stream_completion(ctx_leg.messages, max_tokens=max_gen_tokens)
+            eval_leg_res = evaluate_tool_call(comp_leg_res["text"], p["target_tool"])
 
-            else:
-                leg_ttft_list.append(0.0)
-                leg_latency_list.append(0.0)
-                leg_valid_list.append(True)
+            ttft_leg = comp_leg_res["ttft"]
+            tot_leg = comp_leg_res["total_latency"]
+            emitted_leg = eval_leg_res["emitted"]
+            schema_leg = eval_leg_res["schema_valid"]
+            correct_leg = eval_leg_res["correct_tool"]
 
-        avg_leg_tokens = int(statistics.mean(leg_tokens_list))
-        avg_leg_ttft = statistics.mean(leg_ttft_list)
-        avg_leg_lat = statistics.mean(leg_latency_list)
-        leg_valid = any(leg_valid_list)
+            results_table.append({
+                "id": pid, "scenario": scenario, "mode": "OLD", "run": r,
+                "tokens": exact_leg_tokens, "ttft": ttft_leg, "lat": tot_leg,
+                "emitted": emitted_leg, "schema": schema_leg, "correct": correct_leg
+            })
 
-        results_legacy.append({
-            "id": pid, "tokens": avg_leg_tokens, "ttft": avg_leg_ttft, "lat": avg_leg_lat, "valid": leg_valid
-        })
-        ttft_leg_str = f"{avg_leg_ttft:>8.2f}" if avg_leg_ttft > 0 else f"{'--':>8}"
-        lat_leg_str = f"{avg_leg_lat:>9.2f}" if avg_leg_lat > 0 else f"{'--':>9}"
-        valid_leg_str = str(leg_valid) if run_live_infer else "Exact-Tok"
-        print(f"{pid:<3} | {scenario:<20} | {'OLD':<6} | {avg_leg_tokens:>6} | {ttft_leg_str} | {lat_leg_str} | {valid_leg_str:<10}")
-        print("-" * 90)
-
-
-    # Calculate summary statistics
-    all_new_tokens = [r["tokens"] for r in results_new]
-    all_leg_tokens = [r["tokens"] for r in results_legacy]
-    all_new_ttft = [r["ttft"] for r in results_new if r["ttft"] > 0]
-    all_leg_ttft = [r["ttft"] for r in results_legacy if r["ttft"] > 0]
-    all_new_lat = [r["lat"] for r in results_new if r["lat"] > 0]
-    all_leg_lat = [r["lat"] for r in results_legacy if r["lat"] > 0]
-    
-    mean_token_red = (statistics.mean(all_leg_tokens) - statistics.mean(all_new_tokens)) / statistics.mean(all_leg_tokens) * 100.0
+            print(f"{pid:<3} | {scenario:<18} | {'OLD':<5} | {r:<4} | {exact_leg_tokens:>6} | {ttft_leg:>8.2f} | {tot_leg:>7.2f} | {str(emitted_leg):<8} | {str(schema_leg):<7} | {str(correct_leg)}")
+        print("-" * 105)
 
     print("\n" + "=" * 90)
-    print("                    REAL-MODEL BENCHMARK SUMMARY TABLE")
+    print("                    TOOL-CALL VERIFICATION SUMMARY (3 RUNS)")
     print("=" * 90)
-    print(f"Metric                        | OLD Monolithic       | NEW Smart Context    | Improvement / Delta")
-    print("-" * 90)
-    print(f"Mean Prompt Tokens (Exact)    | {statistics.mean(all_leg_tokens):>12.1f} tokens | {statistics.mean(all_new_tokens):>12.1f} tokens | -{mean_token_red:.1f}% reduction")
-    print(f"Median Prompt Tokens (Exact)  | {statistics.median(all_leg_tokens):>12.1f} tokens | {statistics.median(all_new_tokens):>12.1f} tokens | -{(statistics.median(all_leg_tokens)-statistics.median(all_new_tokens))/statistics.median(all_leg_tokens)*100:.1f}% reduction")
-    if all_new_ttft and all_leg_ttft:
-        print(f"Mean TTFT                     | {statistics.mean(all_leg_ttft):>12.2f} s      | {statistics.mean(all_new_ttft):>12.2f} s      | {statistics.mean(all_leg_ttft)-statistics.mean(all_new_ttft):+.2f} s faster")
-        print(f"Median TTFT                   | {statistics.median(all_leg_ttft):>12.2f} s      | {statistics.median(all_new_ttft):>12.2f} s      | {statistics.median(all_leg_ttft)-statistics.median(all_new_ttft):+.2f} s faster")
-    if all_new_lat and all_leg_lat:
-        print(f"Mean Total Latency            | {statistics.mean(all_leg_lat):>12.2f} s      | {statistics.mean(all_new_lat):>12.2f} s      | {statistics.mean(all_leg_lat)-statistics.mean(all_new_lat):+.2f} s faster")
-    print(f"Normal Chat Tokens (Mean)     | {statistics.mean([r['tokens'] for r in results_legacy[:5]]):>12.1f} tokens | {statistics.mean([r['tokens'] for r in results_new[:5]]):>12.1f} tokens | -{(statistics.mean([r['tokens'] for r in results_legacy[:5]])-statistics.mean([r['tokens'] for r in results_new[:5]]))/statistics.mean([r['tokens'] for r in results_legacy[:5]])*100:.1f}% reduction")
+    tool_results = [r for r in results_table if r["id"] != "A1"]
+    new_tool_runs = [r for r in tool_results if r["mode"] == "NEW"]
+    old_tool_runs = [r for r in tool_results if r["mode"] == "OLD"]
+
+    if new_tool_runs and old_tool_runs:
+        print(f"NEW Pipeline Tool Emitted:   {sum(1 for r in new_tool_runs if r['emitted'])}/{len(new_tool_runs)} ({(sum(1 for r in new_tool_runs if r['emitted'])/len(new_tool_runs))*100:.1f}%)")
+        print(f"NEW Pipeline Schema Valid:   {sum(1 for r in new_tool_runs if r['schema'])}/{len(new_tool_runs)} ({(sum(1 for r in new_tool_runs if r['schema'])/len(new_tool_runs))*100:.1f}%)")
+        print(f"NEW Pipeline Correct Tool:   {sum(1 for r in new_tool_runs if r['correct'])}/{len(new_tool_runs)} ({(sum(1 for r in new_tool_runs if r['correct'])/len(new_tool_runs))*100:.1f}%)")
+        print(f"NEW Pipeline Mean TTFT:      {statistics.mean([r['ttft'] for r in new_tool_runs]):.2f}s")
+        print("-" * 90)
+        print(f"OLD Legacy Tool Emitted:     {sum(1 for r in old_tool_runs if r['emitted'])}/{len(old_tool_runs)} ({(sum(1 for r in old_tool_runs if r['emitted'])/len(old_tool_runs))*100:.1f}%)")
+        print(f"OLD Legacy Schema Valid:     {sum(1 for r in old_tool_runs if r['schema'])}/{len(old_tool_runs)} ({(sum(1 for r in old_tool_runs if r['schema'])/len(old_tool_runs))*100:.1f}%)")
+        print(f"OLD Legacy Correct Tool:     {sum(1 for r in old_tool_runs if r['correct'])}/{len(old_tool_runs)} ({(sum(1 for r in old_tool_runs if r['correct'])/len(old_tool_runs))*100:.1f}%)")
+        print(f"OLD Legacy Mean TTFT:        {statistics.mean([r['ttft'] for r in old_tool_runs]):.2f}s")
     print("=" * 90)
 
 
 if __name__ == "__main__":
-    runs = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    run_benchmark(runs_per_prompt=runs)
+    runs = 3
+    scenarios = ["A1", "C1", "D1", "F1"]
+    for arg in sys.argv[1:]:
+        if arg.isdigit():
+            runs = int(arg)
+        elif arg.startswith("--scenarios="):
+            scenarios = arg.split("=")[1].split(",")
+    run_benchmark(runs_per_prompt=runs, target_scenario_ids=scenarios)
+

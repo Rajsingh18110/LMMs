@@ -27,6 +27,7 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
     correct_intent = 0
     correct_tools_flag = 0
     dangerous_errors: List[Dict[str, Any]] = []
+    over_injected: List[Dict[str, Any]] = []
     misrouted_queries: List[Dict[str, Any]] = []
     
     # Metrics tracking
@@ -93,6 +94,17 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
                     "confidence": res.confidence,
                     "reason": res.reason
                 })
+
+            # Check over-injection error (Chat/Knowledge query unnecessarily received tools)
+            if not expected_tools and pred_tools:
+                over_injected.append({
+                    "line": line_num,
+                    "query": query,
+                    "expected_intent": expected_intent,
+                    "predicted_intent": pred_intent,
+                    "confidence": res.confidence,
+                    "reason": res.reason
+                })
                 
             if pred_tools == expected_tools:
                 correct_tools_flag += 1
@@ -100,14 +112,18 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
     overall_accuracy = (correct_intent / total) * 100.0 if total > 0 else 0.0
     tool_flag_accuracy = (correct_tools_flag / total) * 100.0 if total > 0 else 0.0
     dangerous_error_rate = (len(dangerous_errors) / total) * 100.0 if total > 0 else 0.0
+    chat_knowledge_count = sum(support[it] for it in support if it.lower() in ["normal_chat", "general_knowledge"])
+    over_injection_rate = (len(over_injected) / chat_knowledge_count) * 100.0 if chat_knowledge_count > 0 else 0.0
 
     print("=" * 80)
     print("                INTENT ROUTER EVALUATION REPORT")
     print("=" * 80)
+    print(f"Dataset Path:               {data_path}")
     print(f"Total Test Cases:           {total}")
     print(f"Intent Classification Acc:  {correct_intent}/{total} ({overall_accuracy:.2f}%)")
     print(f"Tool Need Detection Acc:    {correct_tools_flag}/{total} ({tool_flag_accuracy:.2f}%)")
-    print(f"Dangerous Errors (Zero-Tool Actions): {len(dangerous_errors)} ({dangerous_error_rate:.2f}%)")
+    print(f"Dangerous Errors (Zero-Tool Actions):  {len(dangerous_errors)} ({dangerous_error_rate:.2f}%)")
+    print(f"Over-Injection Rate (Tools on Chat/KB): {len(over_injected)}/{chat_knowledge_count} ({over_injection_rate:.2f}%)")
     print("-" * 80)
     
     # Per-intent precision / recall table
@@ -146,12 +162,24 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
     else:
         print("\n[SUCCESS] Zero dangerous errors! All action requests received tools.")
 
+    # Over-injected queries
+    if over_injected:
+        print("\n" + "#" * 80)
+        print(f"OVER-INJECTED QUERIES ({len(over_injected)} chat/knowledge queries that received tools):")
+        print("#" * 80)
+        for oi in over_injected:
+            print(f"  Line {oi['line']:<3}: \"{oi['query']}\"")
+            print(f"           Expected: {oi['expected_intent']} (Tools=False) -> Got: {oi['predicted_intent']} (Tools=True, conf={oi['confidence']:.2f})")
+            print(f"           Reason: {oi['reason']}")
+    else:
+        print("[SUCCESS] Zero over-injections! No chat/knowledge queries received unnecessary tools.")
+
     if verbose_errors and misrouted_queries:
         print("\n" + "-" * 80)
         print(f"OTHER MISROUTED QUERIES ({len(misrouted_queries)}):")
         print("-" * 80)
         for mis in misrouted_queries:
-            if mis in dangerous_errors:
+            if mis in dangerous_errors or mis in over_injected:
                 continue
             print(f"  Line {mis['line']:<3}: \"{mis['query']}\"")
             print(f"           Expected: {mis['expected_intent']} -> Got: {mis['predicted_intent']} (conf={mis['confidence']:.2f})")
@@ -164,9 +192,13 @@ def run_evaluation(data_path: str = "tests/data/router_eval.jsonl", verbose_erro
         "tool_flag_accuracy": tool_flag_accuracy,
         "dangerous_errors_count": len(dangerous_errors),
         "dangerous_error_rate": dangerous_error_rate,
+        "over_injected_count": len(over_injected),
+        "over_injection_rate": over_injection_rate,
         "misrouted_count": len(misrouted_queries)
     }
 
 
 if __name__ == "__main__":
-    run_evaluation()
+    dataset_file = sys.argv[1] if len(sys.argv) > 1 else "tests/data/router_eval.jsonl"
+    run_evaluation(data_path=dataset_file)
+
