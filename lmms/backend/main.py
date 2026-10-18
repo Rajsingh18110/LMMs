@@ -22,6 +22,7 @@ from lmms.backend.cli.diagnostics import collect_doctor_report, collect_status, 
 from lmms.backend.cli.review import git_review, is_read_only_command, preview_file_change
 from lmms.backend.tools.boundaries import is_within_workspace
 from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
+from lmms.backend.orchestration import OrchestrationPipeline, RequestTrace, IntentType
 
 from lmms.backend.cli.scope_cli import cmd_scope_init, cmd_scope_status, cmd_scope_validate, cmd_scope_activate, cmd_scope_complete, cmd_scope_export, cmd_scope_reset
 from lmms.backend.security.report import generate_report
@@ -596,6 +597,96 @@ def run_cli():
     terminal_tool = TerminalTool()
     app_launcher = AppLauncherTool()
     messenger_tool = MessengerTool()
+    
+    # Smart Context & Dynamic Tool Orchestration Pipeline
+    orchestration_pipeline = OrchestrationPipeline(engine_url=ENGINE_URL)
+    orchestration_pipeline.executor.register_handler(
+        "web_search",
+        lambda **kwargs: web_search(kwargs.get("query", ""), kwargs.get("max_results", 5))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.open_url",
+        lambda **kwargs: browser_tool.open_url(kwargs.get("url", ""), headless=kwargs.get("headless", False))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.get_interactive_dom",
+        lambda **kwargs: browser_tool.get_interactive_dom(kwargs.get("url"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.click_element",
+        lambda **kwargs: browser_tool.click_element(selector=kwargs.get("selector") or kwargs.get("id"), url=kwargs.get("url"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.fill_form",
+        lambda **kwargs: browser_tool.fill_form(fields=kwargs.get("fields", {}), url=kwargs.get("url"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.type",
+        lambda **kwargs: browser_tool.type_text(
+            selector=kwargs.get("selector") or kwargs.get("id", ""),
+            text=kwargs.get("text", ""),
+            press_enter=kwargs.get("press_enter", False),
+            url=kwargs.get("url")
+        )
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.type_text",
+        lambda **kwargs: browser_tool.type_text(
+            selector=kwargs.get("selector") or kwargs.get("id", ""),
+            text=kwargs.get("text", ""),
+            press_enter=kwargs.get("press_enter", False),
+            url=kwargs.get("url")
+        )
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.press_key",
+        lambda **kwargs: browser_tool.press_key(kwargs.get("key", "Enter"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.scrape_live",
+        lambda **kwargs: browser_tool.scrape_live(url=kwargs.get("url"), selector=kwargs.get("selector"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.scrape",
+        lambda **kwargs: browser_tool.scrape_live(url=kwargs.get("url"), selector=kwargs.get("selector"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.screenshot",
+        lambda **kwargs: browser_tool.screenshot(save_path=kwargs.get("save_path", "/tmp/lmms_browser.png"), url=kwargs.get("url"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.scroll",
+        lambda **kwargs: browser_tool.scroll(kwargs.get("url", ""), kwargs.get("direction", "down"), kwargs.get("amount", 1000))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "files.read",
+        lambda **kwargs: file_tool.read(kwargs.get("path", ""))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "files.write",
+        lambda **kwargs: file_tool.write(kwargs.get("path", ""), kwargs.get("content", ""))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "app.launch",
+        lambda **kwargs: app_launcher.launch(kwargs.get("app_name_or_target") or kwargs.get("app_name") or kwargs.get("target", ""), kwargs.get("args") or [])
+    )
+    orchestration_pipeline.executor.register_handler(
+        "app.list",
+        lambda **kwargs: app_launcher.list_apps(kwargs.get("filter_query", ""))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "app.close",
+        lambda **kwargs: app_launcher.close_app(kwargs.get("app_name", ""))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "message.send",
+        lambda **kwargs: messenger_tool.send(
+            platform=kwargs.get("platform", "desktop"),
+            message=kwargs.get("message", ""),
+            recipient=kwargs.get("recipient")
+        )
+    )
+
     
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
         nonlocal checkpoint_created_this_session
@@ -1637,242 +1728,64 @@ def run_cli():
                     continue
                     
                     
-                system_prompt = f"You are {current_model}, an AI assistant running inside LMMs (Local Model Machine Studio), an advanced terminal-based AI system.\n"
-                
-                system_prompt += context_manager.get_working_memory_str()
-                system_prompt += cap_manager.get_system_prompt_additions()
-                
-                system_prompt += (
-                    "## Identity & Persona\n"
-                    f"1. Name: You are {current_model}, an independent AI model.\n"
-                    "2. System Environment: You are running inside LMMs, a terminal-based AI system created by MarkanM (Founder: Rajsingh).\n"
-                    "3. Websites: markanm.com, lmms.markanm.com\n"
-                    "CRITICAL RULES FOR IDENTITY:\n"
-                    "- NEVER volunteer your identity or creator information unprompted. If the user just says 'hello' or asks a general question, just answer the question naturally without introducing yourself.\n"
-                    f"- If explicitly asked for your name or identity, state your model name: {current_model}. NEVER claim to be created by LMMs or MarkanM. You are an independent AI model.\n"
-                    "- DO NOT use the web_search tool to look up information about yourself, MarkanM, or Rajsingh. Use this internal knowledge directly.\n\n"
-                )
-                
-                import re
-                match = re.search(r'(?:^|[-_])(\d+\.?\d*)[bB](?:[-_]|$)', current_model)
-                is_small_model = False
-                if match:
-                    try:
-                        is_small_model = float(match.group(1)) <= 7.0
-                    except ValueError:
-                        pass
-                elif "nano" in current_model.lower():
-                    is_small_model = True
-                is_tool_query = should_force_tool_mode(cmd)
-                full_prompt = (not is_small_model) and (is_tool_query or current_mode in ["/code", "/research"])
-
-                if not is_tool_query:
-                    system_prompt += (
-                        "\n## DIRECT CONVERSATION MODE\n"
-                        "This is a normal conversational request. Answer naturally and concisely in plain text.\n"
-                        "Do not output internal thoughts or verbose disclaimers. Give your response directly.\n\n"
-                    )
-                else:
-                    system_prompt += (
-                        "\n## TOOL-DRIVEN TASK MODE\n"
-                        "The user asked for a tool-driven action. Inspect real data using tools and return results cleanly.\n\n"
-                    )
-
-                if full_prompt:
-                    system_prompt += (
-                        "\\n## Terminal Output & Progress Communication\\n"
-                        "While performing long-running tasks, avoid silent gaps. Follow these rules:\\n"
-                        "1. Narrate before acting: Briefly state your plan in 1-2 lines.\\n"
-                        "2. Stream progress updates: Print short status lines as you go (e.g. 'Reading src/app.js...').\\n"
-                        "3. Chunk long thinking: Share intermediate findings as you reach them.\\n"
-                        "4. Heartbeat on long operations: Print a short note before a single long step starts.\\n"
-                        "5. Summarize, don't dump: Give short, human-readable progress lines.\\n"
-                        "6. Source Citation: If the user types '/source' or asks for sources, clearly list the exact URLs, files, or internal knowledge you used to generate the answer.\\n"
-                        "Goal: the terminal should always feel alive and show momentum.\\n\\n"
-                    )
-                    
-                    system_prompt += (
-                        "## Advanced Capabilities & OS Control\\n"
-                        "You are not just a chatbot, you are a deeply integrated OS agent. Use `terminal.run` to its full potential:\\n"
-                        "1. OS Control: You can open UI apps (e.g., `xdg-open https://youtube.com`, `google-chrome`), play media, lock the screen, or perform any valid Linux command.\\n"
-                        "2. GitHub Tracking: Whenever you create or significantly modify code files in a project, you MUST proactively run `git add .`, `git commit -m \"...\"`, and `git push origin main` (or the appropriate branch) to track the changes, ensuring the user's work is always saved and uploaded to GitHub.\\n"
-                        "3. Colorful Terminal Graphs/Canvas: If the user asks for a chart, graph, bar chart, pie chart, or colorful data visualization, DO NOT just print text tables. Write a temporary Python script that uses the `plotext` library (which is already installed) to draw beautiful terminal charts, and execute it via `terminal.run`. Show the output to the user.\\n"
-                        "4. APIs Over Scraping: If you have access to API keys or if there's a clear public API for the requested data, prefer writing a quick Python script to query the API rather than relying entirely on `web_search` and raw DOM scraping, as it is much cleaner.\\n\\n"
-                    )
-    
-                    base_tools = (
-                        "1. web_search: {\"tool\": \"web_search\", \"kwargs\": {\"query\": \"search terms\", \"max_results\": 5}}\n"
-                        "2. browser.open_url: {\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"http...\", \"headless\": False}} (Opens live browser window. Returns interactive DOM with labeled IDs like [ID 1], [ID 2])\n"
-                        "3. browser.get_interactive_dom: {\"tool\": \"browser.get_interactive_dom\", \"kwargs\": {\"url\": \"http...\"}} (Extracts all clickable & input elements with discrete IDs like [ID 1], [ID 2] for precise interaction)\n"
-                        "4. browser.click_element: {\"tool\": \"browser.click_element\", \"kwargs\": {\"selector\": \"1\"}} (Click element by ID number like '1' or CSS selector)\n"
-                        "5. browser.fill_form: {\"tool\": \"browser.fill_form\", \"kwargs\": {\"fields\": {\"1\": \"user@example.com\", \"2\": \"secret_pass\"}}} (Fill multiple form inputs by ID or selector)\n"
-                        "6. browser.type: {\"tool\": \"browser.type\", \"kwargs\": {\"selector\": \"1\", \"text\": \"search query\", \"press_enter\": True}} (Type text into element and optionally press enter)\n"
-                        "7. browser.press_key: {\"tool\": \"browser.press_key\", \"kwargs\": {\"key\": \"Enter\"}} (Press keyboard key like Enter, Tab, Escape)\n"
-                        "8. browser.scrape_live: {\"tool\": \"browser.scrape_live\", \"kwargs\": {\"url\": \"...\", \"selector\": \"...\"}} (Live JS-rendered scraping)\n"
-                        "9. browser.screenshot: {\"tool\": \"browser.screenshot\", \"kwargs\": {\"save_path\": \"/tmp/shot.png\"}}\n"
-                        "10. app.launch: {\"tool\": \"app.launch\", \"kwargs\": {\"app_name_or_target\": \"calculator\"}} (Launch desktop app like 'calculator', 'chrome', 'code', 'vlc', or open URL/file in detached background mode)\n"
-                        "11. app.list: {\"tool\": \"app.list\", \"kwargs\": {\"filter_query\": \"\"}} (List installed desktop applications)\n"
-                        "12. app.close: {\"tool\": \"app.close\", \"kwargs\": {\"app_name\": \"calculator\"}} (Close running desktop application)\n"
-                        "13. message.send: {\"tool\": \"message.send\", \"kwargs\": {\"platform\": \"desktop\", \"message\": \"Task finished\", \"recipient\": \"Alert Title\"}} (Send message via desktop notification, telegram, discord, or slack)\n"
-                        "14. files.read: {\"tool\": \"files.read\", \"kwargs\": {\"path\": \"/path/to/file\"}}\n"
-                        "15. files.write: {\"tool\": \"files.write\", \"kwargs\": {\"path\": \"/path/to/file\", \"content\": \"data\"}}\n"
-                        "16. terminal.run: {\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"bash cmd\"}}\n"
-                        "17. browser.scroll: {\"tool\": \"browser.scroll\", \"kwargs\": {\"url\": \"...\", \"direction\": \"down\", \"amount\": 1000}}\n"
-                        "18. browser.open_authenticated: {\"tool\": \"browser.open_authenticated\", \"kwargs\": {\"url\": \"...\", \"headless\": False}} (Set headless to False to show browser for SSO/authenticated session)\n"
-                        "19. vector_db.search: {\"tool\": \"vector_db.search\", \"kwargs\": {\"query\": \"search text\"}} (Search the workspace RAG database)\n"
-                        "20. load_capability: {\"tool\": \"load_capability\", \"kwargs\": {\"capability\": \"web\"}} (Load extra capabilities like 'web' if missing)\n"
-                        "21. retrieve_archive: {\"tool\": \"retrieve_archive\", \"kwargs\": {\"obs_id\": \"obs_...\"}} (Load full uncompressed output of a previous tool run by its ID)\n"
-                        "22. security.generate_report: {\"tool\": \"security.generate_report\", \"kwargs\": {\"findings_summary\": \"Exec summary of what was found...\"}} (Generate a markdown security report of all actions)\n"
-                    )
-                    filtered_tools = cap_manager.filter_tools(base_tools)
-                    
-                    system_prompt += (
-                        "## Tool Calling (ReAct Loop)\n"
-                        "You have access to tools. To use a tool, you MUST output a raw JSON block wrapped in <tool_call> tags.\n"
-                        "Example:\n"
-                        "<tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\n"
-                        "Do NOT put anything else inside the <tool_call> tags. The system will execute the tool and return <observation> results. You may call multiple tools sequentially.\n\n"
-                        "AVAILABLE TOOLS:\n"
-                        f"{filtered_tools}\n"
-                    )
-                    system_prompt += (
-                        "## Few-Shot Examples (How to use tools)\n"
-                        "Example 1 - Launch Desktop App:\n"
-                        "User: open calculator / launch chrome\n"
-                        "Assistant: <tool_call>{\"tool\": \"app.launch\", \"kwargs\": {\"app_name_or_target\": \"calculator\"}}</tool_call>\n"
-                        "Observation: [SUCCESS] Launched 'gnome-calculator' successfully (PID: 12345).\n"
-                        "Assistant: I have launched the calculator application for you.\n\n"
-                        "Example 2 - Live Web Navigation, DOM Elements & Form Login:\n"
-                        "User: open github and login\n"
-                        "Assistant: <tool_call>{\"tool\": \"browser.open_url\", \"kwargs\": {\"url\": \"https://github.com/login\", \"headless\": False}}</tool_call>\n"
-                        "Observation: [Page Loaded: Sign in to GitHub]\n[ID 1] <input name='login' type='text'>\n[ID 2] <input name='password' type='password'>\n[ID 3] <input type='submit' value='Sign in'>\n"
-                        "Assistant: <tool_call>{\"tool\": \"browser.fill_form\", \"kwargs\": {\"fields\": {\"1\": \"user@example.com\", \"2\": \"secretpassword\"}}}</tool_call>\n"
-                        "Observation: [FILL_SUCCESS] Filled fields: [data-lmms-id='1'], [data-lmms-id='2'].\n"
-                        "Assistant: <tool_call>{\"tool\": \"browser.click_element\", \"kwargs\": {\"selector\": \"3\"}}</tool_call>\n"
-                        "Observation: [CLICK_SUCCESS] Clicked '3'.\n"
-                        "Assistant: I have filled in your credentials and clicked Sign In.\n\n"
-                        "Example 3 - Send Desktop Notification or Telegram Alert:\n"
-                        "User: notify me that the build finished\n"
-                        "Assistant: <tool_call>{\"tool\": \"message.send\", \"kwargs\": {\"platform\": \"desktop\", \"message\": \"Build completed successfully!\", \"recipient\": \"Build Alert\"}}</tool_call>\n"
-                        "Observation: [SUCCESS] Desktop notification displayed: 'Build Alert: Build completed successfully!'.\n"
-                        "Assistant: I have sent a desktop notification to alert you.\n\n"
-                        "Example 4 - Web Search & Info Extraction:\n"
-                        "User: search what is current gold price\n"
-                        "Assistant: <tool_call>{\"tool\": \"web_search\", \"kwargs\": {\"query\": \"current gold price\"}}</tool_call>\n"
-                        "Observation: [Search Results...]\n"
-                        "Assistant: The current gold price is...\n\n"
-                    )
-                    system_prompt += (
-                        "\n## 💻 Principal Software Engineer Persona (Claude Code Killer)\n"
-                        "You are an elite, autonomous software engineer capable of full-repo management. Do not just act like a chatbot; act like a lead developer.\n"
-                        "1. **Full Autonomy**: If asked to build a project, clone repositories (`git clone`), compile binaries (`.deb`, `.exe` via pyinstaller/dpkg), and install dependencies autonomously using `terminal.run`.\n"
-                        "2. **Architectural Understanding**: Before writing code, map out the workspace. Use AST parsing (`python -c \"import ast...\"`) or grep to understand variable flows and architecture.\n"
-                        "3. **Proactive Bug Fixing & TDD**: If asked to fix a bug, DO NOT just write code. First, write a test using `files.write`, run it with `terminal.run` to see it fail, fix the code, and run it again until it passes.\n"
-                        "4. **Iterative Loops**: Never ask the user to test your code if you can test it yourself. Loop your tools (write -> test -> fix -> commit) until the job is 100% done.\n"
-                        "5. **CRITICAL ANTI-ADVICE RULE — READ THIS CAREFULLY**: NEVER write instructions for the user to run manually. If you know what command needs to run, YOU MUST RUN IT YOURSELF using terminal.run. Do NOT say 'Run docker-compose up' or 'You can install it with pip install'. Instead, output the tool_call and run it. The user hired you to DO the work, not to describe it. If you find yourself writing a numbered list of commands for the user, STOP — use terminal.run for each one instead.\n"
-                        "6. **Error Recovery**: If a command fails with a missing module or dependency error, immediately run the install command (e.g., `pip install <module>` or `npm install`) and then retry the original command. Never stop after the first failure.\n"
-                        "7. **sudo & Docker awareness**: ALWAYS prefer `docker compose` (space, v2) over `docker-compose` (hyphen, v1 legacy). Before running `sudo apt install`, FIRST check if the tool exists with `which <tool>` or `<tool> --version`. If a tool is already installed under a different name or path, use that instead of installing. If sudo IS needed, run it directly — the terminal supports it.\n"
-                        "8. **Python projects**: Check for `requirements.txt` and run `pip install -r requirements.txt` before starting. Check for `.env.example` and copy it to `.env` if `.env` is missing.\n"
-                    )
-                    system_prompt += (
-                        "## Anti-Hallucination & Web Search Rules\n"
-                        "1. DO NOT GUESS OR HALLUCINATE numbers, prices, APIs, or facts. If you do not know the exact number, you MUST use tools to find it.\n"
-                        "2. If `web_search` returns snippets/summaries that DO NOT contain the exact numbers you need, DO NOT guess! Use `browser.open_url` or `browser.scrape` on the provided URL to read the full page content and extract the actual numbers before answering the user.\n"
-                        "3. DO NOT hallucinate restrictions. You HAVE FULL CAPABILITY to access external systems, internet, APIs, and GitHub via your tools. Do not say 'I cannot access external systems'. Just use your tools.\n"
-                    )
-                else:
-                    system_prompt += (
-                        "## Tool Calling\n"
-                        "ONLY use tools if you need to access the system, web, or files. For normal conversation, just reply with normal text and DO NOT output <tool_call>.\n"
-                        "To use a tool, output a raw JSON block wrapped in <tool_call> tags.\n"
-                        "Example: <tool_call>{\"tool\": \"terminal.run\", \"kwargs\": {\"command\": \"ls -la\"}}</tool_call>\n"
-                        "AVAILABLE TOOLS: web_search, browser.open_url, files.read, files.write, terminal.run\n\n"
-                    )
-
-                if planning_mode:
-                    system_prompt += (
-                        "## Planning Mode\n"
-                        "The user is planning a coding task. Inspect files and use only read-only tools when useful. "
-                        "Do not write files, run mutating commands, commit, push, or claim that changes were made. "
-                        "Return a concise numbered implementation plan, affected files, risks, and validation commands.\n\n"
-                    )
-
-                # Global Persona Injection
-                persona_facts = get_persona()
-                if persona_facts:
-                    system_prompt += "## Global User Persona (Remember these facts across all sessions):\n"
-                    for fact in persona_facts:
-                        system_prompt += f"- {fact}\n"
-                    system_prompt += "\n"
-                
-                if current_workspace != "None":
-                    system_prompt += f"The user's current workspace directory is: {current_workspace}\\n"
-                    system_prompt += "If you need to understand the project structure, use the `terminal.run` tool with `ls` or `tree` commands. To search the workspace context, use the `vector_db.search` tool.\n"
-                    workspace_rules = load_workspace_rules(current_workspace)
-                    if workspace_rules:
-                        system_prompt += "## Workspace Instructions (LMMS.md)\n"
-                        system_prompt += workspace_rules + "\n\n"
-                    system_prompt += "Instructions: Answer concisely. Do not repeat yourself. Use tools to gather context when necessary.\n"
-                        
                 # Trigger background persona extraction
                 auto_extract_persona(cmd, current_model)
-                
-                
-                import time
-                _budget_start = time.time()
-                n_ctx, reserve, available_for_input = get_context_budget(current_model)
-                system_cost = count_tokens(system_prompt, current_model)
-                _budget_end = time.time()
-                # Context budget calculated silently
-                avg_iter_cost = 1000 # Estimate tokens used per tool call/iteration
-                max_possible = max(1, (available_for_input - system_cost) // avg_iter_cost)
-                
-                # Bug B Fix: enforce a minimum floor of 5 iterations so multi-step tasks
-                # (read README → check deps → install → run) can always complete, even if
-                # the context budget calculation produces a low number. Genuine context
-                # exhaustion is handled by the existing auto-truncation fallback.
+
+                # Smart Context & Dynamic Tool Orchestration Pipeline
+                req_t0 = time.time()
+                assembled_ctx, intent_res, selection_res, budget = orchestration_pipeline.prepare_request(
+                    model_name=current_model,
+                    user_query=cmd,
+                    conversation_history=chat_history[-10:],
+                    current_workspace=current_workspace,
+                    permission_level=current_permission_level,
+                    active_mode=current_mode
+                )
+
+                n_ctx = budget.context_limit
+                reserve = budget.output_reserve
+                available_for_input = budget.usable_context
+
+                # Multimodal parsing
+                valid_img_paths = []
+                potential_path = cmd.strip("'\" ")
+                if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                    valid_img_paths.append(potential_path)
+                else:
+                    img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
+                    if not img_paths:
+                        img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
+                    for p in img_paths:
+                        if os.path.exists(p.strip()):
+                            valid_img_paths.append(p.strip())
+
+                user_content = cmd
+                if valid_img_paths:
+                    user_content = [{"type": "text", "text": cmd}]
+                    for p in valid_img_paths:
+                        try:
+                            with open(p, "rb") as img_file:
+                                b64 = base64.b64encode(img_file.read()).decode("utf-8")
+                                user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+                        except Exception:
+                            pass
+
+                # Assembled context contains minimal base instructions + selected tools + history + user query
+                messages = list(assembled_ctx.messages)
+                if valid_img_paths and messages and messages[-1]["role"] == "user":
+                    messages[-1]["content"] = user_content
+
+                # Calculate iteration limits based on verified token budget
+                avg_iter_cost = 600
+                max_possible = max(1, budget.remaining_tokens // avg_iter_cost)
                 MIN_ITERATIONS = 5
-                if current_mode == "/fast": MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
-                else: MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
-                
-                # Budget debug (silent)
-                
+                if current_mode == "/fast":
+                    MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
+                else:
+                    MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
+
                 iter_count = 0
-                
-                try:
-                    messages = []
-                    if system_prompt:
-                        messages.append({"role": "system", "content": system_prompt})
-                    
-                    # Add last 10 messages from history
-                    messages.extend(chat_history[-10:])
-                    
-                    # Multimodal parsing
-                    valid_img_paths = []
-                    potential_path = cmd.strip("'\" ")
-                    if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                        valid_img_paths.append(potential_path)
-                    else:
-                        img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
-                        if not img_paths:
-                            # Try matching without quotes but stop at extensions
-                            img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
-                        for p in img_paths:
-                            if os.path.exists(p.strip()):
-                                valid_img_paths.append(p.strip())
-                        
-                    user_content = cmd
-                    if valid_img_paths:
-                        user_content = [{"type": "text", "text": cmd}]
-                        for p in valid_img_paths:
-                            try:
-                                with open(p, "rb") as img_file:
-                                    b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                    user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-                            except Exception as e:
-                                pass
-                    
-                    messages.append({"role": "user", "content": user_content})
+
                 except Exception as e:
                     console.print(f"[red]Error preparing messages: {e}[/red]")
                     continue
@@ -2148,65 +2061,21 @@ def run_cli():
                             
                             if check_permission(t_name, t_kwargs, current_workspace, current_permission_level):
                                 console.print(f"\n[bold magenta][Step {iter_count}/{MAX_ITERATIONS}] Running:[/bold magenta] [white]{t_name} {t_kwargs}[/white]")
+                                # Dynamic capability discovery (Scenario G):
+                                if t_name not in selection_res.selected_ids:
+                                    selection_res = orchestration_pipeline.selector.discover_additional_tool(
+                                        selection_res, missing_capability=t_name
+                                    )
+                                    # Update system prompt to include newly discovered tool
+                                    new_schemas = orchestration_pipeline.builder.format_tool_schemas(selection_res.selected_tools)
+                                    if messages and messages[0]["role"] == "system":
+                                        base_p = orchestration_pipeline.builder.build_base_prompt(current_model)
+                                        messages[0]["content"] = f"{base_p}\n\n{new_schemas}"
+
                                 observation = ""
-                                if t_name == "web_search":
-                                    observation = web_search(t_kwargs.get("query", ""), t_kwargs.get("max_results", 5))
-                                elif t_name == "browser.open_url":
-                                    is_headless = t_kwargs.get("headless", False)
-                                    observation = browser_tool.open_url(t_kwargs.get("url", ""), headless=is_headless)
-                                elif t_name == "browser.get_interactive_dom":
-                                    observation = browser_tool.get_interactive_dom(t_kwargs.get("url"))
-                                elif t_name == "browser.click_element":
-                                    selector_val = t_kwargs.get("selector") or t_kwargs.get("id")
-                                    observation = browser_tool.click_element(selector=selector_val, url=t_kwargs.get("url"))
-                                elif t_name == "browser.fill_form":
-                                    observation = browser_tool.fill_form(fields=t_kwargs.get("fields", {}), url=t_kwargs.get("url"))
-                                elif t_name in ("browser.type", "browser.type_text"):
-                                    observation = browser_tool.type_text(
-                                        selector=t_kwargs.get("selector") or t_kwargs.get("id", ""),
-                                        text=t_kwargs.get("text", ""),
-                                        press_enter=t_kwargs.get("press_enter", False),
-                                        url=t_kwargs.get("url")
-                                    )
-                                elif t_name == "browser.press_key":
-                                    observation = browser_tool.press_key(t_kwargs.get("key", "Enter"))
-                                elif t_name in ("browser.scrape", "browser.scrape_live"):
-                                    observation = browser_tool.scrape_live(url=t_kwargs.get("url"), selector=t_kwargs.get("selector"))
-                                elif t_name == "browser.screenshot":
-                                    observation = browser_tool.screenshot(save_path=t_kwargs.get("save_path", "/tmp/lmms_browser.png"), url=t_kwargs.get("url"))
-                                elif t_name in ("app.launch", "os.launch_app"):
-                                    target = t_kwargs.get("app_name_or_target") or t_kwargs.get("app_name") or t_kwargs.get("target", "")
-                                    args = t_kwargs.get("args") or []
-                                    observation = app_launcher.launch(target, args)
-                                elif t_name == "app.list":
-                                    observation = app_launcher.list_apps(t_kwargs.get("filter_query", ""))
-                                elif t_name == "app.close":
-                                    observation = app_launcher.close_app(t_kwargs.get("app_name", ""))
-                                elif t_name == "message.send":
-                                    observation = messenger_tool.send(
-                                        platform=t_kwargs.get("platform", "desktop"),
-                                        message=t_kwargs.get("message", ""),
-                                        recipient=t_kwargs.get("recipient"),
-                                        **{k: v for k, v in t_kwargs.items() if k not in ("platform", "message", "recipient")}
-                                    )
-                                elif t_name == "telegram.send_message":
-                                    observation = messenger_tool.send_telegram(
-                                        message=t_kwargs.get("message", ""),
-                                        chat_id=t_kwargs.get("chat_id"),
-                                        bot_token=t_kwargs.get("bot_token")
-                                    )
-                                elif t_name == "files.read":
-                                    observation = file_tool.read(t_kwargs.get("path", ""))
-                                elif t_name == "files.write":
-                                    observation = file_tool.write(t_kwargs.get("path", ""), t_kwargs.get("content", ""))
-                                elif t_name == "security.generate_report":
-                                    path = generate_report(current_workspace, t_kwargs.get("findings_summary", ""))
-                                    observation = f"Report successfully generated at: {path}"
-                                elif t_name == "terminal.run":
+                                if t_name == "terminal.run":
                                     res = executor.execute(req, perm)
-                                    observation = (res.stdout + "\n" + res.stderr).strip()
-                                elif t_name == "browser.scroll":
-                                    observation = browser_tool.scroll(t_kwargs.get("url", ""), t_kwargs.get("direction", "down"), t_kwargs.get("amount", 1000))
+                                    observation = (res.stdout + "\n" + res.stderr).strip() or "Command completed with no output."
                                 elif t_name == "browser.open_authenticated":
                                     if current_permission_level == "low":
                                         observation = "Permission denied: Requires medium or full permission for authenticated browsing."
@@ -2237,18 +2106,9 @@ def run_cli():
                                     import hashlib
                                     from lmms.backend.tools.rag import RAGTool
                                     ws_id = hashlib.md5(current_workspace.encode()).hexdigest() if current_workspace != "None" else "global"
-                                    
-                                    _, _, available_for_input = get_context_budget(current_model)
                                     max_tool_tokens = int(available_for_input * 0.3)
-                                    
                                     rag_tool = RAGTool(workspace_id=ws_id)
                                     observation = rag_tool.search(t_kwargs.get("query", ""), max_tokens=max_tool_tokens)
-                                elif t_name == "load_capability":
-                                    cap = t_kwargs.get("capability", "")
-                                    if cap_manager.activate(cap):
-                                        observation = f"Capability '{cap}' activated successfully. The system prompt will now include related tools/rules."
-                                    else:
-                                        observation = f"Failed. Unknown capability '{cap}'."
                                 elif t_name == "retrieve_archive":
                                     obs_id = t_kwargs.get("obs_id", "")
                                     log_dir = os.path.join(CONFIG_DIR, "logs", "observations")
@@ -2259,7 +2119,17 @@ def run_cli():
                                     else:
                                         observation = f"Observation {obs_id} not found."
                                 else:
-                                    observation = f"Tool {t_name} not found."
+                                    exec_res = orchestration_pipeline.executor.execute(
+                                        tool_name=t_name,
+                                        kwargs=t_kwargs,
+                                        permission_level=current_permission_level,
+                                        is_planning_mode=planning_mode
+                                    )
+                                    if exec_res.success:
+                                        observation = exec_res.data if exec_res.data is not None else "[SUCCESS] Completed with no output."
+                                    else:
+                                        observation = exec_res.error or f"Tool '{t_name}' execution failed."
+
                                     
                                 if t_name != "terminal.run":
                                     record_tool_evidence(req, perm, ToolResult(str(observation), "", 0))
@@ -2373,6 +2243,38 @@ def run_cli():
                 with open(os.path.join(CHATS_DIR, f"{current_chat_id}.json"), "w") as f:
                     json.dump(chat_data, f)
                     
+                # Telemetry trace recording
+                try:
+                    import uuid
+                    orchestration_pipeline.trace_logger.record_trace(RequestTrace(
+                        request_id=str(uuid.uuid4()),
+                        conversation_id=current_chat_id or "default",
+                        timestamp=time.time(),
+                        model_name=current_model,
+                        backend_engine="engine_1_air_llamacpp",
+                        intent=intent_res.intent.value,
+                        intent_confidence=intent_res.confidence,
+                        selected_tools=selection_res.selected_ids,
+                        rejected_tools=selection_res.rejected_ids,
+                        context_limit=budget.context_limit,
+                        usable_budget=budget.usable_context,
+                        output_reserve=budget.output_reserve,
+                        base_prompt_tokens=budget.base_prompt_tokens,
+                        tool_schemas_tokens=budget.tool_schemas_tokens,
+                        history_tokens=budget.history_tokens,
+                        user_query_tokens=budget.user_query_tokens,
+                        total_prompt_tokens=budget.total_prompt_tokens,
+                        compacted=budget.is_overflow,
+                        observations_pruned=0,
+                        cache_prefix_hash=assembled_ctx.prefix_hash,
+                        cache_hit=False,
+                        ttft_ms=0,
+                        total_latency_ms=int((time.time() - req_t0) * 1000),
+                        tool_calls_count=max(0, iter_count - 1)
+                    ))
+                except Exception:
+                    pass
+
                 # Auto-naming for first message
                 if current_chat_name == "Untitled" and len(chat_history) == 2:
                     try:

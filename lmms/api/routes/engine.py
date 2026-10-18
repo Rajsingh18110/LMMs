@@ -50,6 +50,60 @@ async def get_engine_status():
     return engine_manager.status()
 
 
+class TokenizeRequest(BaseModel):
+    model_name: Optional[str] = None
+    texts: List[str]
+
+
+@router.get("/model/context")
+async def get_model_context(model_name: Optional[str] = None):
+    ctx_len = 8192
+    if engine_manager.runtime and hasattr(engine_manager.runtime, "pager") and engine_manager.runtime.pager.active_profile:
+        ctx_len = engine_manager.runtime.pager.active_profile.context_length
+    elif model_name:
+        path = os.path.join(MODELS_DIR, f"{model_name}.gguf")
+        if not os.path.exists(path) and os.path.exists(model_name):
+            path = model_name
+        if os.path.exists(path):
+            try:
+                from lmms.engine.engine_1_llamacpp.air_loader import parse_gguf_metadata
+                meta = parse_gguf_metadata(path)
+                for k, v in meta.items():
+                    if k.endswith(".context_length") and isinstance(v, int) and v > 0:
+                        ctx_len = v
+                        break
+            except Exception:
+                pass
+    return {
+        "status": "success",
+        "model_name": model_name or "active",
+        "context_length": ctx_len
+    }
+
+
+@router.post("/tokenize")
+async def tokenize_texts(req: TokenizeRequest):
+    counts = []
+    runtime = engine_manager.runtime
+    for text in req.texts:
+        count = None
+        if runtime and hasattr(runtime, "tokenize"):
+            try:
+                tokens = runtime.tokenize(text)
+                if tokens:
+                    count = len(tokens)
+            except Exception:
+                pass
+        if count is None:
+            count = max(1, int(len(text) / 3.2) + 1)
+        counts.append(count)
+    return {
+        "status": "success",
+        "token_counts": counts
+    }
+
+
+
 @router.get("/benchmark")
 async def run_benchmark():
     try:
