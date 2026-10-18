@@ -212,38 +212,68 @@ These commands are typed inside an active LMMs CLI chat session.
 
 ## ⚙️ Engine Terminal Commands
 
-These commands are run directly in your system terminal (not inside the chat session) to manage models and the engine.
+These commands are run directly in your system terminal (not inside the chat session) to manage models, modular packages, hardware offloading, and the engine runtime.
 
-### Core Model Management
-
-| Command | Description |
-|---|---|
-| `lmms pull <model>` | Auto-detect the best quantization and download a model |
-| `lmms run <model>` | Load and start a chat with a model (auto-selects engine) |
-| `lmms run <model> -use l` | Force llama.cpp engine |
-| `lmms run <model> -use p` | Force PyTorch engine |
-| `lmms stop <model>` | Unload a model from memory |
-| `lmms ps` | Show all currently loaded models |
-| `lmms list` | List all locally downloaded models |
-| `lmms info <model>` | Show metadata, parameter count, and quant info for a model |
-| `lmms rm <model>` | Delete a model from disk |
-| `lmms search <query>` | Search the model hub |
-| `lmms benchmark <model>` | Run a speed test on a model |
-| `lmms doctor [--fix]` | Diagnose and optionally repair engine health |
-| `lmms create <model> -f <file>` | Create a custom model from a Modelfile |
-| `lmms server` | Start the LMMs API server / webhook dashboard |
-
-### Air Engine (AirLLM — Disk Offloading for 70B+ Models)
+### 🦙 Core Model Management (Ollama-Style CLI)
 
 | Command | Description |
 |---|---|
-| `lmms -air run <model>` | Run a large model using disk-offloading via AirLLM |
-| `lmms --air run <m1> <m2>` | Run two models in cluster/scheduled mode |
-| `lmms air ps` | Show Air Engine active sessions |
-| `lmms air cache` | Show disk cache usage |
-| `lmms air stats` | Show memory and throughput metrics |
-| `lmms air unload` | Unload Air Engine models from memory |
-| `lmms air benchmark` | Benchmark a model under Air Engine |
+| `lmms run <model> [prompt]` | Run a model in interactive chat mode or execute a single-shot prompt directly from the command line. |
+| `lmms list` / `lmms ls` | List all locally installed GGUF models and registered manifests with exact file sizes. |
+| `lmms ps` | Show all currently loaded models, active VRAM/RAM allocation, and offloading regimes. |
+| `lmms pull <model>` | Search Hugging Face for GGUF repos, interactively select quantization (`Q4_K_M`, `Q5_K_M`, `Q8_0`), and download with auto-registration. |
+| `lmms info <model>` | Inspect model architecture, total layers, context length, embedding size, and quantization type. |
+| `lmms rm <model>` / `lmms delete <model>` | Delete a model and its associated manifest tag from the local registry. |
+| `lmms stop <model>` / `lmms unload <model>` | Unload an active model from memory and immediately purge GPU VRAM. |
+| `lmms search <query>` | Search Hugging Face Hub for available GGUF repositories. |
+| `lmms benchmark <model>` / `lmms bench <model>` | Run automated speed benchmark measuring load time, TTFT, and generation throughput (tokens/sec). |
+| `lmms doctor [--fix]` | Run system health diagnostics (Models dir, NVIDIA CUDA driver, llama-cpp-python, RAM, Disk). |
+| `lmms create <model> -f <file>` | Create custom model manifests and aliases from a Modelfile. |
+
+### 🌬️ Air Engine (Swapping & Dynamic Hybrid Offload)
+
+The Air Engine dynamically partitions transformer layers between GPU VRAM and DDR5 system RAM with zero-copy `mmap`, quantized Q8_0 KV cache, and physical P-core thread locking.
+
+| Command | Description |
+|---|---|
+| `lmms -air run <model> [prompt]` | Run large models (e.g. 30B MoE, 70B) in Air dynamic hybrid offload mode. |
+| `lmms --air run <m1> <m2>` | Run multiple models simultaneously managed by the Air scheduler. |
+| `lmms air ps` | Display active Air session models, allocated GPU layers, CPU DDR5 layers, and active regime. |
+| `lmms air stats` | View real-time hardware telemetry: VRAM %, RAM %, swapping engine status, and throughput. |
+| `lmms air cache` | View Air Engine disk cache directory size and storage utilization. |
+| `lmms air unload` | Forcefully unload all Air models and flush GPU VRAM to 0 MiB. |
+| `lmms air benchmark <model>` | Benchmark model execution under the Air Engine dynamic offloading scheduler. |
+
+### 📦 Modular Package Management
+
+Manage modular execution backends, model providers, and agentic tools.
+
+| Command | Description |
+|---|---|
+| `lmms package list` | List all installed and available runtime backends, model providers, and agent tools. |
+| `lmms package install runtime <name>` | Register/install an execution runtime (e.g., `llama-cpp`, `pytorch`, `vllm`). |
+| `lmms package install provider <name>` | Register/install a model provider (e.g., `huggingface`, `lmstudio`, `ollama`). |
+| `lmms package install tool <name>` | Register/install an external agent capability (e.g., `terminal`, `browser`, `files`, `web_search`, `github`). |
+| `lmms package remove [<type>] <name>` | Unregister and remove a package from the local environment. |
+
+### 🔄 Dual-Engine Architecture & Server Daemon
+
+| Command | Description |
+|---|---|
+| `lmms engine status` | Inspect active engine mode (**Engine 1: Air + Llama.cpp GGUF**, **Engine 2: Air + PyTorch Safetensors**) and memory stats. |
+| `lmms engine mode <auto\|1\|2>` | Switch the hardware execution engine backend (`auto`, `1` for GGUF high-throughput, `2` for PyTorch/Safetensors). |
+| `lmms engine unload [model]` | Purge all active models from memory and clear GPU VRAM cache. |
+| `lmms server start [--port 11435]` | Start the 24/7 background FastAPI engine daemon (Business Server mode). |
+| `lmms server stop` | Terminate the persistent background engine daemon. |
+| `lmms server status` | Check server daemon status, active port, PID, and uptime. |
+
+### 💬 Interactive Chat Controls & Clean VRAM Purge
+
+When running interactive chat (`lmms run <model>` or `lmms -air run <model>`):
+
+- **Clean Exits:** Type `exit`, `quit`, `bye`, `/exit`, `/quit`, `/bye`, `/q`, `:q`, or press `Ctrl+C` to immediately terminate the session. The engine automatically unloads model weights and flushes GPU VRAM back to 0 MiB.
+- **Arrow-Key History:** Full navigation through past prompts using Up/Down arrow keys and line editing (powered by `readline`).
+- **Context Reset:** Type `/clear` to reset the active conversation memory without restarting the engine.
 
 ---
 
