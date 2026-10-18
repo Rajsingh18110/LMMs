@@ -86,6 +86,97 @@ def uninstall_main():
     else:
         print("Usage: LMMs-uninstall -all [--purge]")
 
+def run_system_check():
+    import platform
+    import shutil
+    
+    c_cyan = "\033[1;36m"
+    c_white = "\033[1;37m"
+    c_green = "\033[1;32m"
+    c_dim = "\033[2m"
+    c_reset = "\033[0m"
+    c_yellow = "\033[1;33m"
+    
+    print(f"\n{c_white}LMMs OS{c_reset} {c_dim}· System & Hardware Diagnostics{c_reset}")
+    print(f"{c_dim}{'─' * 62}{c_reset}")
+    
+    # OS
+    os_name = f"{platform.system()} {platform.release()} ({platform.machine()})"
+    print(f"  {c_cyan}OS:{c_reset}        {os_name}")
+    
+    # Python
+    py_info = f"Python {platform.python_version()} ({sys.executable})"
+    print(f"  {c_cyan}Python:{c_reset}    {py_info}")
+    
+    # CPU
+    cpu_cores = os.cpu_count() or 1
+    cpu_model = platform.processor() or "Unknown"
+    if os.path.exists("/proc/cpuinfo"):
+        try:
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if "model name" in line:
+                        cpu_model = line.split(":", 1)[1].strip()
+                        break
+        except Exception:
+            pass
+    print(f"  {c_cyan}CPU:{c_reset}       {cpu_model} ({cpu_cores} threads)")
+    
+    # RAM
+    ram_str = "Unknown"
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        ram_str = f"{mem.total / (1024**3):.1f} GB Total ({mem.available / (1024**3):.1f} GB Available)"
+    except ImportError:
+        if os.path.exists("/proc/meminfo"):
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if "MemTotal" in line:
+                            kb = int(line.split()[1])
+                            ram_str = f"{kb / (1024**2):.1f} GB Total"
+                            break
+            except Exception:
+                pass
+    print(f"  {c_cyan}RAM:{c_reset}       {ram_str}")
+    
+    # GPU & VRAM
+    gpu_found = False
+    if shutil.which("nvidia-smi"):
+        try:
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.free,driver_version", "--format=csv,noheader"],
+                capture_output=True, text=True, timeout=3
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                lines = res.stdout.strip().split("\n")
+                for i, g in enumerate(lines):
+                    parts = [p.strip() for p in g.split(",")]
+                    name = parts[0] if len(parts) > 0 else "NVIDIA GPU"
+                    vram_total = parts[1] if len(parts) > 1 else ""
+                    vram_free = parts[2] if len(parts) > 2 else ""
+                    driver = parts[3] if len(parts) > 3 else ""
+                    gpu_found = True
+                    print(f"  {c_cyan}GPU [{i}]:{c_reset}   {name} ({vram_total} VRAM, {vram_free} Free) [Driver {driver}]")
+        except Exception:
+            pass
+    
+    if not gpu_found:
+        print(f"  {c_cyan}GPU:{c_reset}       {c_yellow}No dedicated NVIDIA GPU detected (CPU/mmap DDR5 mode active){c_reset}")
+    
+    # LMMs Core Status
+    print(f"{c_dim}{'─' * 62}{c_reset}")
+    llama_ok = False
+    try:
+        import importlib.util
+        llama_ok = importlib.util.find_spec("llama_cpp") is not None
+    except Exception:
+        pass
+    llama_status = f"{c_green}Available{c_reset}" if llama_ok else f"{c_yellow}Not installed (run 'lmms install --engine'){c_reset}"
+    print(f"  {c_cyan}llama.cpp:{c_reset} {llama_status}")
+    print(f"{c_dim}{'─' * 62}{c_reset}\n")
+
 def main():
     threading.Thread(target=check_for_updates, daemon=True).start()
     args = sys.argv[1:]
@@ -100,8 +191,8 @@ def main():
         launch("cli", args, ensure_engine=False)
         return
 
-    if args[0] in ["-check", "--check"]:
-        print("\033[96m[INFO]\033[0m Hardware Profiler & System Check: (Feature coming soon...)")
+    if args[0] in ["-check", "--check", "check"]:
+        run_system_check()
         return
 
     if args[0] in ["--update", "update"]:

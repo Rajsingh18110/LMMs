@@ -66,6 +66,24 @@ ENGINE_PACKAGES: List[Dict[str, str]] = [
     {"name": "nest-asyncio", "spec": "nest_asyncio", "desc": "Concurrent event loop patcher"},
     {"name": "huggingface-hub", "spec": "huggingface_hub", "desc": "Hugging Face Model Hub API"},
     {"name": "safetensors", "spec": "safetensors", "desc": "Fast & safe tensor serialization"},
+    {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
+]
+
+ENGINE1_PACKAGES: List[Dict[str, str]] = [
+    {"name": "fastapi", "spec": "fastapi", "desc": "High-performance ASGI framework"},
+    {"name": "uvicorn", "spec": "uvicorn", "desc": "Lightning-fast ASGI server"},
+    {"name": "nest-asyncio", "spec": "nest_asyncio", "desc": "Concurrent event loop patcher"},
+    {"name": "huggingface-hub", "spec": "huggingface_hub", "desc": "Hugging Face Model Hub API"},
+    {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
+]
+
+ENGINE2_PACKAGES: List[Dict[str, str]] = [
+    {"name": "fastapi", "spec": "fastapi", "desc": "High-performance ASGI framework"},
+    {"name": "uvicorn", "spec": "uvicorn", "desc": "Lightning-fast ASGI server"},
+    {"name": "nest-asyncio", "spec": "nest_asyncio", "desc": "Concurrent event loop patcher"},
+    {"name": "safetensors", "spec": "safetensors", "desc": "Fast & safe tensor serialization"},
+    {"name": "transformers", "spec": "transformers", "desc": "PyTorch Transformers runtime"},
+    {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
 ]
 
 VOICE_PACKAGES: List[Dict[str, str]] = [
@@ -147,99 +165,153 @@ def read_single_key() -> str:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def interactive_checkbox_wizard(action_verb: str = "Install") -> List[str]:
+def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
     """
-    Renders an interactive terminal multi-select checkbox menu.
-    Allows toggling options with [SPACE], navigating with [UP/DOWN],
-    toggling all with [a], and confirming with [ENTER].
+    Renders an interactive terminal wizard matching the architecture flowchart:
+    Level 1: "Aap kaun ho?" -> [1] Individual / [2] Enterprise
+    Level 2 (Individual): "Kya download karna hai?" ->
+      [1] Standalone Engine (llama.cpp + PyTorch + Air Engine)
+      [2] Desktop GUI Studio (folder: gui/)
+      [3] Terminal CLI Studio (folder: cli/)
+    Level 2 (Enterprise): "Host ya Client?" ->
+      [1] Dedicated Host Server (Engine 2: PyTorch + AirLLM Server)
+      [2] Client GUI (guicode/ + backend)
+      [3] Client CLI (clicode/ + backend)
     """
-    items = [
-        {
-            "id": "cli",
-            "title": "Standalone CLI",
-            "desc": "Terminal Chat, LAN Remote Client (0-GPU overhead)",
-            "selected": True,
-        },
-        {
-            "id": "gui",
-            "title": "Desktop Studio GUI",
-            "desc": "PyQt6 Hardware-Accelerated Visual Desktop App",
-            "selected": False,
-        },
-        {
-            "id": "engine",
-            "title": "Standalone Engine",
-            "desc": "Dual Model Runtime (GGUF + PyTorch) & API Server Daemon",
-            "selected": True,
-        },
-        {
-            "id": "voice",
-            "title": "Voice Dependencies",
-            "desc": "Real-time microphone audio capture & audio stream buffers",
-            "selected": False,
-        },
-    ]
-
-    cursor_idx = 0
-    total_items = len(items)
-
-    # Hide cursor
     sys.stdout.write(CURSOR_HIDE)
     sys.stdout.flush()
 
     try:
+        # Step 1: Aap kaun ho?
+        persona_items = [
+            {"id": "individual", "title": "Individual", "desc": "Single Workstation (Local GPU/RAM dynamic offloading)"},
+            {"id": "enterprise", "title": "Enterprise", "desc": "Distributed Infrastructure (Dedicated host server & clients)"},
+        ]
+        cursor_1 = 0
         while True:
-            # Render menu
-            lines: List[str] = []
-            lines.append(f"  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· component configuration wizard{COLOR_RESET}")
-            lines.append(f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
-            lines.append(
-                f"  {COLOR_DIM}keys: [↑/↓] navigate · [space] toggle · [a] all · [enter] confirm · [q] cancel{COLOR_RESET}\n"
-            )
+            lines = [
+                f"\n  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· architecture setup wizard{COLOR_RESET}",
+                f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}",
+                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1/2] quick select · [q] cancel{COLOR_RESET}\n",
+                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}Aap kaun ho?{COLOR_RESET}",
+            ]
+            for i, it in enumerate(persona_items):
+                is_cur = (i == cursor_1)
+                prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
+                num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
+                title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
+                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']:<14}{COLOR_RESET} {COLOR_DIM}— {it['desc']}{COLOR_RESET}")
 
-            for i, it in enumerate(items):
-                is_cursor = (i == cursor_idx)
-                prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cursor else " "
-                chk = f"{COLOR_BOLD_CYAN}[x]{COLOR_RESET}" if it["selected"] else f"{COLOR_DIM}[ ]{COLOR_RESET}"
-                title_color = COLOR_BOLD_WHITE if is_cursor else COLOR_RESET
-                lines.append(
-                    f"  {prefix} {chk} {title_color}{it['title']:<22}{COLOR_RESET} {COLOR_DIM}{it['desc']}{COLOR_RESET}"
-                )
-
-            selected_names = [it["title"] for it in items if it["selected"]]
-            sel_str = ", ".join(selected_names) if selected_names else f"{COLOR_YELLOW}none (select at least one target){COLOR_RESET}"
             lines.append(f"\n  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
-            lines.append(f"  {COLOR_DIM}targets:{COLOR_RESET} {COLOR_BOLD_WHITE}{sel_str}{COLOR_RESET}")
-            lines.append(f"  {COLOR_CYAN}press [enter] to proceed with {action_verb.lower()}...{COLOR_RESET}")
-
-            # Clear screen and draw
             output = "\033[H\033[J" + "\n".join(lines) + "\n"
             sys.stdout.write(output)
             sys.stdout.flush()
 
-            # Read user keypress
             key = read_single_key()
-            if key == "up":
-                cursor_idx = (cursor_idx - 1) % total_items
-            elif key == "down":
-                cursor_idx = (cursor_idx + 1) % total_items
-            elif key == "space":
-                items[cursor_idx]["selected"] = not items[cursor_idx]["selected"]
-            elif key == "a":
-                # If all selected, deselect all; otherwise select all
-                all_sel = all(it["selected"] for it in items)
-                for it in items:
-                    it["selected"] = not all_sel
+            if key in ("up", "down"):
+                cursor_1 = (cursor_1 + (1 if key == "down" else -1)) % len(persona_items)
+            elif key == "1":
+                cursor_1 = 0
+                break
+            elif key == "2":
+                cursor_1 = 1
+                break
             elif key == "enter":
-                selected_ids = [it["id"] for it in items if it["selected"]]
-                if selected_ids:
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    return selected_ids
+                break
             elif key in ("quit", "esc"):
-                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled by user.{COLOR_RESET}\n")
-                sys.stdout.flush()
+                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
                 sys.exit(0)
+
+        selected_persona = persona_items[cursor_1]["id"]
+
+        # Step 2: Component Selection
+        if selected_persona == "individual":
+            comp_items = [
+                {
+                    "id": "engine",
+                    "title": "Standalone Engine (llama.cpp + PyTorch + Air)",
+                    "desc": "Pure API daemon (Port 11435) for Continue.dev/Open-WebUI (Zero GUI)",
+                    "components": ["engine"],
+                },
+                {
+                    "id": "gui",
+                    "title": "Desktop GUI Studio (folder: gui/)",
+                    "desc": "Monaco Code Editor + Source Control + Auto-linked Central Engine",
+                    "components": ["gui", "engine"],
+                },
+                {
+                    "id": "cli",
+                    "title": "Terminal CLI Studio (folder: cli/)",
+                    "desc": "Interactive AI Shell + Coding Tools + Auto-linked Central Engine",
+                    "components": ["cli", "engine"],
+                },
+            ]
+            prompt_q = "Kya download karna hai?"
+        else:
+            comp_items = [
+                {
+                    "id": "host",
+                    "title": "Dedicated Host Server (Engine 2: PyTorch + AirLLM)",
+                    "desc": "High-throughput server node serving remote teams on LAN/VPC",
+                    "components": ["engine2"],
+                },
+                {
+                    "id": "client_gui",
+                    "title": "Client GUI (guicode/ + backend)",
+                    "desc": "Desktop Studio client configured to connect to Host IP:port",
+                    "components": ["gui"],
+                },
+                {
+                    "id": "client_cli",
+                    "title": "Client CLI (clicode/ + backend)",
+                    "desc": "Terminal Shell client configured to connect to Host IP:port",
+                    "components": ["cli"],
+                },
+            ]
+            prompt_q = "Host ya Client?"
+
+        cursor_2 = 0
+        while True:
+            lines = [
+                f"\n  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· {selected_persona.capitalize()} setup{COLOR_RESET}",
+                f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}",
+                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1/2/3] quick select · [q] cancel{COLOR_RESET}\n",
+                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}",
+            ]
+            for i, it in enumerate(comp_items):
+                is_cur = (i == cursor_2)
+                prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
+                num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
+                title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
+                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
+                lines.append(f"       {COLOR_DIM}└─ {it['desc']}{COLOR_RESET}")
+
+            lines.append(f"\n  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
+            output = "\033[H\033[J" + "\n".join(lines) + "\n"
+            sys.stdout.write(output)
+            sys.stdout.flush()
+
+            key = read_single_key()
+            if key in ("up", "down"):
+                cursor_2 = (cursor_2 + (1 if key == "down" else -1)) % len(comp_items)
+            elif key == "1":
+                cursor_2 = 0
+                break
+            elif key == "2":
+                cursor_2 = 1
+                break
+            elif key == "3":
+                cursor_2 = 2
+                break
+            elif key == "enter":
+                break
+            elif key in ("quit", "esc"):
+                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
+                sys.exit(0)
+
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        return comp_items[cursor_2]["components"]
 
     finally:
         sys.stdout.write(CURSOR_SHOW)
@@ -266,7 +338,7 @@ def sync_lmms_config(installed_components: List[str]) -> None:
         config["installed_components"] = sorted(list(existing_components))
 
         # Auto-wiring mode
-        if "engine" in existing_components:
+        if any(c in existing_components for c in ("engine", "engine1", "engine2")):
             config.setdefault("mode", "local")
             config.setdefault("engine_host", "127.0.0.1")
             config.setdefault("engine_port", 11435)
@@ -302,6 +374,8 @@ class CLIInstaller:
         has_cli = "--cli" in self.args or "-c" in self.args
         has_gui = "--gui" in self.args or "-g" in self.args
         has_engine = "--engine" in self.args or "-e" in self.args
+        has_engine1 = "--engine1" in self.args
+        has_engine2 = "--engine2" in self.args
         has_voice = "--voice" in self.args or "-v" in self.args
         has_all = "--all" in self.args or "-a" in self.args
 
@@ -311,6 +385,8 @@ class CLIInstaller:
             if has_cli: self.selected_components.add("cli")
             if has_gui: self.selected_components.add("gui")
             if has_engine: self.selected_components.add("engine")
+            if has_engine1: self.selected_components.add("engine1")
+            if has_engine2: self.selected_components.add("engine2")
             if has_voice: self.selected_components.add("voice")
 
         # Positional packages check (e.g. lmms install <pkg1> <pkg2>)
@@ -320,11 +396,11 @@ class CLIInstaller:
                 self.packages.append(PackageTask(name=p, spec=p, component="custom"))
             return
 
-        # If no flags provided
+        # If no flags provided, launch the 2-level architecture flowchart wizard
         if not self.selected_components:
             if sys.stdin.isatty():
                 verb = "Update" if self.is_update else "Install"
-                chosen = interactive_checkbox_wizard(action_verb=verb)
+                chosen = interactive_flowchart_wizard(action_verb=verb)
                 self.selected_components = set(chosen)
             else:
                 self.selected_components = {"cli", "gui", "engine", "voice"}
@@ -339,6 +415,12 @@ class CLIInstaller:
         if "engine" in self.selected_components:
             for p in ENGINE_PACKAGES:
                 self.packages.append(PackageTask(**p, component="engine"))
+        if "engine1" in self.selected_components:
+            for p in ENGINE1_PACKAGES:
+                self.packages.append(PackageTask(**p, component="engine1"))
+        if "engine2" in self.selected_components:
+            for p in ENGINE2_PACKAGES:
+                self.packages.append(PackageTask(**p, component="engine2"))
         if "voice" in self.selected_components:
             for p in VOICE_PACKAGES:
                 self.packages.append(PackageTask(**p, component="voice"))
@@ -347,14 +429,16 @@ class CLIInstaller:
         action = "update" if self.is_update else "install"
         title = "Updater" if self.is_update else "Installer"
         sys.stdout.write(
-            f"{COLOR_BOLD_WHITE}lmms {action}{COLOR_RESET} {COLOR_DIM}v1.0.0 (Component {title}){COLOR_RESET}\n\n"
+            f"{COLOR_BOLD_WHITE}lmms {action}{COLOR_RESET} {COLOR_DIM}v2.1.0 (Component {title}){COLOR_RESET}\n\n"
             f"Usage: lmms {action} [options]\n\n"
             f"Options:\n"
-            f"  (no flags)    Interactive Multi-Select Checkbox Wizard (select components interactively)\n"
+            f"  (no flags)    Interactive Architecture Flowchart Wizard (Individual vs Enterprise)\n"
             f"  --all, -a     {'Update' if self.is_update else 'Install'} all components: CLI, GUI, Engine, and Voice\n"
             f"  --cli, -c     {'Update' if self.is_update else 'Install'} Standalone CLI (terminal chat & LAN remote client)\n"
             f"  --gui, -g     {'Update' if self.is_update else 'Install'} Desktop Studio GUI (PyQt6 windowing toolkit)\n"
-            f"  --engine, -e  {'Update' if self.is_update else 'Install'} Standalone Engine binary & backend API daemon\n"
+            f"  --engine, -e  {'Update' if self.is_update else 'Install'} Superpower Engine (llama.cpp + PyTorch + Air Engine + API Daemon)\n"
+            f"  --engine1     {'Update' if self.is_update else 'Install'} Engine 1 (llama.cpp + Air Engine GGUF)\n"
+            f"  --engine2     {'Update' if self.is_update else 'Install'} Engine 2 (PyTorch + AirLLM Safetensors)\n"
             f"  --voice, -v   {'Update' if self.is_update else 'Install'} Voice input & audio streaming dependencies\n"
             f"  -h, --help    Show this help message\n\n"
             f"Combine options freely: lmms {action} --cli --engine\n"
@@ -447,7 +531,7 @@ class CLIInstaller:
         components_label = ", ".join(sorted(list(self.selected_components))) if self.selected_components else "selected targets"
 
         # Phase 1: Header
-        sys.stdout.write(f"\n{COLOR_BOLD_WHITE}lmms-engine{COLOR_RESET} {COLOR_DIM}v1.0.0{COLOR_RESET}\n")
+        sys.stdout.write(f"\n{COLOR_BOLD_WHITE}lmms{COLOR_RESET} {COLOR_DIM}v2.1.0{COLOR_RESET}\n")
         sys.stdout.write(
             f"{COLOR_CYAN}ℹ{COLOR_RESET} {COLOR_DIM}{action_verb} dependencies for [{COLOR_BOLD_CYAN}{components_label}{COLOR_RESET}{COLOR_DIM}]...{COLOR_RESET}\n\n"
         )
@@ -494,14 +578,28 @@ class CLIInstaller:
         if self.selected_components:
             sync_lmms_config(list(self.selected_components))
             sys.stdout.write(
-                f"{COLOR_BOLD_GREEN}✔{COLOR_RESET} {COLOR_DIM}Configuration synchronized (~/.lmms/config.json){COLOR_RESET}\n\n"
+                f"{COLOR_BOLD_GREEN}✔{COLOR_RESET} {COLOR_DIM}Configuration synchronized (~/.lmms/config.json){COLOR_RESET}\n"
             )
 
-        # Quick Next Steps Guide
-        if "engine" in self.selected_components:
-            sys.stdout.write(f"{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms server start{COLOR_RESET}{COLOR_DIM}' to start local engine daemon.{COLOR_RESET}\n")
+        # Quick Next Steps Guide & Continue.dev Configuration Card
+        has_any_engine = any(c in self.selected_components for c in ("engine", "engine1", "engine2"))
+        if has_any_engine:
+            sys.stdout.write(
+                f"\n{COLOR_CYAN}╭──────────────────────────────────────────────────────────────────────────────╮{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  {COLOR_BOLD_GREEN}✔ LMMs Inference Engine is Ready!{COLOR_RESET}{' ' * 43}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}{' ' * 78}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  Daemon Endpoint:    {COLOR_BOLD_WHITE}http://127.0.0.1:11435/v1{COLOR_RESET}{' ' * 31}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  Quick Commands:     {COLOR_BOLD_CYAN}lmms server start{COLOR_RESET} {COLOR_DIM}·{COLOR_RESET} {COLOR_BOLD_CYAN}lmms run <model>{COLOR_RESET}{' ' * 23}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}{' ' * 78}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  {COLOR_DIM}Continue.dev / Open-WebUI Configuration:{COLOR_RESET}{' ' * 36}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  {COLOR_DIM}{{\"title\": \"LMMs Engine\", \"provider\": \"openai\", \"model\": \"<model_tag>\",{COLOR_RESET}    {COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}│{COLOR_RESET}  {COLOR_DIM} \"apiBase\": \"http://localhost:11435/v1\"}}{COLOR_RESET}{' ' * 39}{COLOR_CYAN}│{COLOR_RESET}\n"
+                f"{COLOR_CYAN}╰──────────────────────────────────────────────────────────────────────────────╯{COLOR_RESET}\n\n"
+            )
+        elif "gui" in self.selected_components:
+            sys.stdout.write(f"\n{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms gui{COLOR_RESET}{COLOR_DIM}' to open Desktop Studio GUI.{COLOR_RESET}\n\n")
         elif "cli" in self.selected_components:
-            sys.stdout.write(f"{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms connect{COLOR_RESET}{COLOR_DIM}' to bind to a LAN engine, or '{COLOR_BOLD_CYAN}lmms chat <model>{COLOR_RESET}{COLOR_DIM}'.{COLOR_RESET}\n")
+            sys.stdout.write(f"\n{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms{COLOR_RESET}{COLOR_DIM}' or '{COLOR_BOLD_CYAN}lmms run <model>{COLOR_RESET}{COLOR_DIM}' to launch Interactive Shell.{COLOR_RESET}\n\n")
         sys.stdout.flush()
 
     def _render_interactive(self) -> None:
