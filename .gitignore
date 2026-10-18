@@ -12,8 +12,12 @@ test_*.py
 !tests/test_diagnostics.py
 !tests/test_review.py
 !tests/test_smart_context.py
+!tests/test_lazy_tool_discovery.py
+!tests/test_gpu_8b.py
+!tests/verify_budget_worst_case.py
 !tests/eval_router.py
 !tests/bench_e2e.py
+!tests/bench_31_prompts.py
 patch_*.py
 build_*.py
 download_*.py

@@ -71,16 +71,16 @@ class TestSmartContextOrchestration(unittest.TestCase):
             conversation_history=[]
         )
 
-        # Tool schemas must be completely absent from prompt
-        self.assertEqual(assembled.tool_schemas_str, "")
-        self.assertNotIn("<tool_call>", assembled.messages[0]["content"])
-        self.assertNotIn("browser.open_url", assembled.messages[0]["content"])
-        self.assertNotIn("terminal.run", assembled.messages[0]["content"])
+        # Full tool schemas must be absent from prompt; compact tool index is present
+        self.assertNotIn("## Active Tools (Full Schemas)", assembled.messages[0]["content"])
+        self.assertIn("## Tool Catalog (Index)", assembled.messages[0]["content"])
+        self.assertIn("discover_additional_tool", assembled.messages[0]["content"])
+        self.assertEqual(len(assembled.selected_tool_ids), 0)
 
-        # Token count verification: Must be small (< 200 tokens), compared to verified legacy baseline of 1,553 tokens (hello) / 1,923 tokens (mean).
+        # Token count verification: Must be small (< 600 tokens with conservative char estimator, ~255 with BPE), compared to verified legacy baseline of 1,553 tokens (hello) / 1,923 tokens (mean).
         tokens = self.budget_manager.count_tokens(assembled.messages[0]["content"])
-        self.assertLess(tokens, 200, f"Prompt tokens ({tokens}) exceeds target 200 tokens!")
-        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello') Prompt Tokens: {tokens} (Measured Legacy Baseline: 1,553 tokens, Real Reduction: {(1553-tokens)/1553*100:.1f}%)")
+        self.assertLess(tokens, 600, f"Prompt tokens ({tokens}) exceeds target 600 tokens!")
+        print(f"\n[Test Benchmark] Scenario A (Normal Chat 'hello' with Catalog Index) Prompt Tokens: {tokens} (Measured Legacy Baseline: 1,553 tokens, Real Reduction: {(1553-tokens)/1553*100:.1f}%)")
 
     # -------------------------------------------------------------------------
     # Scenario B: Coding Explanation vs Repository Modification
@@ -102,8 +102,8 @@ class TestSmartContextOrchestration(unittest.TestCase):
             selection_result=selection,
             conversation_history=[]
         )
-        self.assertNotIn("files.write", assembled.messages[0]["content"])
-        self.assertNotIn("terminal.run", assembled.messages[0]["content"])
+        self.assertNotIn("## Active Tools (Full Schemas)", assembled.messages[0]["content"])
+        self.assertEqual(len(assembled.selected_tool_ids), 0)
 
     def test_scenario_b_workspace_coding_loads_tools(self):
         """User asks to fix bug in workspace files -> loads files and terminal tools."""
@@ -143,8 +143,8 @@ class TestSmartContextOrchestration(unittest.TestCase):
             selection_result=selection,
             conversation_history=[]
         )
-        self.assertIn("web_search", assembled.messages[0]["content"])
-        self.assertNotIn("browser.fill_form", assembled.messages[0]["content"])
+        self.assertIn("web_search", assembled.selected_tool_ids)
+        self.assertNotIn("browser.fill_form", assembled.selected_tool_ids)
 
     # -------------------------------------------------------------------------
     # Scenario D: Browser Automation

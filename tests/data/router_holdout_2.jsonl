@@ -1,0 +1,60 @@
+{"query": "kya haal chaal hai dost?", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "can you run through some common python interview questions with me?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "aaj ka mausam kaisa hai delhi me?", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "cat /etc/os-release chala ke batao kaunsa linux distro hai", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "open up your creative mind and write a haiku on snowfall", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "find out which fruit has more vitamin C: orange or kiwi", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "read file tests/test_smart_context.py line 50 to 80", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "bhai thoda stress ho raha hai, koi aisi baat batao jo mood theek kare", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "search online for the latest nvidia driver version for linux 2026", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "open https://news.ycombinator.com and tell me the top story", "intent": "BROWSER_AUTOMATION", "requires_tools": true}
+{"query": "explain the difference between multiprocessing and multithreading in c++", "intent": "CODING", "requires_tools": false}
+{"query": "check if you can write a short emotional poem about old books", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "git log --oneline -5 run karo", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "bhai mujhe ek badhiya si paneer butter masala ki recipe bata", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "create a file called scratch.py and write a hello world inside it", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "what is the capital of madagascar?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "navigate to https://github.com/trending and scrape today's top python repo", "intent": "BROWSER_AUTOMATION", "requires_tools": true}
+{"query": "bhai search kar ke batao kal ka cricket match kaun jeeta", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "install ripgrep using apt in terminal", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "can you edit your tone to be more formal from now on?", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "tell me a funny story about a programmer and coffee", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "research 3 lightweight databases for embedded devices and compare them in a markdown report", "intent": "MULTI_STEP_WORKFLOW", "requires_tools": true}
+{"query": "read the contents of package.json if it exists", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "how do black holes lose mass through hawking radiation?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "check docker container list via shell", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "bhai open karna chahta hu ek naya business, thode tech ideas do", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "lookup current stock price of google", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "launch chrome browser on desktop", "intent": "DESKTOP_APP_CONTROL", "requires_tools": true}
+{"query": "why is the sky blue during day and red during sunset?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "open https://en.wikipedia.org/wiki/Artificial_intelligence and summarize intro", "intent": "BROWSER_AUTOMATION", "requires_tools": true}
+{"query": "send desktop notification saying lunch time ho gaya", "intent": "DESKTOP_NOTIFICATION", "requires_tools": true}
+{"query": "what is your favourite philosophical paradox?", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "write unit test for fibonacci function in tests/test_math.py", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "terminal pe free -h command chalao ram dekhne ke liye", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "what does the acronym REST stand for in web apis?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "bhai kal raat ko bohot late so gaya, subah utha nahi gaya", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "search duckduckgo for latest arch linux installation guide", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "click on element with id submit-btn on the page", "intent": "BROWSER_AUTOMATION", "requires_tools": true}
+{"query": "explain how quiksort algorithm achieves O(n log n) average time complexity", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "run pytest on current directory", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "find a way to balance work and personal life as a developer", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "google search who won the fifa world cup in 2022", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "delete the temporary folder /tmp/scratch_lmms", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "can you check if you have any emotions?", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "read readme.md file and tell me installation steps", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "bhai browser khol ke test karo http://localhost:3000", "intent": "BROWSER_AUTOMATION", "requires_tools": true}
+{"query": "difference between inner join and outer join in sql with simple example", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "terminal me df -h run karke check karo disk usage", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "launch calculator app", "intent": "DESKTOP_APP_CONTROL", "requires_tools": true}
+{"query": "namaste! aapka din kaisa ja raha hai?", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "who is the prime minister of japan currently?", "intent": "WEB_SEARCH", "requires_tools": true}
+{"query": "search in workspace code for class ContextCompactor", "intent": "WORKSPACE_FILE_OPS", "requires_tools": true}
+{"query": "open up the terminal and ping 8.8.8.8 three times", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "what is p-value in statistics in simple english?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "bhai thoda bore ho raha hu, koi riddle pucho na", "intent": "NORMAL_CHAT", "requires_tools": false}
+{"query": "compare react and svelte and generate a benchmark comparison report", "intent": "MULTI_STEP_WORKFLOW", "requires_tools": true}
+{"query": "write a python script to download images from a list of urls to disk", "intent": "CODING", "requires_tools": false}
+{"query": "check running processes using ps aux | grep python in bash", "intent": "TERMINAL_COMMAND", "requires_tools": true}
+{"query": "what is schrodingers cat experiment?", "intent": "GENERAL_KNOWLEDGE", "requires_tools": false}
+{"query": "bye dost, milte hain kal", "intent": "NORMAL_CHAT", "requires_tools": false}

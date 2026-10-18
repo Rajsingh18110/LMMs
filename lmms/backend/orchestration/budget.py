@@ -39,6 +39,9 @@ class TokenBudgetManager:
     Manages and enforces model context budgets using verified engine metadata.
     """
 
+    _global_offline_urls = set(["http://127.0.0.1:0", "http://localhost:0"])
+    _global_limit_cache: Dict[str, int] = {}
+
     def __init__(
         self,
         engine_url: str = "http://localhost:11435",
@@ -54,6 +57,7 @@ class TokenBudgetManager:
         self._custom_tokenize_fn = tokenize_fn
         self._limit_cache: Dict[str, int] = {}
         self._token_cache: Dict[tuple, int] = {}
+        self._engine_offline = (engine_url in self._global_offline_urls)
 
     def get_effective_context_limit(self, model_name: str) -> int:
         """
@@ -65,6 +69,10 @@ class TokenBudgetManager:
         """
         if model_name in self._limit_cache:
             return self._limit_cache[model_name]
+        if model_name in TokenBudgetManager._global_limit_cache:
+            limit = TokenBudgetManager._global_limit_cache[model_name]
+            self._limit_cache[model_name] = limit
+            return limit
 
         # 1. Try direct GGUF metadata parsing from ~/.lmms/models
         models_dir = os.path.expanduser("~/.lmms/models")
@@ -83,21 +91,25 @@ class TokenBudgetManager:
                             # Clamp native 256k to a practical memory-safe window if running locally
                             effective = min(v, 32768)
                             self._limit_cache[model_name] = effective
+                            TokenBudgetManager._global_limit_cache[model_name] = effective
                             return effective
                 except Exception:
                     pass
 
         # 2. Try Engine HTTP endpoint
-        try:
-            resp = requests.get(f"{self.engine_url}/v1/model/context", params={"model_name": model_name}, timeout=1)
-            if resp.status_code == 200:
-                data = resp.json()
-                ctx = data.get("context_length")
-                if isinstance(ctx, int) and ctx > 0:
-                    self._limit_cache[model_name] = ctx
-                    return ctx
-        except Exception:
-            pass
+        if not self._engine_offline:
+            try:
+                resp = requests.get(f"{self.engine_url}/v1/model/context", params={"model_name": model_name}, timeout=1)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ctx = data.get("context_length")
+                    if isinstance(ctx, int) and ctx > 0:
+                        self._limit_cache[model_name] = ctx
+                        TokenBudgetManager._global_limit_cache[model_name] = ctx
+                        return ctx
+            except Exception:
+                self._engine_offline = True
+                TokenBudgetManager._global_offline_urls.add(self.engine_url)
 
         # 3. Known heuristics based on model name
         lower = model_name.lower()
@@ -111,6 +123,7 @@ class TokenBudgetManager:
             limit = self.default_context_limit
 
         self._limit_cache[model_name] = limit
+        TokenBudgetManager._global_limit_cache[model_name] = limit
         return limit
 
     def count_tokens(self, text: str, model_name: str = "default") -> int:
@@ -137,20 +150,22 @@ class TokenBudgetManager:
                 pass
 
         # Try Engine endpoint
-        try:
-            r = requests.post(
-                f"{self.engine_url}/v1/tokenize",
-                json={"model_name": model_name, "texts": [text]},
-                timeout=1
-            )
-            if r.status_code == 200:
-                counts = r.json().get("token_counts", [])
-                if counts:
-                    count = counts[0]
-                    self._token_cache[cache_key] = count
-                    return count
-        except Exception:
-            pass
+        if not self._engine_offline:
+            try:
+                r = requests.post(
+                    f"{self.engine_url}/v1/tokenize",
+                    json={"model_name": model_name, "texts": [text]},
+                    timeout=1
+                )
+                if r.status_code == 200:
+                    counts = r.json().get("token_counts", [])
+                    if counts:
+                        count = counts[0]
+                        self._token_cache[cache_key] = count
+                        return count
+            except Exception:
+                self._engine_offline = True
+                TokenBudgetManager._global_offline_urls.add(self.engine_url)
 
         # Conservative fallback: ~3.2 characters per token for English & code
         # Never underestimate token counts to prevent silent overflows!

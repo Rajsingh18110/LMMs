@@ -6,7 +6,7 @@ Prevents untrusted user inputs or tool observations from escalating to privilege
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from .registry import DynamicToolDefinition
+from .registry import DynamicToolDefinition, ToolRegistry
 from .router import IntentResult, IntentType
 from .selector import SelectionResult
 
@@ -24,11 +24,12 @@ class AssembledContext:
 
 class ContextBuilder:
     """
-    Modular, deterministic context assembler.
+    Modular, deterministic context assembler with compact tool catalog indexing.
     """
 
-    def __init__(self, version: str = "1.0.0"):
+    def __init__(self, version: str = "1.0.0", tool_registry: Optional[ToolRegistry] = None):
         self.version = version
+        self.registry = tool_registry
 
     def build_base_prompt(self, model_name: str) -> str:
         """
@@ -84,19 +85,46 @@ class ContextBuilder:
 
         return "\n\n".join(sections)
 
+    def build_compact_tool_index(self, all_tools: Optional[List[DynamicToolDefinition]] = None) -> str:
+        """
+        Constructs a lightweight, compact tool index (~150-250 tokens) containing:
+        - name + one-line description for all registered tools
+        - discover_additional_tool syntax for lazy schema loading
+        Injected on every turn to prevent zero-tool traps (dangerous errors).
+        """
+        if all_tools is None:
+            if hasattr(self, "registry") and self.registry:
+                all_tools = list(self.registry._tools.values())
+            else:
+                all_tools = list(ToolRegistry()._tools.values())
+
+        lines = [
+            "## Tool Catalog (Index)",
+            "Available tools:",
+        ]
+        for tool in all_tools:
+            if tool.id != "discover_additional_tool" and tool.enabled:
+                lines.append(f"- {tool.id}: {tool.metadata.summary}")
+
+        lines.append(
+            "\nTo request full schema or invoke any tool from the catalog above:\n"
+            "- <tool_call>{\"tool\": \"discover_additional_tool\", \"kwargs\": {\"capability\": \"<tool_name>\"}}</tool_call>"
+        )
+        return "\n".join(lines)
+
     def format_tool_schemas(self, selected_tools: List[DynamicToolDefinition]) -> str:
         """
-        Renders ReAct-style compact tool specifications for selected tools only.
+        Renders ReAct-style full parameter schemas for routed / active tools.
         If zero tools are selected, returns an empty string.
         """
         if not selected_tools:
             return ""
 
         lines = [
-            "## Available Tools",
-            "To use a tool, output a raw JSON block wrapped in <tool_call> tags:",
+            "## Active Tools (Full Schemas)",
+            "To use an active tool, output a raw JSON block wrapped in <tool_call> tags:",
             "<tool_call>{\"tool\": \"tool_name\", \"kwargs\": {...}}</tool_call>",
-            "Tools will execute and return results wrapped in <observation> tags. Available tools:"
+            "Active tool schemas:"
         ]
 
         for tool in selected_tools:
@@ -112,10 +140,13 @@ class ContextBuilder:
         selection_result: SelectionResult,
         conversation_history: List[Dict[str, Any]],
         current_workspace: Optional[str] = None,
-        active_mode: str = "/fast"
+        active_mode: str = "/fast",
+        all_tools: Optional[List[DynamicToolDefinition]] = None,
+        include_tool_index: bool = True
     ) -> AssembledContext:
         """
         Assembles all sections into a canonical message list with strict hierarchy.
+        Injects compact tool catalog on every turn, and full schemas for routed tools.
         """
         # 1. Base prompt
         base_prompt = self.build_base_prompt(model_name)
@@ -132,8 +163,18 @@ class ContextBuilder:
             active_mode=active_mode
         )
 
-        # 4. Tool schemas
-        tool_schemas_str = self.format_tool_schemas(selection_result.selected_tools)
+        # 4. Tool schemas: compact index + full schemas for routed tools
+        tool_section_blocks = []
+        if include_tool_index:
+            compact_index = self.build_compact_tool_index(all_tools)
+            if compact_index:
+                tool_section_blocks.append(compact_index)
+
+        active_schemas_str = self.format_tool_schemas(selection_result.selected_tools)
+        if active_schemas_str:
+            tool_section_blocks.append(active_schemas_str)
+
+        tool_schemas_str = "\n\n".join(tool_section_blocks)
 
         # Combine into complete system prompt
         system_blocks = [base_prompt]

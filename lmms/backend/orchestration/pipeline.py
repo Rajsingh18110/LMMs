@@ -51,7 +51,7 @@ class OrchestrationPipeline:
         self.registry = registry or ToolRegistry()
         self.router = IntentRouter()
         self.selector = ToolSelector(self.registry)
-        self.builder = ContextBuilder()
+        self.builder = ContextBuilder(tool_registry=self.registry)
         self.budget_manager = TokenBudgetManager(engine_url=engine_url)
         self.compactor = ContextCompactor()
         self.prompt_cache = PromptCacheManager()
