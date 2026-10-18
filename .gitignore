@@ -11,6 +11,7 @@ test_*.py
 !tests/test_workspace_rules.py
 !tests/test_diagnostics.py
 !tests/test_review.py
+!tests/test_smart_context.py
 patch_*.py
 build_*.py
 download_*.py
