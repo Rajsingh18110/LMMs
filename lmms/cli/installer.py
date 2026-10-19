@@ -124,7 +124,7 @@ def check_package_installed(spec: str) -> bool:
 
 
 def read_single_key() -> str:
-    """Reads a single keypress cleanly across Linux/macOS and Windows."""
+    """Reads a single keypress cleanly across Linux/macOS and Windows without buffering issues."""
     if not sys.stdin.isatty():
         return "enter"
     if os.name == "nt":
@@ -150,23 +150,32 @@ def read_single_key() -> str:
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            ch = sys.stdin.read(1)
-            if ch == "\x1b":
-                r, _, _ = select.select([sys.stdin], [], [], 0.05)
+            raw = os.read(fd, 32)
+            if not raw:
+                return "quit"
+            if raw == b"\x1b":
+                r, _, _ = select.select([fd], [], [], 0.05)
                 if r:
-                    ch2 = sys.stdin.read(1)
-                    if ch2 == "[":
-                        ch3 = sys.stdin.read(1)
-                        if ch3 == "A": return "up"
-                        elif ch3 == "B": return "down"
-                        elif ch3 == "C": return "right"
-                        elif ch3 == "D": return "left"
+                    raw += os.read(fd, 31)
+            if raw in (b"\x1b[A", b"\x1bOA", b"\x1b[1;A"):
+                return "up"
+            elif raw in (b"\x1b[B", b"\x1bOB", b"\x1b[1;B"):
+                return "down"
+            elif raw in (b"\x1b[C", b"\x1bOC", b"\x1b[1;C"):
+                return "right"
+            elif raw in (b"\x1b[D", b"\x1bOD", b"\x1b[1;D"):
+                return "left"
+            elif raw == b"\x1b":
+                return "esc"
+            elif raw in (b"\r", b"\n", b"\r\n"):
+                return "enter"
+            elif raw == b" ":
+                return "space"
+            elif raw in (b"b", b"B", b"\x7f", b"\x08"):
                 return "back"
-            elif ch == " ": return "space"
-            elif ch in ("\r", "\n"): return "enter"
-            elif ch in ("b", "B", "\x7f", "\x08"): return "back"
-            elif ch in ("q", "Q", "\x03"): return "quit"
-            return ch
+            elif raw in (b"q", b"Q", b"\x03"):
+                return "quit"
+            return raw.decode("latin1", errors="ignore")
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -217,7 +226,7 @@ def render_menu(
         key = read_single_key()
         if key in ("up", "down"):
             cursor = (cursor + (1 if key == "down" else -1)) % total_slots
-        elif key == "left":
+        elif key in ("left", "back", "esc"):
             if can_back:
                 return "back"
         elif key in [str(i + 1) for i in range(min(9, len(items)))]:
@@ -226,12 +235,6 @@ def render_menu(
             if can_back and cursor == len(items):
                 return "back"
             return cursor
-        elif key == "back":
-            if can_back:
-                return "back"
-            else:
-                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
-                sys.exit(0)
         elif key in ("quit", "q", "Q"):
             sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
             sys.exit(0)
