@@ -305,7 +305,8 @@ def main():
     engine_commands = [
         "run", "list", "ls", "ps", "pull", "info", "benchmark", "bench",
         "rm", "delete", "stop", "search", "doctor", "cache", "air",
-        "registry", "downloads", "create", "package", "packages"
+        "registry", "downloads", "create", "package", "packages",
+        "status", "mode", "unload", "purge"
     ]
     if any(a in ["--air", "-air"] for a in args) or (len(args) > 0 and args[0] in engine_commands):
         if not getattr(sys, 'frozen', False):

@@ -707,6 +707,15 @@ def run_engine(args: Optional[List[str]] = None) -> None:
     subcmd = args[0].lower()
     sub_args = args[1:]
 
+    # Strip optional 'engine' prefix if forwarded as `lmms engine <cmd>`
+    if subcmd in ["engine", "--engine", "-engine"]:
+        if sub_args:
+            subcmd = sub_args[0].lower()
+            sub_args = sub_args[1:]
+        else:
+            print_engine_banner()
+            return
+
     # Air subcommand router
     if subcmd in ["air", "--air", "-air"]:
         engine_manager.set_engine_mode("1")
