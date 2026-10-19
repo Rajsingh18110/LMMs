@@ -34,14 +34,19 @@ def main():
         sys.exit(1)
 
     # 2. Sync local distribution branches
-    branches = ["cli", "gui", "engine", "backendcode", "clicode", "enginecode", "guicode"]
-    for b in branches:
+    direct_branches = ["gui", "backendcode", "clicode", "enginecode", "guicode"]
+    for b in direct_branches:
         run_cmd(f"git branch -f {b} main")
         print(f"  \033[1;32m✔\033[0m Synchronized branch \033[1m{b}\033[0m with main")
 
+    for b in ["cli", "engine"]:
+        run_cmd(f"git checkout {b} && git merge main --no-edit && git checkout main")
+        print(f"  \033[1;32m✔\033[0m Merged main into tailored branch \033[1m{b}\033[0m")
+
     # 3. Push if requested
     if should_push:
-        push_targets = "main " + " ".join(branches)
+        all_branches = direct_branches + ["cli", "engine"]
+        push_targets = "main " + " ".join(all_branches)
         print(f"\n\033[1;36mPushing branches to origin: {push_targets}\033[0m")
         run_cmd(f"git push origin {push_targets}")
         print("\033[1;32m✔ Successfully pushed all branches to origin!\033[0m\n")
