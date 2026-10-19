@@ -40,7 +40,7 @@ def main():
         print(f"  \033[1;32m✔\033[0m Synchronized branch \033[1m{b}\033[0m with main")
 
     for b in ["cli", "engine"]:
-        run_cmd(f"git checkout {b} && git merge main --no-edit && git checkout main")
+        run_cmd(f"git checkout {b} && git pull origin {b} --no-edit && git merge main --no-edit && git checkout main")
         print(f"  \033[1;32m✔\033[0m Merged main into tailored branch \033[1m{b}\033[0m")
 
     # 3. Push if requested
