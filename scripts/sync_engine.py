@@ -34,7 +34,7 @@ def main():
         sys.exit(1)
 
     # 2. Sync local distribution branches
-    branches = ["backendcode", "clicode", "enginecode", "guicode"]
+    branches = ["cli", "gui", "engine", "backendcode", "clicode", "enginecode", "guicode"]
     for b in branches:
         run_cmd(f"git branch -f {b} main")
         print(f"  \033[1;32m✔\033[0m Synchronized branch \033[1m{b}\033[0m with main")
