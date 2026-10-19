@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Dict, Any, Tuple
 from lmms.engine.engine_1_llamacpp.air_loader import ModelProfile
 
@@ -16,7 +17,10 @@ class AirPager:
         self.states: Dict[str, Tuple[Any, int]] = {}
 
     def load(self, profile: ModelProfile) -> bool:
-        if self.active_profile and self.active_profile.model_name == profile.model_name:
+        if self.active_profile and (
+            self.active_profile.model_name == profile.model_name
+            or (self.active_profile.file_path and profile.file_path and os.path.abspath(self.active_profile.file_path) == os.path.abspath(profile.file_path))
+        ):
             return True # Already loaded
             
         # If another model is active, we must save its state and unload it
@@ -35,10 +39,14 @@ class AirPager:
                 except Exception:
                     pass
 
-            print("[AirPager] mmap enabled: TRUE (Zero-latency OS virtual memory mapping)")
-            print(f"[AirPager] P-Core affinity locking: n_threads={profile.recommended_threads}")
-            print(f"[AirPager] Quantized KV Cache: Q8_0 + FlashAttention enabled")
-            print(f"[AirPager] Allocating {profile.optimal_gpu_layers} layers to GPU ({profile.gpu_pct:.1f}%), {profile.cpu_layers} layers to DDR5 CPU ({profile.cpu_pct:.1f}%)")
+            if os.environ.get("LMMS_AIR_DEBUG") == "1":
+                print("[AirPager] mmap enabled: TRUE (Zero-latency OS virtual memory mapping)")
+                print(f"[AirPager] P-Core affinity locking: n_threads={profile.recommended_threads}")
+                print(f"[AirPager] Quantized KV Cache: Q8_0 + FlashAttention enabled")
+                print(f"[AirPager] Allocating {profile.optimal_gpu_layers} layers to GPU ({profile.gpu_pct:.1f}%), {profile.cpu_layers} layers to DDR5 CPU ({profile.cpu_pct:.1f}%)")
+            else:
+                gpu_desc = f"{profile.optimal_gpu_layers} GPU" if profile.optimal_gpu_layers != -1 else "100% GPU"
+                print(f"[AirPager] Hardware mapped: {gpu_desc} / {profile.cpu_layers} CPU layers (mmap · Q8_0 KV · {profile.recommended_threads} P-Cores)")
 
             ctx_len = min(getattr(profile, "context_length", 4096), 4096)
             threads = getattr(profile, "recommended_threads", 6)

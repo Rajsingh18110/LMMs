@@ -154,8 +154,16 @@ class EngineManager:
 
     def is_model_loaded(self, model_name: str) -> bool:
         loaded = self.get_loaded_models()
-        clean = os.path.splitext(os.path.basename(model_name))[0]
-        return model_name in loaded or f"{model_name}.gguf" in loaded or clean in loaded
+        clean = os.path.splitext(os.path.basename(model_name))[0].lower()
+        if model_name in loaded or f"{model_name}.gguf" in loaded or clean in [k.lower() for k in loaded]:
+            return True
+        for k in loaded.keys():
+            if os.path.splitext(os.path.basename(k))[0].lower() == clean:
+                return True
+        if self._engine_1 is not None and hasattr(self._engine_1, "scheduler"):
+            if self._engine_1.scheduler.is_model_active(model_name):
+                return True
+        return False
 
     def unload_all(self):
         if self._engine_1 is not None and hasattr(self._engine_1, "unload_model"):

@@ -45,38 +45,9 @@ class AirLlamaCppRuntime(RuntimeContract):
         Loads GGUF model via AirLoader hardware profile and AirPager.
         Automatically calculates GPU vs CPU layer allocation.
         """
-        # Resolve path
-        path = model_id
-        models_dir = os.path.expanduser("~/.lmms/models")
-        manifests_dir = os.path.expanduser("~/.lmms/manifests")
-
-        # 1. Check manifests first
-        manifest_candidate = os.path.join(manifests_dir, f"{model_id}.json")
-        if os.path.exists(manifest_candidate):
-            try:
-                import json
-                with open(manifest_candidate, "r") as mf:
-                    mdata = json.load(mf)
-                    base = mdata.get("base_model")
-                    if base:
-                        cand = os.path.join(models_dir, base if base.endswith(".gguf") else f"{base}.gguf")
-                        if os.path.exists(cand):
-                            path = cand
-                        elif os.path.exists(os.path.join(models_dir, base)):
-                            path = os.path.join(models_dir, base)
-            except Exception:
-                pass
-
-        # 2. Check direct model file
-        if not os.path.exists(path):
-            candidate = os.path.join(models_dir, f"{model_id}.gguf")
-            if os.path.exists(candidate):
-                path = candidate
-            elif os.path.exists(os.path.join(models_dir, model_id)):
-                path = os.path.join(models_dir, model_id)
-
-        if not os.path.exists(path):
-            print(f"[AirLlamaCpp] Error: Model file not found: {path}")
+        path = self.loader.resolve_path(model_id)
+        if not path:
+            print(f"[AirLlamaCpp] Error: Model file not found for '{model_id}'")
             return False
 
         profile = self.loader.build_profile(path)
@@ -117,22 +88,16 @@ class AirLlamaCppRuntime(RuntimeContract):
         result = self.scheduler.route_request(1, target_role, messages)
 
         def stream_wrapper(gen):
-            t0 = time.time()
-            tokens = 0
             for item in gen:
-                tokens += 1
                 yield item
-            total_time = time.time() - t0
-            tps = tokens / max(total_time, 0.001)
 
-            profile = self.pager.active_profile
-            gpu_pct = profile.gpu_pct if profile else 0.0
-            cpu_pct = profile.cpu_pct if profile else 100.0
-            optimal_gpu_l = profile.optimal_gpu_layers if (profile and profile.optimal_gpu_layers != -1) else (profile.total_layers if profile else 0)
-            cpu_l = profile.cpu_layers if profile else 0
-
-            print(f"\n[AirLlamaCpp] Inference finished: {tps:.2f} tokens/sec")
-            print(f"[AirLlamaCpp] Allocation: GPU {optimal_gpu_l} layers ({gpu_pct:.1f}%) | CPU DDR5 {cpu_l} layers ({cpu_pct:.1f}%)")
+            if os.environ.get("LMMS_AIR_DEBUG") == "1":
+                profile = self.pager.active_profile
+                gpu_pct = profile.gpu_pct if profile else 0.0
+                cpu_pct = profile.cpu_pct if profile else 100.0
+                optimal_gpu_l = profile.optimal_gpu_layers if (profile and profile.optimal_gpu_layers != -1) else (profile.total_layers if profile else 0)
+                cpu_l = profile.cpu_layers if profile else 0
+                print(f"\n[AirLlamaCpp] Allocation: GPU {optimal_gpu_l} layers ({gpu_pct:.1f}%) | CPU DDR5 {cpu_l} layers ({cpu_pct:.1f}%)")
 
         if stream:
             return stream_wrapper(result)

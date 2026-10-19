@@ -89,40 +89,57 @@ class AirLoader:
     def __init__(self, models_dir: str = "~/.lmms/models"):
         self.models_dir = os.path.expanduser(models_dir)
 
-    def analyze_model(self, model_name: str, target_context: int = 4096) -> Optional[ModelProfile]:
-        return self._analyze(model_name, target_context)
+    def resolve_path(self, model_name: str) -> Optional[str]:
+        """Resolves model tag, alias, manifest or filename to canonical absolute path."""
+        if os.path.exists(model_name):
+            return os.path.abspath(model_name)
 
-    def build_profile(self, model_name: str, target_context: int = 4096) -> Optional[ModelProfile]:
-        return self.analyze_model(model_name, target_context)
-
-    def _analyze(self, model_name: str, target_context: int = 4096) -> Optional[ModelProfile]:
         path = os.path.join(self.models_dir, f"{model_name}.gguf")
-        if not os.path.exists(path):
-            manifest_candidate = os.path.expanduser(f"~/.lmms/manifests/{model_name}.json")
-            if os.path.exists(manifest_candidate):
-                try:
-                    import json
-                    with open(manifest_candidate, "r") as mf:
-                        base = json.load(mf).get("base_model")
-                        if base:
-                            cand = os.path.join(self.models_dir, base if base.endswith(".gguf") else f"{base}.gguf")
-                            if os.path.exists(cand):
-                                path = cand
-                            elif os.path.exists(os.path.join(self.models_dir, base)):
-                                path = os.path.join(self.models_dir, base)
-                except Exception:
-                    pass
+        if os.path.exists(path):
+            return os.path.abspath(path)
 
-        if not os.path.exists(path):
-            if os.path.exists(model_name):
-                path = model_name
-            elif os.path.exists(os.path.join(self.models_dir, model_name)):
-                path = os.path.join(self.models_dir, model_name)
-            else:
-                return None
+        path_raw = os.path.join(self.models_dir, model_name)
+        if os.path.exists(path_raw):
+            return os.path.abspath(path_raw)
+
+        # Check manifests
+        manifest_candidate = os.path.expanduser(f"~/.lmms/manifests/{model_name}.json")
+        if os.path.exists(manifest_candidate):
+            try:
+                import json
+                with open(manifest_candidate, "r") as mf:
+                    base = json.load(mf).get("base_model")
+                    if base:
+                        cand = os.path.join(self.models_dir, base if base.endswith(".gguf") else f"{base}.gguf")
+                        if os.path.exists(cand):
+                            return os.path.abspath(cand)
+                        cand_raw = os.path.join(self.models_dir, base)
+                        if os.path.exists(cand_raw):
+                            return os.path.abspath(cand_raw)
+            except Exception:
+                pass
+
+        return None
+
+    def analyze_model(self, model_name: str, target_context: int = 4096, verbose: bool = False) -> Optional[ModelProfile]:
+        return self._analyze(model_name, target_context, verbose=verbose)
+
+    def build_profile(self, model_name: str, target_context: int = 4096, verbose: bool = False) -> Optional[ModelProfile]:
+        return self.analyze_model(model_name, target_context, verbose=verbose)
+
+    def _analyze(self, model_name: str, target_context: int = 4096, verbose: bool = False) -> Optional[ModelProfile]:
+        path = self.resolve_path(model_name)
+        if not path:
+            return None
 
         size_gb = os.path.getsize(path) / (1024**3)
-        print(f"\n[AirLoader] Analyzing model: {model_name} ({size_gb:.2f} GB)")
+        clean_model_name = os.path.splitext(os.path.basename(path))[0]
+        show_full_schedule = verbose or os.environ.get("LMMS_AIR_DEBUG") == "1"
+
+        if show_full_schedule:
+            print(f"\n[AirLoader] Analyzing model: {model_name} ({size_gb:.2f} GB)")
+        else:
+            print(f"[AirLoader] Model: {clean_model_name} ({size_gb:.2f} GB)")
 
         # 1. Parse exact metadata from GGUF binary header
         meta = parse_gguf_metadata(path)
@@ -161,9 +178,11 @@ class AirLoader:
                 total_layers = 64
             else:
                 total_layers = 80  # 70B
-            print(f"[AirLoader] Estimated layers from architecture scale: {total_layers} layers")
-        else:
-            print(f"[AirLoader] Exact GGUF layers detected from header: {total_layers} layers (Arch: {arch})")
+        if show_full_schedule:
+            if not total_layers or total_layers <= 0:
+                print(f"[AirLoader] Estimated layers from architecture scale: {total_layers} layers")
+            else:
+                print(f"[AirLoader] Exact GGUF layers detected from header: {total_layers} layers (Arch: {arch})")
 
         d_model = d_model or 4096
         n_heads_kv = n_heads_kv or 8
@@ -312,23 +331,27 @@ class AirLoader:
             # Prefill streams weights once for all tokens in prompt batch
             expected_prefill_tps = 512.0 / ((size_gb / nvme_bw_gb_s) + 1.5)
 
-        print(f"\n[AirPlanner] ================= MATHEMATICAL AIR SCHEDULE =================")
-        print(f"[AirPlanner] Model: {meta.get('general.name', model_name)} | Size: {size_gb:.2f} GB | Layers: {total_layers}")
-        print(f"[AirPlanner] Architecture: {arch} | Hidden: {d_model} | KV-Heads: {n_heads_kv} | Ctx: {context_len}")
-        print(f"[AirPlanner] GPU VRAM: {vram_total_gb:.1f}GB total ({vram_available_gb:.1f}GB free, Reserve: {v_reserve_gb:.2f}GB, Usable: {v_usable_gb:.2f}GB)")
-        print(f"[AirPlanner] System RAM: {ram_total_gb:.1f}GB total ({ram_available_gb:.1f}GB free, Reserve: {r_reserve_gb:.2f}GB, Usable: {r_usable_gb:.2f}GB)")
-        print(f"[AirPlanner] Weight Breakdown: Embeddings/Head: {w_embed_gb:.2f}GB | Layer: {w_layer_gb*1000:.1f}MB | KV Total: {kv_total_gb*1000:.1f}MB")
-        print(f"[AirPlanner] Scratch Buffer: {compute_scratch_gb*1000:.1f}MB | VRAM Layer Budget: {v_layer_budget_gb:.2f}GB")
-        
         regime_names = {
             1: "Regime 1 (Pure GPU Offload)",
             2: "Regime 2 (Dynamic Hybrid Partitioning)",
-            3: "Regime 3 (Sequential Layer Streaming / AirEngine)"
+            3: "Regime 3 (Sequential Layer Streaming)"
         }
-        print(f"[AirPlanner] Selected Regime: {regime_names[regime]}")
-        print(f"[AirPlanner] Layer Assignment: GPU {optimal_gpu_layers if optimal_gpu_layers != -1 else total_layers} layers ({gpu_pct:.1f}%) | CPU {cpu_layers} layers ({cpu_pct:.1f}%)")
-        print(f"[AirPlanner] Performance Estimate: Decode: ~{expected_decode_tps:.2f} tok/s | Prefill: ~{expected_prefill_tps:.1f} tok/s")
-        print(f"[AirPlanner] ==================================================================\n")
+        gpu_l = optimal_gpu_layers if optimal_gpu_layers != -1 else total_layers
+
+        if show_full_schedule:
+            print(f"\n[AirPlanner] ================= MATHEMATICAL AIR SCHEDULE =================")
+            print(f"[AirPlanner] Model: {meta.get('general.name', model_name)} | Size: {size_gb:.2f} GB | Layers: {total_layers}")
+            print(f"[AirPlanner] Architecture: {arch} | Hidden: {d_model} | KV-Heads: {n_heads_kv} | Ctx: {context_len}")
+            print(f"[AirPlanner] GPU VRAM: {vram_total_gb:.1f}GB total ({vram_available_gb:.1f}GB free, Reserve: {v_reserve_gb:.2f}GB, Usable: {v_usable_gb:.2f}GB)")
+            print(f"[AirPlanner] System RAM: {ram_total_gb:.1f}GB total ({ram_available_gb:.1f}GB free, Reserve: {r_reserve_gb:.2f}GB, Usable: {r_usable_gb:.2f}GB)")
+            print(f"[AirPlanner] Weight Breakdown: Embeddings/Head: {w_embed_gb:.2f}GB | Layer: {w_layer_gb*1000:.1f}MB | KV Total: {kv_total_gb*1000:.1f}MB")
+            print(f"[AirPlanner] Scratch Buffer: {compute_scratch_gb*1000:.1f}MB | VRAM Layer Budget: {v_layer_budget_gb:.2f}GB")
+            print(f"[AirPlanner] Selected Regime: {regime_names[regime]}")
+            print(f"[AirPlanner] Layer Assignment: GPU {gpu_l} layers ({gpu_pct:.1f}%) | CPU {cpu_layers} layers ({cpu_pct:.1f}%)")
+            print(f"[AirPlanner] Performance Estimate: Decode: ~{expected_decode_tps:.2f} tok/s | Prefill: ~{expected_prefill_tps:.1f} tok/s")
+            print(f"[AirPlanner] ==================================================================\n")
+        else:
+            print(f"[AirPlanner] {regime_names[regime]}: {gpu_l} GPU layers ({gpu_pct:.1f}%) | {cpu_layers} CPU DDR5 layers ({cpu_pct:.1f}%) [~{expected_decode_tps:.1f} tok/s]")
 
         clean_model_name = os.path.splitext(os.path.basename(model_name))[0]
         return ModelProfile(

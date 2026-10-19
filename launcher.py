@@ -186,13 +186,31 @@ def run_system_check():
     print(f"  {c_cyan}llama.cpp:{c_reset} {llama_status}")
     print(f"{c_dim}{'─' * 62}{c_reset}\n")
 
+def get_installed_components():
+    p = os.path.expanduser("~/.lmms/config/installed_components.json")
+    if os.path.exists(p):
+        try:
+            with open(p, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
 def main():
     threading.Thread(target=check_for_updates, daemon=True).start()
     args = sys.argv[1:]
     config = load_config()
 
     if not args:
-        mode = config.get("default_mode", "cli")
+        installed = get_installed_components()
+        mode = config.get("default_mode")
+        if not mode or (mode == "cli" and not (installed.get("cli") or installed.get("all"))):
+            if installed.get("engine") or installed.get("engine1") or installed.get("engine2"):
+                mode = "engine"
+            elif installed.get("cli") or installed.get("all"):
+                mode = "cli"
+            else:
+                mode = "engine"
         launch(mode)
         return
 
@@ -287,7 +305,30 @@ def main():
 def launch(mode, forward_args=None, ensure_engine=True):
     if forward_args is None:
         forward_args = []
-        
+
+    installed = get_installed_components()
+    has_all = installed.get("all", False)
+
+    if mode == "cli":
+        if not (has_all or installed.get("cli", False)):
+            print("\n\033[1;31m[ERROR]\033[0m Terminal Studio (CLI) is not installed on this workstation.")
+            print("\033[2mCurrently installed configuration: Engine Runtime only.\033[0m")
+            print("\nTo install Terminal Studio (CLI), run:")
+            print("  \033[1;36mlmms install --cli\033[0m")
+            print("or install the complete suite:")
+            print("  \033[1;36mlmms install --all\033[0m\n")
+            return
+
+    elif mode == "gui":
+        if not (has_all or installed.get("gui", False)):
+            print("\n\033[1;31m[ERROR]\033[0m Desktop Studio (GUI) is not installed on this workstation.")
+            print("\033[2mCurrently installed configuration: Engine Runtime only.\033[0m")
+            print("\nTo install Desktop Studio (GUI), run:")
+            print("  \033[1;36mlmms install --gui\033[0m")
+            print("or install the complete suite:")
+            print("  \033[1;36mlmms install --all\033[0m\n")
+            return
+
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
 

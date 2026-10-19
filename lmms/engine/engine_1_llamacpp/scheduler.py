@@ -24,21 +24,35 @@ class AirScheduler:
                 mapping["text"] = part
         self.groups[group_id] = mapping
 
+    def is_model_active(self, model_name: str) -> bool:
+        if not (self.pager.active_profile and self.pager.active_model is not None):
+            return False
+
+        active_prof = self.pager.active_profile
+        clean_name = os.path.splitext(os.path.basename(model_name))[0].lower()
+        active_clean = os.path.splitext(os.path.basename(active_prof.model_name))[0].lower()
+
+        if clean_name == active_clean or model_name.lower() == active_prof.model_name.lower():
+            return True
+
+        target_path = self.loader.resolve_path(model_name)
+        if target_path and active_prof.file_path:
+            if os.path.abspath(target_path) == os.path.abspath(active_prof.file_path):
+                return True
+
+        return False
+
     def route_request(self, group_id: int, target_role: str, messages: list):
         group = self.groups.get(group_id, {})
         model_name = group.get(target_role)
         if not model_name:
             model_name = list(group.values())[0] if group else "default"
 
-        clean_name = os.path.splitext(os.path.basename(model_name))[0]
-
         # Fast path: If the requested model is already active and loaded in AirPager,
         # reuse it directly without re-reading binary GGUF headers or recalculating schedules.
-        if self.pager.active_profile and self.pager.active_model is not None:
-            active_clean = os.path.splitext(os.path.basename(self.pager.active_profile.model_name))[0]
-            if active_clean == clean_name or self.pager.active_profile.model_name == model_name:
-                self.update_state(self.pager.active_profile.model_name, "Active Generating")
-                return self.pager.execute_stream(messages)
+        if self.is_model_active(model_name):
+            self.update_state(self.pager.active_profile.model_name, "Active Generating")
+            return self.pager.execute_stream(messages)
 
         profile = self.loader.analyze_model(model_name)
         if not profile:
