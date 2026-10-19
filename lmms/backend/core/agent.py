@@ -675,11 +675,16 @@ ONLY JSON, no explanation."""
             return
 
         # Parse plan
+        plan: Dict[str, Any] = {}
         try:
             import re
             json_match = re.search(r'\{.*\}', plan_text, re.DOTALL)
             if json_match:
-                plan = json.loads(json_match.group())
+                parsed = json.loads(json_match.group())
+                if isinstance(parsed, dict):
+                    plan = parsed
+                else:
+                    raise ValueError("JSON is not a dict")
             else:
                 raise ValueError("No JSON found")
         except Exception:
@@ -687,8 +692,10 @@ ONLY JSON, no explanation."""
             plan = {"changes": [{"file": task, "action": "edit", "description": task}], "steps": [task]}
 
         c.print(f"\n[bold]Plan:[/bold]")
-        for step in plan.get("steps", []):
-            c.print(f"  • {step}")
+        steps_list = plan.get("steps", [])
+        if isinstance(steps_list, list):
+            for step in steps_list:
+                c.print(f"  • {step}")
 
         confirm = input("\nProceed? (y/n/edit): ").strip().lower()
         if confirm == "n":
@@ -700,14 +707,15 @@ ONLY JSON, no explanation."""
             return
 
         # Step 3: Apply changes
-        changes: List[Dict[str, Any]] = plan.get("changes", []) if isinstance(plan, dict) else []
+        changes_raw: Any = plan.get("changes", [])
+        changes: List[Any] = list(changes_raw) if isinstance(changes_raw, list) else []
         for change in changes:
             if not isinstance(change, dict):
                 continue
-            file_name = change.get("file", "")
+            file_name = str(change.get("file", ""))
             file_path = os.path.join(project_path, file_name)
-            action = change.get("action", "edit")
-            desc = change.get("description", "")
+            action = str(change.get("action", "edit"))
+            desc = str(change.get("description", ""))
 
             c.print(f"\n[cyan]✏ {action.upper()}: {file_path}[/cyan]")
             c.print(f"[dim]{desc}[/dim]")
