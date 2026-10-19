@@ -292,7 +292,7 @@ class AirLoader:
             expected_prefill_tps = expected_decode_tps * 3.0
 
         else:
-            # REGIME 3: SEQUENTIAL LAYER STREAMING (AirLLM-Style)
+            # REGIME 3: SEQUENTIAL LAYER STREAMING (AirEngine)
             # Model exceeds total memory. Stream 1 layer at a time from NVMe SSD.
             regime = 3
             optimal_gpu_layers = 1  # 1 layer active in double buffer at a time
@@ -318,7 +318,7 @@ class AirLoader:
         regime_names = {
             1: "Regime 1 (Pure GPU Offload)",
             2: "Regime 2 (Dynamic Hybrid Partitioning)",
-            3: "Regime 3 (Sequential Layer Streaming / AirLLM-Style)"
+            3: "Regime 3 (Sequential Layer Streaming / AirEngine)"
         }
         print(f"[AirPlanner] Selected Regime: {regime_names[regime]}")
         print(f"[AirPlanner] Layer Assignment: GPU {optimal_gpu_layers if optimal_gpu_layers != -1 else total_layers} layers ({gpu_pct:.1f}%) | CPU {cpu_layers} layers ({cpu_pct:.1f}%)")

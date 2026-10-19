@@ -51,8 +51,8 @@ The Engine is the lowest level of LMMs. It is responsible for actually loading a
 - **Memory Management:** Automatically splits the model layers across available GPUs (Tensor Parallelism) or shifts non-active layers to CPU RAM (Model Offloading) to prevent Out of Memory (OOM) errors.
 - **Best for:** Multimodal models (Vision + Text), frontier models with custom attention mechanisms, and unquantized precision tasks.
 
-#### 🌬️ Engine C: `AirLLM` (Air Engine) — Distributed / Disk-Offloading
-- **Core Mechanism:** Traditional engines load the *entire* model into RAM/VRAM before generating a single token. AirLLM uses a **Layer-by-Layer Streaming** logic. It keeps only a small subset of the neural network layers in GPU memory at any given millisecond. As the forward pass reaches layer N, layer N+1 is pre-fetched from the SSD, and layer N-1 is evicted.
+#### 🌬️ Engine C: `AirEngine` — Distributed / Disk-Offloading Runtime
+- **Core Mechanism:** Traditional engines load the *entire* model into RAM/VRAM before generating a single token. AirEngine uses a **Layer-by-Layer Streaming** logic. It keeps only a small subset of the neural network layers in GPU memory at any given millisecond. As the forward pass reaches layer N, layer N+1 is pre-fetched from the SSD, and layer N-1 is evicted.
 - **Impact:** Allows a standard 16GB RAM PC to run massive 70B parameter models by bottlenecking on disk read-speed rather than memory capacity.
 
 > **Key Insight:** You can select which engine to use at model load time using `lmms run <model> -use l` (llama.cpp) or `lmms run <model> -use p` (PyTorch). The Engine auto-detects the best runtime if you omit the flag.
@@ -118,7 +118,7 @@ The GUI is a PyQt6-based graphical AI Workspace IDE. It is designed to be a visu
 
 | Component | Description | Status |
 |---|---|---|
-| **LMMs Engine** | AI execution layer (llama.cpp + PyTorch + AirLLM) | ✅ Stable |
+| **LMMs Engine** | AI execution layer (llama.cpp + PyTorch + AirEngine) | ✅ Stable |
 | **LMMs Backend** | Agentic brain: tools, RAG, web search, state tracking | ✅ Stable |
 | **LMMs CLI** | Smart terminal interface for all interactions | ✅ Beta |
 | **LMMs GUI** | PyQt6 graphical AI Workspace IDE | 🚧 In Development |

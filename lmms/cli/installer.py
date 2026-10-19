@@ -168,41 +168,55 @@ def read_single_key() -> str:
 def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
     """
     Renders an interactive terminal wizard matching the architecture flowchart:
-    Level 1: "Aap kaun ho?" -> [1] Individual / [2] Enterprise
-    Level 2 (Individual): "Kya download karna hai?" ->
-      [1] Standalone Engine (llama.cpp + PyTorch + Air Engine)
-      [2] Desktop GUI Studio (folder: gui/)
-      [3] Terminal CLI Studio (folder: cli/)
-    Level 2 (Enterprise): "Host ya Client?" ->
-      [1] Dedicated Host Server (Engine 2: PyTorch + AirLLM Server)
-      [2] Client GUI (guicode/ + backend)
-      [3] Client CLI (clicode/ + backend)
+    Level 1: Deployment Tier -> [1] Individual Workstation / [2] Enterprise Infrastructure
+    Level 2 (Individual): Component Selection ->
+      [1] Engine 1 (Lightweight Runtime - llama.cpp + AirEngine)
+      [2] Engine 2 (PyTorch Native - PyTorch + AirEngine)
+      [3] Super Engine (Unified Runtimes - llama.cpp + PyTorch + AirEngine)
+      [4] Desktop Studio (GUI)
+      [5] Terminal Studio (CLI)
+      [6] Complete Ecosystem Suite
+    Level 2 (Enterprise): Infrastructure Role ->
+      [1] Dedicated Enterprise Super Host Server (All Engines)
+      [2] PyTorch / AirEngine High-Performance Node
+      [3] Enterprise Desktop Client (GUI)
+      [4] Enterprise Terminal Client (CLI)
     """
     sys.stdout.write(CURSOR_HIDE)
     sys.stdout.flush()
 
     try:
-        # Step 1: Aap kaun ho?
+        # Step 1: Deployment Tier Selection
         persona_items = [
-            {"id": "individual", "title": "Individual", "desc": "Single Workstation (Local GPU/RAM dynamic offloading)"},
-            {"id": "enterprise", "title": "Enterprise", "desc": "Distributed Infrastructure (Dedicated host server & clients)"},
+            {
+                "id": "individual",
+                "title": "Individual Workstation",
+                "desc": "Single workstation deployment with local hardware acceleration & offloading.",
+            },
+            {
+                "id": "enterprise",
+                "title": "Enterprise Infrastructure",
+                "desc": "Distributed client-server infrastructure for teams across LAN/VPC networks.",
+            },
         ]
         cursor_1 = 0
         while True:
             lines = [
-                f"\n  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· architecture setup wizard{COLOR_RESET}",
-                f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}",
-                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1/2] quick select · [q] cancel{COLOR_RESET}\n",
-                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}Aap kaun ho?{COLOR_RESET}",
+                f"\n  {COLOR_BOLD_WHITE}LMMs Installer{COLOR_RESET} {COLOR_DIM}· Architecture Setup Wizard{COLOR_RESET}",
+                f"  {COLOR_CYAN}For more details, visit: https://lmms.markanm.com{COLOR_RESET}",
+                f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}",
+                f"  {COLOR_DIM}Controls: [↑/↓] Navigate  ·  [Enter] Select  ·  [1/2] Quick Select  ·  [Q] Exit{COLOR_RESET}\n",
+                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}Select Deployment Architecture:{COLOR_RESET}\n",
             ]
             for i, it in enumerate(persona_items):
                 is_cur = (i == cursor_1)
                 prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
                 num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
                 title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
-                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']:<14}{COLOR_RESET} {COLOR_DIM}— {it['desc']}{COLOR_RESET}")
+                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
+                lines.append(f"        {COLOR_DIM}{it['desc']}{COLOR_RESET}\n")
 
-            lines.append(f"\n  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
+            lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
             output = "\033[H\033[J" + "\n".join(lines) + "\n"
             sys.stdout.write(output)
             sys.stdout.flush()
@@ -224,83 +238,86 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
 
         selected_persona = persona_items[cursor_1]["id"]
 
-        # Step 2: Component Selection
+        # Step 2: Component Configuration Selection
         if selected_persona == "individual":
             comp_items = [
                 {
                     "id": "engine1",
-                    "title": "Engine 1 (Fast & Light)",
-                    "desc": "llama.cpp + AirEngine (GGUF, Low RAM, Port 11435) for Continue.dev/Cursor/Zero-GUI",
+                    "title": "Engine 1 (Lightweight Runtime)",
+                    "desc": "llama.cpp + AirEngine (GGUF format, low RAM footprint, pure API on port 11435)",
                     "components": ["engine1"],
                 },
                 {
                     "id": "engine2",
-                    "title": "Engine 2 (PyTorch native)",
-                    "desc": "PyTorch + Transformers + AirLLM (Full Precision safetensors)",
+                    "title": "Engine 2 (PyTorch Native)",
+                    "desc": "PyTorch + Transformers + AirEngine (Full-precision Safetensors model runtime)",
                     "components": ["engine2"],
                 },
                 {
                     "id": "engine",
-                    "title": "Super Engine (All 3)",
-                    "desc": "llama.cpp + PyTorch + AirEngine (Teeno ek sath local machine par)",
+                    "title": "Super Engine (Unified Runtimes)",
+                    "desc": "All runtimes unified (llama.cpp + PyTorch + AirEngine) in a single service",
                     "components": ["engine"],
                 },
                 {
                     "id": "gui",
-                    "title": "Desktop GUI Studio (folder: gui/)",
-                    "desc": "Monaco Code Editor + Source Control + Auto-linked Central Engine",
+                    "title": "Desktop Studio (GUI)",
+                    "desc": "Monaco Editor + Local Engine Client + Git Integration (gui/ branch)",
                     "components": ["gui", "engine"],
                 },
                 {
                     "id": "cli",
-                    "title": "Terminal CLI Studio (folder: cli/)",
-                    "desc": "Interactive AI Shell + Coding Tools + Auto-linked Central Engine",
+                    "title": "Terminal Studio (CLI)",
+                    "desc": "Interactive AI Shell + Developer Toolchain + Local Engine Client (cli/ branch)",
                     "components": ["cli", "engine"],
                 },
                 {
                     "id": "all",
-                    "title": "Complete Suite (All-in-One)",
-                    "desc": "Everything: Desktop GUI, Terminal CLI, Voice & Super Engine",
+                    "title": "Complete Ecosystem Suite",
+                    "desc": "Full installation: Desktop Studio, Terminal CLI, Voice & Super Engine",
                     "components": ["gui", "cli", "engine", "voice"],
                 },
             ]
-            prompt_q = "Kya setup karna hai?"
+            prompt_q = "Select Component Configuration:"
+            header_subtitle = "Individual Workstation Setup"
         else:
             comp_items = [
                 {
                     "id": "super_host",
-                    "title": "Dedicated Enterprise Super Host Server (All 3 Engines)",
-                    "desc": "Teeno ek sath (llama.cpp + PyTorch + AirEngine) serving Team on LAN/VPC 0.0.0.0:11435",
+                    "title": "Dedicated Enterprise Super Host Server (All Engines)",
+                    "desc": "Central multi-engine daemon listening on 0.0.0.0:11435 for team LAN/VPC access",
                     "components": ["engine"],
                 },
                 {
                     "id": "host_node",
-                    "title": "PyTorch / AirLLM Node Server (Engine 2)",
-                    "desc": "Dedicated heavy cluster inference node (PyTorch + AirLLM)",
+                    "title": "PyTorch / AirEngine High-Performance Node",
+                    "desc": "Dedicated heavy cluster inference node for multi-GPU & large model serving",
                     "components": ["engine2"],
                 },
                 {
                     "id": "client_gui",
-                    "title": "Enterprise Client GUI (Desktop Studio)",
-                    "desc": "Desktop client (guicode/) configured with Local->LAN->Global auto-discovery",
+                    "title": "Enterprise Desktop Client (GUI)",
+                    "desc": "Desktop Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
                     "components": ["gui"],
                 },
                 {
                     "id": "client_cli",
-                    "title": "Enterprise Client CLI (Terminal Studio)",
-                    "desc": "Terminal client (clicode/) configured with Local->LAN->Global auto-discovery",
+                    "title": "Enterprise Terminal Client (CLI)",
+                    "desc": "Terminal Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
                     "components": ["cli"],
                 },
             ]
-            prompt_q = "Enterprise Role: Host Server ya Remote Client?"
+            prompt_q = "Select Enterprise Infrastructure Role:"
+            header_subtitle = "Enterprise Infrastructure Setup"
 
         cursor_2 = 0
         while True:
             lines = [
-                f"\n  {COLOR_BOLD_WHITE}lmms {action_verb.lower()}{COLOR_RESET} {COLOR_DIM}· {selected_persona.capitalize()} setup{COLOR_RESET}",
-                f"  {COLOR_DIM}{'─' * 68}{COLOR_RESET}",
-                f"  {COLOR_DIM}keys: [↑/↓] navigate · [enter] select · [1-{len(comp_items)}] quick select · [q] cancel{COLOR_RESET}\n",
-                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}",
+                f"\n  {COLOR_BOLD_WHITE}LMMs Installer{COLOR_RESET} {COLOR_DIM}· {header_subtitle}{COLOR_RESET}",
+                f"  {COLOR_CYAN}For more details, visit: https://lmms.markanm.com{COLOR_RESET}",
+                f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}",
+                f"  {COLOR_DIM}Controls: [↑/↓] Navigate  ·  [Enter] Select  ·  [1-{len(comp_items)}] Quick Select  ·  [Q] Exit{COLOR_RESET}\n",
+                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}\n",
             ]
             for i, it in enumerate(comp_items):
                 is_cur = (i == cursor_2)
@@ -308,9 +325,9 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
                 num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
                 title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
                 lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
-                lines.append(f"       {COLOR_DIM}└─ {it['desc']}{COLOR_RESET}")
+                lines.append(f"        {COLOR_DIM}{it['desc']}{COLOR_RESET}\n")
 
-            lines.append(f"\n  {COLOR_DIM}{'─' * 68}{COLOR_RESET}")
+            lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
             output = "\033[H\033[J" + "\n".join(lines) + "\n"
             sys.stdout.write(output)
             sys.stdout.flush()
@@ -458,7 +475,7 @@ class CLIInstaller:
             f"  --gui, -g     {'Update' if self.is_update else 'Install'} Desktop Studio GUI (PyQt6 windowing toolkit)\n"
             f"  --engine, -e  {'Update' if self.is_update else 'Install'} Superpower Engine (llama.cpp + PyTorch + Air Engine + API Daemon)\n"
             f"  --engine1     {'Update' if self.is_update else 'Install'} Engine 1 (llama.cpp + Air Engine GGUF)\n"
-            f"  --engine2     {'Update' if self.is_update else 'Install'} Engine 2 (PyTorch + AirLLM Safetensors)\n"
+            f"  --engine2     {'Update' if self.is_update else 'Install'} Engine 2 (PyTorch + AirEngine Safetensors)\n"
             f"  --voice, -v   {'Update' if self.is_update else 'Install'} Voice input & audio streaming dependencies\n"
             f"  -h, --help    Show this help message\n\n"
             f"Combine options freely: lmms {action} --cli --engine\n"

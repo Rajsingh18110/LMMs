@@ -5,7 +5,7 @@ from lmms.engine.air.memory_map import GGUFMemoryMap
 
 class AirLayerPrefetcher:
     """
-    Double-buffered asynchronous layer streaming pipeline for Regime 3 (AirLLM-Style).
+    Double-buffered asynchronous layer streaming pipeline for Regime 3 (AirEngine-Style).
     Prefetches layer (l+1) via kernel readahead while layer (l) forward pass computes.
     Evicts layer (l-1) immediately via posix_fadvise(DONTNEED) to eliminate OS page cache thrashing.
     """

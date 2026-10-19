@@ -1,6 +1,6 @@
 """
 agent.py — LMMs HexAgent (Full Rewrite)
-Supports: Ollama, Cloud APIs, AirLLM, Smart Routing, Canvas, Claude Code Mode
+Supports: Ollama, Cloud APIs, AirEngine, Smart Routing, Canvas, Claude Code Mode
 """
 
 import requests
@@ -81,7 +81,7 @@ class HexAgent:
         self.messenger = MessengerTool()
         self.canvas = get_canvas()
 
-        # Backend selection: lmms_engine | airllm | cloud:<name>
+        # Backend selection: lmms_engine | airengine | cloud:<name>
         self.backend = "lmms_engine"
         self.airllm_model = None
         self.airllm_model_name = None
@@ -406,7 +406,7 @@ class HexAgent:
         self.memory.save(self.session_id, "user", final_prompt, "user")
 
         # Route to backend
-        if self.backend == "airllm":
+        if self.backend in ("airllm", "airengine", "air"):
             self._run_airllm(final_prompt)
         elif self.backend.startswith("cloud:"):
             connector_name = self.backend[6:]

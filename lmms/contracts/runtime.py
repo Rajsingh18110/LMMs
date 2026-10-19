@@ -1,7 +1,7 @@
 from typing import Protocol, Any, Dict
 
 class RuntimeContract(Protocol):
-    """Protocol for LMMs engines (Ollama, llama.cpp, AirLLM, vLLM)."""
+    """Protocol for LMMs engines (Ollama, llama.cpp, AirEngine, vLLM)."""
     
     def load_model(self, model_id: str, manifest: Dict[str, Any]) -> bool:
         ...

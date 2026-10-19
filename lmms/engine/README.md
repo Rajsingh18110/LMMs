@@ -47,7 +47,7 @@ lmms/engine/
 │
 ├── engine_2_pytorch/           # 🌟 ENGINE 2: AIR + PYTORCH (Safetensors & Training)
 │   ├── runtime.py              # AirPyTorchRuntime (Main Engine 2 executor)
-│   ├── air_streamer.py         # AirLLM-style layer-by-layer Safetensors offloading
+│   ├── air_streamer.py         # AirEngine layer-by-layer Safetensors offloading
 │   ├── trainer.py              # Enterprise PEFT / LoRA fine-tuning offloader
 │   └── hf_vision.py            # Multimodal vision processor
 │

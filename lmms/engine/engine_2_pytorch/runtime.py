@@ -10,7 +10,7 @@ class AirPyTorchRuntime(RuntimeContract):
     """
     Engine 2: Air Engine + PyTorch Enterprise Runtime.
     - HuggingFace Safetensors & Multimodal (Vision, Audio, TTS) execution.
-    - AirLLM-style layer-by-layer sequential offload for heavy 70B+ models on limited VRAM.
+    - AirEngine layer-by-layer sequential offload for heavy 70B+ models on limited VRAM.
     - LoRA / PEFT fine-tuning and training offloader.
     """
     def __init__(self):

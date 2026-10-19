@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, Generator
 
 class AirPyTorchStreamer:
     """
-    Air Engine Layer-by-Layer Streaming for PyTorch (AirLLM-style).
+    Air Engine Layer-by-Layer Streaming for PyTorch (AirEngine).
     Allows running and fine-tuning 70B+ Safetensors models on limited VRAM (e.g., 6GB-16GB GPUs)
     by paging transformer layers sequentially between RAM/NVMe and GPU VRAM.
     """
