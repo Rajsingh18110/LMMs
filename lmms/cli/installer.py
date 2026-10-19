@@ -23,7 +23,8 @@ import subprocess
 import sys
 import threading
 import time
-from typing import List, Dict, Optional, Set
+import select
+from typing import List, Dict, Optional, Set, Any, Union
 
 # --- Typography & ANSI Constants (Node.js/Yarn Blueprint) ---
 COLOR_RESET = "\033[0m"
@@ -124,6 +125,8 @@ def check_package_installed(spec: str) -> bool:
 
 def read_single_key() -> str:
     """Reads a single keypress cleanly across Linux/macOS and Windows."""
+    if not sys.stdin.isatty():
+        return "enter"
     if os.name == "nt":
         import msvcrt
         ch = msvcrt.getch()
@@ -136,33 +139,91 @@ def read_single_key() -> str:
             return "unknown"
         elif ch == b" ": return "space"
         elif ch in (b"\r", b"\n"): return "enter"
-        elif ch in (b"a", b"A"): return "a"
+        elif ch in (b"b", b"B", b"\x08", b"\x1b"): return "back"
         elif ch in (b"q", b"Q", b"\x03"): return "quit"
         return ch.decode("latin1", errors="ignore")
     else:
         import tty
         import termios
+        import select
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
             ch = sys.stdin.read(1)
             if ch == "\x1b":
-                ch2 = sys.stdin.read(1)
-                if ch2 == "[":
-                    ch3 = sys.stdin.read(1)
-                    if ch3 == "A": return "up"
-                    elif ch3 == "B": return "down"
-                    elif ch3 == "C": return "right"
-                    elif ch3 == "D": return "left"
-                return "esc"
+                r, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if r:
+                    ch2 = sys.stdin.read(1)
+                    if ch2 == "[":
+                        ch3 = sys.stdin.read(1)
+                        if ch3 == "A": return "up"
+                        elif ch3 == "B": return "down"
+                        elif ch3 == "C": return "right"
+                        elif ch3 == "D": return "left"
+                return "back"
             elif ch == " ": return "space"
             elif ch in ("\r", "\n"): return "enter"
-            elif ch in ("a", "A"): return "a"
+            elif ch in ("b", "B", "\x7f", "\x08"): return "back"
             elif ch in ("q", "Q", "\x03"): return "quit"
             return ch
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def render_menu(
+    header_subtitle: str,
+    prompt_q: str,
+    items: List[Dict[str, Any]],
+    can_back: bool = False,
+    back_hint: str = "Back"
+) -> Union[int, str]:
+    cursor = 0
+    while True:
+        controls = f"[↑/↓] Navigate  ·  [Enter] Select  ·  [1-{len(items)}] Quick Select"
+        if can_back:
+            controls += "  ·  [B/ESC] Back"
+        controls += "  ·  [Q] Exit"
+
+        lines = [
+            f"\n  {COLOR_BOLD_WHITE}LMMs Installer{COLOR_RESET} {COLOR_DIM}· {header_subtitle}{COLOR_RESET}",
+            f"  {COLOR_CYAN}For more details, visit: https://lmms.markanm.com{COLOR_RESET}",
+            f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}",
+            f"  {COLOR_DIM}Controls: {controls}{COLOR_RESET}\n",
+            f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}\n",
+        ]
+        for i, it in enumerate(items):
+            is_cur = (i == cursor)
+            prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
+            num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
+            title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
+            lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
+            lines.append(f"        {COLOR_DIM}{it['desc']}{COLOR_RESET}\n")
+
+        lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
+        if can_back:
+            lines.append(f"  {COLOR_DIM}[B] ◄ {back_hint}{COLOR_RESET}\n")
+
+        output = "\033[H\033[J" + "\n".join(lines) + "\n"
+        sys.stdout.write(output)
+        sys.stdout.flush()
+
+        key = read_single_key()
+        if key in ("up", "down"):
+            cursor = (cursor + (1 if key == "down" else -1)) % len(items)
+        elif key in [str(i + 1) for i in range(min(9, len(items)))]:
+            return int(key) - 1
+        elif key == "enter":
+            return cursor
+        elif key == "back":
+            if can_back:
+                return "back"
+            else:
+                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
+                sys.exit(0)
+        elif key in ("quit", "q", "Q"):
+            sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
+            sys.exit(0)
 
 
 def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
@@ -176,180 +237,211 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
       [4] Desktop Studio (GUI)
       [5] Terminal Studio (CLI)
       [6] Complete Ecosystem Suite
-    Level 2 (Enterprise): Infrastructure Role ->
-      [1] Dedicated Enterprise Super Host Server (All Engines)
+    Level 2 (Enterprise): Vertical Role Selection ->
+      [1] Host Server Infrastructure
+      [2] Remote Client Studio
+    Level 3 (Enterprise Host):
+      [1] Dedicated Enterprise Super Host Server (All Engines Unified)
       [2] PyTorch / AirEngine High-Performance Node
-      [3] Enterprise Desktop Client (GUI)
-      [4] Enterprise Terminal Client (CLI)
+      [3] Engine 1 Lightweight Node
+    Level 3 (Enterprise Client):
+      [1] Enterprise Desktop Client (GUI)
+      [2] Enterprise Terminal Client (CLI)
+      [3] Complete Client Suite (Desktop GUI + Terminal CLI)
     """
+    if not sys.stdin.isatty():
+        return ["cli", "gui", "engine", "voice"]
+
     sys.stdout.write(CURSOR_HIDE)
     sys.stdout.flush()
 
+    persona_items = [
+        {
+            "id": "individual",
+            "title": "Individual Workstation",
+            "desc": "Single workstation deployment with local hardware acceleration & offloading.",
+        },
+        {
+            "id": "enterprise",
+            "title": "Enterprise Infrastructure",
+            "desc": "Distributed client-server infrastructure for teams across LAN/VPC networks.",
+        },
+    ]
+
+    indiv_items = [
+        {
+            "id": "engine1",
+            "title": "Engine 1 (Lightweight Runtime)",
+            "desc": "llama.cpp + AirEngine (GGUF format, low RAM footprint, pure API on port 11435)",
+            "components": ["engine1"],
+        },
+        {
+            "id": "engine2",
+            "title": "Engine 2 (PyTorch Native)",
+            "desc": "PyTorch + Transformers + AirEngine (Full-precision Safetensors model runtime)",
+            "components": ["engine2"],
+        },
+        {
+            "id": "engine",
+            "title": "Super Engine (Unified Runtimes)",
+            "desc": "All runtimes unified (llama.cpp + PyTorch + AirEngine) in a single service",
+            "components": ["engine"],
+        },
+        {
+            "id": "gui",
+            "title": "Desktop Studio (GUI)",
+            "desc": "Monaco Editor + Local Engine Client + Git Integration (gui/ branch)",
+            "components": ["gui", "engine"],
+        },
+        {
+            "id": "cli",
+            "title": "Terminal Studio (CLI)",
+            "desc": "Interactive AI Shell + Developer Toolchain + Local Engine Client (cli/ branch)",
+            "components": ["cli", "engine"],
+        },
+        {
+            "id": "all",
+            "title": "Complete Ecosystem Suite",
+            "desc": "Full installation: Desktop Studio, Terminal CLI, Voice & Super Engine",
+            "components": ["gui", "cli", "engine", "voice"],
+        },
+    ]
+
+    enterprise_role_items = [
+        {
+            "id": "host",
+            "title": "Host Server Infrastructure",
+            "desc": "Central inference server daemon listening on 0.0.0.0:11435 for team access",
+        },
+        {
+            "id": "client",
+            "title": "Remote Client Studio",
+            "desc": "Workstation applications connecting to host via Local->LAN->Global discovery",
+        },
+    ]
+
+    host_items = [
+        {
+            "id": "super_host",
+            "title": "Dedicated Enterprise Super Host Server (All Engines)",
+            "desc": "Central multi-engine daemon listening on 0.0.0.0:11435 for team LAN/VPC access",
+            "components": ["engine"],
+        },
+        {
+            "id": "host_node",
+            "title": "PyTorch / AirEngine High-Performance Node",
+            "desc": "Dedicated heavy cluster inference node for multi-GPU & large model serving",
+            "components": ["engine2"],
+        },
+        {
+            "id": "engine1_node",
+            "title": "Engine 1 Lightweight Node",
+            "desc": "llama.cpp + AirEngine (GGUF format, low RAM footprint, port 11435)",
+            "components": ["engine1"],
+        },
+    ]
+
+    client_items = [
+        {
+            "id": "client_gui",
+            "title": "Enterprise Desktop Client (GUI)",
+            "desc": "Desktop Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
+            "components": ["gui"],
+        },
+        {
+            "id": "client_cli",
+            "title": "Enterprise Terminal Client (CLI)",
+            "desc": "Terminal Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
+            "components": ["cli"],
+        },
+        {
+            "id": "client_suite",
+            "title": "Complete Client Suite (Desktop GUI + Terminal CLI)",
+            "desc": "Install both GUI and CLI clients configured for enterprise host auto-discovery",
+            "components": ["gui", "cli"],
+        },
+    ]
+
     try:
-        # Step 1: Deployment Tier Selection
-        persona_items = [
-            {
-                "id": "individual",
-                "title": "Individual Workstation",
-                "desc": "Single workstation deployment with local hardware acceleration & offloading.",
-            },
-            {
-                "id": "enterprise",
-                "title": "Enterprise Infrastructure",
-                "desc": "Distributed client-server infrastructure for teams across LAN/VPC networks.",
-            },
-        ]
-        cursor_1 = 0
+        screen = "level1"
+        history: List[str] = []
+
         while True:
-            lines = [
-                f"\n  {COLOR_BOLD_WHITE}LMMs Installer{COLOR_RESET} {COLOR_DIM}· Architecture Setup Wizard{COLOR_RESET}",
-                f"  {COLOR_CYAN}For more details, visit: https://lmms.markanm.com{COLOR_RESET}",
-                f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}",
-                f"  {COLOR_DIM}Controls: [↑/↓] Navigate  ·  [Enter] Select  ·  [1/2] Quick Select  ·  [Q] Exit{COLOR_RESET}\n",
-                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}Select Deployment Architecture:{COLOR_RESET}\n",
-            ]
-            for i, it in enumerate(persona_items):
-                is_cur = (i == cursor_1)
-                prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
-                num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
-                title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
-                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
-                lines.append(f"        {COLOR_DIM}{it['desc']}{COLOR_RESET}\n")
+            if screen == "level1":
+                res = render_menu(
+                    header_subtitle="Architecture Setup Wizard",
+                    prompt_q="Select Deployment Architecture:",
+                    items=persona_items,
+                    can_back=False,
+                )
+                if res == 0:
+                    history.append(screen)
+                    screen = "individual"
+                elif res == 1:
+                    history.append(screen)
+                    screen = "enterprise_roles"
 
-            lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
-            output = "\033[H\033[J" + "\n".join(lines) + "\n"
-            sys.stdout.write(output)
-            sys.stdout.flush()
+            elif screen == "individual":
+                res = render_menu(
+                    header_subtitle="Individual Workstation Setup",
+                    prompt_q="Select Component Configuration:",
+                    items=indiv_items,
+                    can_back=True,
+                    back_hint="Back to Architecture Selection",
+                )
+                if res == "back":
+                    screen = history.pop() if history else "level1"
+                elif isinstance(res, int):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return list(indiv_items[res]["components"])
 
-            key = read_single_key()
-            if key in ("up", "down"):
-                cursor_1 = (cursor_1 + (1 if key == "down" else -1)) % len(persona_items)
-            elif key == "1":
-                cursor_1 = 0
-                break
-            elif key == "2":
-                cursor_1 = 1
-                break
-            elif key == "enter":
-                break
-            elif key in ("quit", "esc"):
-                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
-                sys.exit(0)
+            elif screen == "enterprise_roles":
+                res = render_menu(
+                    header_subtitle="Enterprise Infrastructure Setup",
+                    prompt_q="Select Enterprise Infrastructure Role:",
+                    items=enterprise_role_items,
+                    can_back=True,
+                    back_hint="Back to Architecture Selection",
+                )
+                if res == "back":
+                    screen = history.pop() if history else "level1"
+                elif res == 0:
+                    history.append(screen)
+                    screen = "enterprise_host"
+                elif res == 1:
+                    history.append(screen)
+                    screen = "enterprise_client"
 
-        selected_persona = persona_items[cursor_1]["id"]
+            elif screen == "enterprise_host":
+                res = render_menu(
+                    header_subtitle="Enterprise Host Server Setup",
+                    prompt_q="Select Host Server Configuration:",
+                    items=host_items,
+                    can_back=True,
+                    back_hint="Back to Enterprise Role Selection",
+                )
+                if res == "back":
+                    screen = history.pop() if history else "enterprise_roles"
+                elif isinstance(res, int):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return list(host_items[res]["components"])
 
-        # Step 2: Component Configuration Selection
-        if selected_persona == "individual":
-            comp_items = [
-                {
-                    "id": "engine1",
-                    "title": "Engine 1 (Lightweight Runtime)",
-                    "desc": "llama.cpp + AirEngine (GGUF format, low RAM footprint, pure API on port 11435)",
-                    "components": ["engine1"],
-                },
-                {
-                    "id": "engine2",
-                    "title": "Engine 2 (PyTorch Native)",
-                    "desc": "PyTorch + Transformers + AirEngine (Full-precision Safetensors model runtime)",
-                    "components": ["engine2"],
-                },
-                {
-                    "id": "engine",
-                    "title": "Super Engine (Unified Runtimes)",
-                    "desc": "All runtimes unified (llama.cpp + PyTorch + AirEngine) in a single service",
-                    "components": ["engine"],
-                },
-                {
-                    "id": "gui",
-                    "title": "Desktop Studio (GUI)",
-                    "desc": "Monaco Editor + Local Engine Client + Git Integration (gui/ branch)",
-                    "components": ["gui", "engine"],
-                },
-                {
-                    "id": "cli",
-                    "title": "Terminal Studio (CLI)",
-                    "desc": "Interactive AI Shell + Developer Toolchain + Local Engine Client (cli/ branch)",
-                    "components": ["cli", "engine"],
-                },
-                {
-                    "id": "all",
-                    "title": "Complete Ecosystem Suite",
-                    "desc": "Full installation: Desktop Studio, Terminal CLI, Voice & Super Engine",
-                    "components": ["gui", "cli", "engine", "voice"],
-                },
-            ]
-            prompt_q = "Select Component Configuration:"
-            header_subtitle = "Individual Workstation Setup"
-        else:
-            comp_items = [
-                {
-                    "id": "super_host",
-                    "title": "Dedicated Enterprise Super Host Server (All Engines)",
-                    "desc": "Central multi-engine daemon listening on 0.0.0.0:11435 for team LAN/VPC access",
-                    "components": ["engine"],
-                },
-                {
-                    "id": "host_node",
-                    "title": "PyTorch / AirEngine High-Performance Node",
-                    "desc": "Dedicated heavy cluster inference node for multi-GPU & large model serving",
-                    "components": ["engine2"],
-                },
-                {
-                    "id": "client_gui",
-                    "title": "Enterprise Desktop Client (GUI)",
-                    "desc": "Desktop Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
-                    "components": ["gui"],
-                },
-                {
-                    "id": "client_cli",
-                    "title": "Enterprise Terminal Client (CLI)",
-                    "desc": "Terminal Studio client featuring Local -> LAN UDP Beacon -> Global Remote auto-discovery",
-                    "components": ["cli"],
-                },
-            ]
-            prompt_q = "Select Enterprise Infrastructure Role:"
-            header_subtitle = "Enterprise Infrastructure Setup"
-
-        cursor_2 = 0
-        while True:
-            lines = [
-                f"\n  {COLOR_BOLD_WHITE}LMMs Installer{COLOR_RESET} {COLOR_DIM}· {header_subtitle}{COLOR_RESET}",
-                f"  {COLOR_CYAN}For more details, visit: https://lmms.markanm.com{COLOR_RESET}",
-                f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}",
-                f"  {COLOR_DIM}Controls: [↑/↓] Navigate  ·  [Enter] Select  ·  [1-{len(comp_items)}] Quick Select  ·  [Q] Exit{COLOR_RESET}\n",
-                f"  {COLOR_BOLD_CYAN}?{COLOR_RESET} {COLOR_BOLD_WHITE}{prompt_q}{COLOR_RESET}\n",
-            ]
-            for i, it in enumerate(comp_items):
-                is_cur = (i == cursor_2)
-                prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_cur else " "
-                num_tag = f"{COLOR_CYAN}[{i+1}]{COLOR_RESET}" if is_cur else f"{COLOR_DIM}[{i+1}]{COLOR_RESET}"
-                title_col = COLOR_BOLD_WHITE if is_cur else COLOR_RESET
-                lines.append(f"  {prefix} {num_tag} {title_col}{it['title']}{COLOR_RESET}")
-                lines.append(f"        {COLOR_DIM}{it['desc']}{COLOR_RESET}\n")
-
-            lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
-            output = "\033[H\033[J" + "\n".join(lines) + "\n"
-            sys.stdout.write(output)
-            sys.stdout.flush()
-
-            key = read_single_key()
-            if key in ("up", "down"):
-                cursor_2 = (cursor_2 + (1 if key == "down" else -1)) % len(comp_items)
-            elif key in ("1", "2", "3", "4", "5", "6"):
-                idx = int(key) - 1
-                if idx < len(comp_items):
-                    cursor_2 = idx
-                    break
-            elif key == "enter":
-                break
-            elif key in ("quit", "esc"):
-                sys.stdout.write(f"\n{COLOR_DIM}Operation cancelled.{COLOR_RESET}\n")
-                sys.exit(0)
-
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-        selected_components = comp_items[cursor_2]["components"]
-        return list(selected_components) if isinstance(selected_components, list) else [str(selected_components)]
+            elif screen == "enterprise_client":
+                res = render_menu(
+                    header_subtitle="Enterprise Client Studio Setup",
+                    prompt_q="Select Client Studio Configuration:",
+                    items=client_items,
+                    can_back=True,
+                    back_hint="Back to Enterprise Role Selection",
+                )
+                if res == "back":
+                    screen = history.pop() if history else "enterprise_roles"
+                elif isinstance(res, int):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    return list(client_items[res]["components"])
 
     finally:
         sys.stdout.write(CURSOR_SHOW)
