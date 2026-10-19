@@ -80,20 +80,37 @@ def save_config(config):
         json.dump(config, f)
 
 def uninstall_main():
-    args = sys.argv[1:]
-    if "-all" in args:
-        if "--purge" in args:
-            print("\033[91m[WARNING]\033[0m Factory reset initiated. Deleting all data, models, and code...")
-            subprocess.run("rm -rf ~/.lmms", shell=True)
-            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
-            print("\033[92m[SUCCESS]\033[0m Total Purge complete. LMMs is fully uninstalled.")
-        else:
-            print("\033[91m[WARNING]\033[0m Removing LMMs source code. User data (models, chats) is kept safe.")
-            subprocess.run("rm -rf ~/.lmms/LMMs", shell=True)
-            subprocess.run(f"{sys.executable} -m pip uninstall -y LMMs", shell=True)
-            print("\033[92m[SUCCESS]\033[0m LMMs code uninstalled successfully.")
+    args = [a.lower() for a in sys.argv[1:]]
+    src_dir = os.path.expanduser("~/.lmms/app/src")
+    if "--purge" in args or "-purge" in args or "purge" in args:
+        print("\033[91m[WARNING]\033[0m Factory reset initiated. Deleting all data, models, and code...")
+        subprocess.run("rm -rf ~/.lmms", shell=True)
+        print("\033[92m[SUCCESS]\033[0m Total Purge complete. LMMs is fully uninstalled.")
     else:
-        print("Usage: LMMs-uninstall -all [--purge]")
+        if not os.path.exists(src_dir):
+            print("\033[92m[SUCCESS]\033[0m LMMs source code is already uninstalled. Nothing to remove.")
+            return
+        print("\033[91m[WARNING]\033[0m Removing LMMs source code. User data (models, chats) is kept safe.")
+        subprocess.run(f"rm -rf {src_dir}", shell=True)
+        reg_path = os.path.expanduser("~/.lmms/config/installed_components.json")
+        if os.path.exists(reg_path):
+            try:
+                with open(reg_path, "w") as f:
+                    json.dump({"all": False, "cli": False, "gui": False, "engine": False, "engine1": False, "engine2": False}, f, indent=2)
+            except Exception:
+                pass
+        cfg_file = os.path.expanduser("~/.lmms/config/config.json")
+        if os.path.exists(cfg_file):
+            try:
+                with open(cfg_file, "r") as f:
+                    cfg = json.load(f)
+                cfg.pop("default_mode", None)
+                cfg.pop("engine_variant", None)
+                with open(cfg_file, "w") as f:
+                    json.dump(cfg, f, indent=2)
+            except Exception:
+                pass
+        print("\033[92m[SUCCESS]\033[0m LMMs code uninstalled successfully.")
 
 def run_system_check():
     import platform
