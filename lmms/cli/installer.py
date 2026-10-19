@@ -179,10 +179,12 @@ def render_menu(
     back_hint: str = "Back"
 ) -> Union[int, str]:
     cursor = 0
+    total_slots = len(items) + (1 if can_back else 0)
+
     while True:
         controls = f"[↑/↓] Navigate  ·  [Enter] Select  ·  [1-{len(items)}] Quick Select"
         if can_back:
-            controls += "  ·  [B/ESC] Back"
+            controls += "  ·  [←/B/ESC] Back"
         controls += "  ·  [Q] Exit"
 
         lines = [
@@ -202,7 +204,11 @@ def render_menu(
 
         lines.append(f"  {COLOR_DIM}{'─' * 70}{COLOR_RESET}")
         if can_back:
-            lines.append(f"  {COLOR_DIM}[B] ◄ {back_hint}{COLOR_RESET}\n")
+            is_back_cur = (cursor == len(items))
+            prefix = f"{COLOR_BOLD_CYAN}❯{COLOR_RESET}" if is_back_cur else " "
+            back_tag = f"{COLOR_CYAN}[B]{COLOR_RESET}" if is_back_cur else f"{COLOR_DIM}[B]{COLOR_RESET}"
+            back_title = f"{COLOR_BOLD_WHITE}◄ {back_hint}{COLOR_RESET}" if is_back_cur else f"{COLOR_DIM}◄ {back_hint}{COLOR_RESET}"
+            lines.append(f"  {prefix} {back_tag} {back_title}\n")
 
         output = "\033[H\033[J" + "\n".join(lines) + "\n"
         sys.stdout.write(output)
@@ -210,10 +216,15 @@ def render_menu(
 
         key = read_single_key()
         if key in ("up", "down"):
-            cursor = (cursor + (1 if key == "down" else -1)) % len(items)
+            cursor = (cursor + (1 if key == "down" else -1)) % total_slots
+        elif key == "left":
+            if can_back:
+                return "back"
         elif key in [str(i + 1) for i in range(min(9, len(items)))]:
             return int(key) - 1
         elif key == "enter":
+            if can_back and cursor == len(items):
+                return "back"
             return cursor
         elif key == "back":
             if can_back:
