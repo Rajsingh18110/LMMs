@@ -348,7 +348,8 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
 
         sys.stdout.write("\n")
         sys.stdout.flush()
-        return comp_items[cursor_2]["components"]
+        selected_components = comp_items[cursor_2]["components"]
+        return list(selected_components) if isinstance(selected_components, list) else [str(selected_components)]
 
     finally:
         sys.stdout.write(CURSOR_SHOW)

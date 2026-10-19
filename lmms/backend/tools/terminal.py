@@ -74,6 +74,11 @@ default_registry.register(ToolDefinition(
 ))
 
 class TerminalTool:
+    agent: Any = None
+
+    def __init__(self, agent: Any = None):
+        self.agent = agent
+
     def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False) -> Any:
         # Check if dangerous
         for blocked in BLOCKED_COMMANDS:

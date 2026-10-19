@@ -47,6 +47,11 @@ default_registry.register(ToolDefinition(
 ))
 
 class FileTool:
+    agent: Any = None
+
+    def __init__(self, agent: Any = None):
+        self.agent = agent
+
     def read(self, path: str) -> str:
         try:
             enforce_boundary(path)

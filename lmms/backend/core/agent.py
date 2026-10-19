@@ -4,10 +4,10 @@ Supports: Ollama, Cloud APIs, AirEngine, Smart Routing, Canvas, Claude Code Mode
 """
 
 import requests
-
 import os
 import json
 import difflib
+from typing import Optional, Any, Dict, List, Union
 from datetime import datetime
 from lmms.backend.models import ModelManager
 from lmms.backend.memory.core_memory import Memory
@@ -206,7 +206,7 @@ class HexAgent:
     # ──────────────────────────────────────────────
     # ENGINE API HELPER
     # ──────────────────────────────────────────────
-    def _engine_chat(self, model, messages, stream=False, tools=None):
+    def _engine_chat(self, model: str, messages: list, stream: bool = False, tools: Any = None) -> Any:
         payload = {
             "model_name": model,
             "messages": messages,
@@ -397,7 +397,7 @@ class HexAgent:
     # MAIN CHAT ENTRY
     # ──────────────────────────────────────────────
 
-    def chat(self, user_input: str, image_path: str = None):
+    def chat(self, user_input: str, image_path: Optional[str] = None):
         final_prompt = user_input
         if image_path:
             desc = self._process_image_vram_safe(image_path)
@@ -422,7 +422,7 @@ class HexAgent:
     # SMART ROUTING: auto pick cloud for complex tasks
     # ──────────────────────────────────────────────
 
-    def smart_chat(self, user_input: str, image_path: str = None):
+    def smart_chat(self, user_input: str, image_path: Optional[str] = None):
         """Auto-route: complex tasks → cloud if available, else local."""
         connectors = self.models.list_connectors()
         if connectors and is_complex_task(user_input):
@@ -700,8 +700,12 @@ ONLY JSON, no explanation."""
             return
 
         # Step 3: Apply changes
-        for change in plan.get("changes", []):
-            file_path = os.path.join(project_path, change["file"])
+        changes: List[Dict[str, Any]] = plan.get("changes", []) if isinstance(plan, dict) else []
+        for change in changes:
+            if not isinstance(change, dict):
+                continue
+            file_name = change.get("file", "")
+            file_path = os.path.join(project_path, file_name)
             action = change.get("action", "edit")
             desc = change.get("description", "")
 
@@ -742,7 +746,10 @@ Output ONLY the complete new file content. No explanation. No markdown backticks
                 )
                 new_content = ""
                 for chunk in stream:
-                    new_content += chunk.get("message", {}).get("content", "")
+                    if isinstance(chunk, dict):
+                        new_content += chunk.get("message", {}).get("content", "")
+                    elif isinstance(chunk, str):
+                        new_content += chunk
 
                 result = self.edit_file_diff(file_path, new_content)
                 c.print(f"[green]{result}[/green]")
