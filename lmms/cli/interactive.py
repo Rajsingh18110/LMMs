@@ -127,10 +127,75 @@ class InteractiveChat:
                 f"  {COLOR_CYAN}/ps{COLOR_RESET}                Show currently running models\n"
                 f"  {COLOR_CYAN}/stats{COLOR_RESET}             Show target hardware & memory profiler\n"
                 f"  {COLOR_CYAN}/ping{COLOR_RESET}              Measure round-trip network latency\n"
-                f"  {COLOR_CYAN}/mode [deep|fast]{COLOR_RESET} Toggle inference reasoning mode\n"
+                f"  {COLOR_CYAN}/mcp [list|tools|add]{COLOR_RESET} Model Context Protocol tools & servers\n"
+                f"  {COLOR_CYAN}/perm [tier]{COLOR_RESET}          Set or show permission tier (sandboxed, low, medium, full)\n"
+                f"  {COLOR_CYAN}/worktree [cmd]{COLOR_RESET}        Git worktree isolation (on, off, status, diff, apply, discard)\n"
+                f"  {COLOR_CYAN}/sessions{COLOR_RESET}              List conversation sessions & forks\n"
+                f"  {COLOR_CYAN}/fork [name]{COLOR_RESET}           Fork current session into new branch\n"
+                f"  {COLOR_CYAN}/resume [id]{COLOR_RESET}           Switch or interactively pick session\n"
+                f"  {COLOR_CYAN}/rename <name>{COLOR_RESET}         Rename active session\n"
+                f"  {COLOR_CYAN}/compact [restore]{COLOR_RESET}     Compact context with local model or restore\n"
                 f"  {COLOR_CYAN}/clear{COLOR_RESET}             Clear conversation history & screen\n"
                 f"  {COLOR_CYAN}/exit{COLOR_RESET}              Exit chat\n\n"
             )
+
+
+        elif cmd == "/mcp":
+            from lmms_mcp.cli import handle_mcp_cli
+            handle_mcp_cli(parts[1:])
+            sys.stdout.write("\n")
+
+        elif cmd == "/worktree":
+            from lmms_worktree.cli import handle_worktree_cli
+            handle_worktree_cli(parts[1:], os.getcwd())
+            sys.stdout.write("\n")
+
+        elif cmd == "/sessions":
+            from lmms_sessions.cli import default_session_cli
+            default_session_cli.handle_sessions(parts[1:])
+            sys.stdout.write("\n")
+
+        elif cmd == "/fork":
+            from lmms_sessions.cli import default_session_cli
+            default_session_cli.handle_fork(parts[1:])
+            sys.stdout.write("\n")
+
+        elif cmd == "/resume":
+            from lmms_sessions.cli import default_session_cli
+            default_session_cli.handle_resume(parts[1:])
+            sys.stdout.write("\n")
+
+        elif cmd == "/rename":
+            from lmms_sessions.cli import default_session_cli
+            default_session_cli.handle_rename(parts[1:])
+            sys.stdout.write("\n")
+
+        elif cmd == "/compact":
+            from lmms_sessions.cli import default_session_cli
+            default_session_cli.handle_compact(parts[1:])
+            sys.stdout.write("\n")
+
+
+        elif cmd == "/perm":
+            if len(parts) > 1:
+                level = parts[1].lower()
+                if level == "sandboxed":
+                    from lmms_sandbox.runner import default_runner
+                    s_status = default_runner.get_status()
+                    if s_status["isolation_status"] == "NOT isolated":
+                        sys.stdout.write(f"  {COLOR_RED}Cannot enable sandboxed mode: Neither Bubblewrap nor Landlock is available.{COLOR_RESET}\n")
+                        sys.stdout.write(f"  {COLOR_DIM}Install bubblewrap: sudo apt install bubblewrap{COLOR_RESET}\n\n")
+                    else:
+                        self.permission_level = "sandboxed"
+                        sys.stdout.write(f"  {COLOR_GREEN}✓ Permission tier set to: sandboxed ({s_status['isolation_status']}){COLOR_RESET}\n\n")
+                elif level in ["low", "medium", "full"]:
+                    self.permission_level = level
+                    sys.stdout.write(f"  {COLOR_GREEN}✓ Permission tier set to: {level}{COLOR_RESET}\n\n")
+                else:
+                    sys.stdout.write(f"  {COLOR_RED}Invalid permission level. Use: sandboxed, low, medium, full.{COLOR_RESET}\n\n")
+            else:
+                cur = getattr(self, "permission_level", "medium")
+                sys.stdout.write(f"  Active permission tier: {COLOR_CYAN}{cur}{COLOR_RESET} (available: sandboxed, low, medium, full)\n\n")
 
         elif cmd == "/ping":
             info = self.remote_mgr.get_active_info()

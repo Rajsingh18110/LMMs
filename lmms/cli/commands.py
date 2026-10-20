@@ -319,4 +319,9 @@ def cmd_engine(args: List[str]) -> None:
     run_engine(args)
 
 
-
+def cmd_mcp(args: List[str]) -> None:
+    """Manage Model Context Protocol (MCP) servers and tools."""
+    from lmms_mcp.cli import handle_mcp_cli
+    code = handle_mcp_cli(args)
+    if code != 0:
+        sys.exit(code)

@@ -301,6 +301,10 @@ def main():
         cmd_server(args[1:])
         return
 
+    if args[0] == "mcp":
+        from lmms_mcp.cli import handle_mcp_cli
+        sys.exit(handle_mcp_cli(args[1:]))
+
     # Engine commands should be routed directly to the engine
     engine_commands = [
         "run", "list", "ls", "ps", "pull", "info", "benchmark", "bench",
@@ -356,6 +360,7 @@ def launch(mode, forward_args=None, ensure_engine=True):
     # In a compiled environment, this calls ./lmms-backend or ./lmms-engine
     while True:
         engine_proc = None
+        cmd: list[str] = []
         if mode in ["cli", "tui", "gui"]:
             if ensure_engine:
                 engine_proc = ensure_engine_running()
@@ -388,6 +393,9 @@ def launch(mode, forward_args=None, ensure_engine=True):
             if forward_args:
                 cmd.extend(forward_args)
                 
+        if not cmd:
+            break
+
         should_reboot = False
         try:
             result = subprocess.run(cmd, env=env)
@@ -401,14 +409,15 @@ def launch(mode, forward_args=None, ensure_engine=True):
                     print("\n\033[96m[INFO]\033[0m Rebooting system (Engine & CLI)...")
                 else:
                     print("\n\033[96m[INFO]\033[0m Shutting down auto-started Engine...")
-                if hasattr(engine_proc, "terminate"):
+                term_fn = getattr(engine_proc, "terminate", None)
+                if callable(term_fn):
                     try:
-                        engine_proc.terminate()
+                        term_fn()
                     except Exception:
                         pass
                 elif isinstance(engine_proc, dict) and "pid" in engine_proc:
                     try:
-                        os.kill(engine_proc["pid"], 15)
+                        os.kill(int(engine_proc["pid"]), 15)
                     except Exception:
                         pass
         if not should_reboot:
@@ -434,7 +443,7 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--internal-engine":
         # Modify argv to strip internal flag
         try:
-            from lmms.engine.main import main as engine_main
+            from lmms.engine.main import run_engine as engine_main
         except ImportError:
             from lmms.lmmsengine.main import main as engine_main
         engine_main()

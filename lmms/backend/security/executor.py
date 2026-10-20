@@ -15,7 +15,15 @@ class SecureExecutor:
         if request.tool_name == "terminal.run":
             cmd = request.kwargs.get("command", "")
             cwd = request.workspace if request.workspace and request.workspace != "None" else None
-            
+
+            if request.permission_level == "sandboxed":
+                from lmms_sandbox.runner import default_runner
+                workspace_dir = cwd or os.getcwd()
+                s_res = default_runner.run(cmd, workspace_dir=workspace_dir, cwd=cwd, timeout=timeout, enforce_sandbox=True)
+                result = ToolResult(stdout=s_res.stdout, stderr=s_res.stderr, exit_code=s_res.exit_code)
+                record_tool_evidence(request, permission_result, result)
+                return result
+
             # Use shell=False if possible, but the command parser already stripped dangerous bash tokens
             # Wait, our parser guarantees no meta-characters. So we can use shell=True safely OR shell=False using shlex
             import shlex

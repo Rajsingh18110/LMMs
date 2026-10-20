@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 import requests
 import secrets
 import subprocess
@@ -44,7 +45,8 @@ from prompt_toolkit.completion import Completer, Completion
 
 def _patched_ask(message, choices=None, default=None, **kwargs):
     import io
-    c = Console(file=io.StringIO(), force_terminal=True, color_system="standard")
+    sio = io.StringIO()
+    c = Console(file=sio, force_terminal=True, color_system="standard")
     msg = message
     if choices:
         msg += f" \\[{'/'.join(choices)}]"
@@ -52,7 +54,7 @@ def _patched_ask(message, choices=None, default=None, **kwargs):
         msg += f" (default: {default})"
     msg += ": "
     c.print(msg, end="")
-    ansi_str = c.file.getvalue()
+    ansi_str = sio.getvalue()
     
     while True:
         ans = prompt(ANSI(ansi_str)).strip()
@@ -60,7 +62,7 @@ def _patched_ask(message, choices=None, default=None, **kwargs):
             return default
         if not choices or ans in choices:
             return ans
-Prompt.ask = staticmethod(_patched_ask)
+Prompt.ask = staticmethod(_patched_ask)  # type: ignore
 
 
 try:
@@ -519,7 +521,6 @@ def run_cli():
     status = "[bold green]ONLINE[/bold green]" if check_engine_health() else "[bold red]OFFLINE[/bold red]"
     
     if check_engine_health():
-        import threading
         t = threading.Thread(target=cli_heartbeat, daemon=True)
         t.start()
 
@@ -614,49 +615,64 @@ def run_cli():
     )
     orchestration_pipeline.executor.register_handler(
         "browser.get_interactive_dom",
-        lambda **kwargs: browser_tool.get_interactive_dom(kwargs.get("url"))
+        lambda **kwargs: browser_tool.get_interactive_dom(str(kwargs.get("url") or ""))
     )
     orchestration_pipeline.executor.register_handler(
         "browser.click_element",
-        lambda **kwargs: browser_tool.click_element(selector=kwargs.get("selector") or kwargs.get("id"), url=kwargs.get("url"))
+        lambda **kwargs: browser_tool.click_element(
+            selector=str(kwargs.get("selector") or kwargs.get("id") or ""),
+            url=str(kwargs.get("url") or "")
+        )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.fill_form",
-        lambda **kwargs: browser_tool.fill_form(fields=kwargs.get("fields", {}), url=kwargs.get("url"))
+        lambda **kwargs: browser_tool.fill_form(
+            fields=kwargs.get("fields", {}),
+            url=str(kwargs.get("url") or "")
+        )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.type",
         lambda **kwargs: browser_tool.type_text(
-            selector=kwargs.get("selector") or kwargs.get("id", ""),
-            text=kwargs.get("text", ""),
-            press_enter=kwargs.get("press_enter", False),
-            url=kwargs.get("url")
+            selector=str(kwargs.get("selector") or kwargs.get("id") or ""),
+            text=str(kwargs.get("text") or ""),
+            press_enter=bool(kwargs.get("press_enter", False)),
+            url=str(kwargs.get("url") or "")
         )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.type_text",
         lambda **kwargs: browser_tool.type_text(
-            selector=kwargs.get("selector") or kwargs.get("id", ""),
-            text=kwargs.get("text", ""),
-            press_enter=kwargs.get("press_enter", False),
-            url=kwargs.get("url")
+            selector=str(kwargs.get("selector") or kwargs.get("id") or ""),
+            text=str(kwargs.get("text") or ""),
+            press_enter=bool(kwargs.get("press_enter", False)),
+            url=str(kwargs.get("url") or "")
         )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.press_key",
-        lambda **kwargs: browser_tool.press_key(kwargs.get("key", "Enter"))
+        lambda **kwargs: browser_tool.press_key(str(kwargs.get("key", "Enter")))
     )
     orchestration_pipeline.executor.register_handler(
         "browser.scrape_live",
-        lambda **kwargs: browser_tool.scrape_live(url=kwargs.get("url"), selector=kwargs.get("selector"))
+        lambda **kwargs: browser_tool.scrape_live(
+            url=str(kwargs.get("url") or ""),
+            selector=str(kwargs.get("selector") or "")
+        )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.scrape",
-        lambda **kwargs: browser_tool.scrape_live(url=kwargs.get("url"), selector=kwargs.get("selector"))
+        lambda **kwargs: browser_tool.scrape_live(
+            url=str(kwargs.get("url") or ""),
+            selector=str(kwargs.get("selector") or "")
+        )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.screenshot",
-        lambda **kwargs: browser_tool.screenshot(save_path=kwargs.get("save_path", "/tmp/lmms_browser.png"), url=kwargs.get("url"))
+        lambda **kwargs: browser_tool.screenshot(
+            save_path=str(kwargs.get("save_path", "/tmp/lmms_browser.png")),
+            url=str(kwargs.get("url") or "")
+        )
     )
     orchestration_pipeline.executor.register_handler(
         "browser.scroll",
@@ -864,6 +880,10 @@ def run_cli():
         "/redo": "Redo the last undone action",
         "/workspace": "Manage workspaces",
         "/reboot": "Restart the CLI and Engine",
+        "/perm": "Set or view permission tiers: sandboxed, low, medium, or full",
+        "/worktree": "Git worktree isolation (/worktree on|off|status|diff|apply|discard)",
+        "/mcp": "Model Context Protocol tools, servers, and live dashboard",
+        "/gui": "Launch Desktop Studio (e.g. /gui tools)",
         "exit": "Quit CLI",
         "clear": "Clear screen"
     }
@@ -972,7 +992,7 @@ def run_cli():
                 try:
                     with sr.AudioFile("/tmp/lmms_mic.wav") as source:
                         audio_data = r.record(source)
-                    cmd = r.recognize_google(audio_data)
+                    cmd = r.recognize_google(audio_data)  # type: ignore
                     console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
                 except Exception as e:
                     console.print(f"[red]Could not understand audio: {e}[/red]")
@@ -986,7 +1006,7 @@ def run_cli():
                     try:
                         with sr.AudioFile(file_path) as source:
                             audio_data = r.record(source)
-                        cmd = r.recognize_google(audio_data)
+                        cmd = r.recognize_google(audio_data)  # type: ignore
                         console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
                     except Exception as e:
                         console.print(f"[red]Could not transcribe audio (ensure it's a valid WAV/FLAC/AIFF): {e}[/red]")
@@ -1278,6 +1298,20 @@ def run_cli():
                 else:
                     cmd_tools_status()
 
+            elif base_cmd == "/mcp":
+                from lmms_mcp.cli import handle_mcp_cli
+                handle_mcp_cli(parts[1:])
+
+            elif base_cmd == "/gui":
+                gui_args = parts[1:]
+                target_page = gui_args[0] if gui_args else "workspace"
+                console.print(f"[bold cyan]Launching Desktop Studio (GUI)...[/bold cyan] [dim](focusing: {target_page})[/dim]")
+                cmd = [sys.executable, "-m", "lmms.gui.app"] + gui_args
+                try:
+                    subprocess.Popen(cmd)
+                except Exception as ge:
+                    console.print(f"[red]Failed to launch GUI:[/red] {ge}")
+
             elif base_cmd == "/report":
                 console.print("[cyan]Triggering AI to generate a security report...[/cyan]")
                 cmd = "Please generate a comprehensive security report summarizing our findings, the assets we discovered, and the timeline of actions. Use the security.generate_report tool."
@@ -1343,7 +1377,8 @@ def run_cli():
                             repo_id = models[0].id
                             
                         repo_info = api.model_info(repo_id, files_metadata=True)
-                        gguf_files = [f for f in repo_info.siblings if f.rfilename.endswith(".gguf")]
+                        siblings = repo_info.siblings or []
+                        gguf_files = [f for f in siblings if f.rfilename.endswith(".gguf")]
                         
                         if not gguf_files:
                             console.print(f"[red]No GGUF file found in {repo_id}[/red]")
@@ -1369,7 +1404,6 @@ def run_cli():
                             r = requests.post(f"{ENGINE_URL}/v1/models/pull", json={"model_name": repo_id, "file_name": result})
                             if r.status_code == 200:
                                 downloads_file = os.path.expanduser("~/.lmms/logs/downloads.json")
-                                import time
                                 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
                                 with Progress(
                                     SpinnerColumn(),
@@ -1613,13 +1647,55 @@ def run_cli():
                 else:
                     console.print("Usage: /pair <id> | /pair -n <id> <config> | /pair -l | /pair -d <id>")
 
-            elif base_cmd == "/perm" and len(parts) > 1:
-                level = parts[1].lower()
-                if level in ["low", "medium", "full"]:
-                    current_permission_level = level
-                    console.print(f"[green]Permission level set to: {current_permission_level}[/green]")
+            elif base_cmd == "/perm":
+                if len(parts) > 1:
+                    level = parts[1].lower()
+                    if level == "sandboxed":
+                        from lmms_sandbox.runner import default_runner
+                        s_status = default_runner.get_status()
+                        if s_status["isolation_status"] == "NOT isolated":
+                            console.print("[bold red]Cannot enable sandboxed mode: Neither Bubblewrap nor Landlock is available on this system.[/bold red]")
+                            console.print("[yellow]To enable containment, install bubblewrap: sudo apt install bubblewrap[/yellow]")
+                        else:
+                            current_permission_level = "sandboxed"
+                            console.print(f"[green]Permission level set to: sandboxed ({s_status['isolation_status']})[/green]")
+                    elif level in ["low", "medium", "full"]:
+                        current_permission_level = level
+                        console.print(f"[green]Permission level set to: {current_permission_level}[/green]")
+                    else:
+                        console.print("[red]Invalid permission level. Use: sandboxed, low, medium, or full.[/red]")
                 else:
-                    console.print("[red]Invalid permission level. Use low, medium, or full.[/red]")
+                    console.print(f"[bold cyan]Current Permission Level:[/bold cyan] {current_permission_level}")
+                    console.print("Available tiers:")
+                    console.print("  • [yellow]sandboxed[/yellow]: Unprivileged bwrap/Landlock containment (isolated /home, masked secrets, workspace read-write only)")
+                    console.print("  • [cyan]low[/cyan]: Read-only inspection; all mutating actions require confirmation")
+                    console.print("  • [green]medium[/green]: Standard developer freedom inside workspace")
+                    console.print("  • [magenta]full[/magenta]: Unrestricted system commands")
+
+            elif base_cmd == "/worktree":
+                from lmms_worktree.cli import handle_worktree_cli
+                handle_worktree_cli(parts[1:], current_workspace)
+
+            elif base_cmd == "/sessions":
+                from lmms_sessions.cli import default_session_cli
+                default_session_cli.handle_sessions(parts[1:])
+
+            elif base_cmd == "/fork":
+                from lmms_sessions.cli import default_session_cli
+                default_session_cli.handle_fork(parts[1:])
+
+            elif base_cmd == "/resume":
+                from lmms_sessions.cli import default_session_cli
+                default_session_cli.handle_resume(parts[1:])
+
+            elif base_cmd == "/rename":
+                from lmms_sessions.cli import default_session_cli
+                default_session_cli.handle_rename(parts[1:])
+
+            elif base_cmd == "/compact":
+                from lmms_sessions.cli import default_session_cli
+                default_session_cli.handle_compact(parts[1:])
+
                     
             elif base_cmd == "/agent":
                 if len(parts) > 1:
@@ -1856,10 +1932,11 @@ def run_cli():
                             break
                         except requests.exceptions.HTTPError as e:
                             error_detail = str(e)
-                            try:
-                                error_detail = e.response.json().get("detail", str(e))
-                            except:
-                                pass
+                            if e.response is not None:
+                                try:
+                                    error_detail = e.response.json().get("detail", str(e))
+                                except Exception:
+                                    pass
                             if "context length" in error_detail.lower() or "too large" in error_detail.lower() or "exceeded" in error_detail.lower():
                                 console.print(f"\n[bold yellow]⚠️ Context Overflow detected! Auto-truncating and retrying...[/bold yellow]")
                                 for idx, m in enumerate(messages):
@@ -1881,7 +1958,6 @@ def run_cli():
                         first_token = False
                         live_view = None
                         try:
-                            import time
                             last_refresh = time.time()
                             final_display = ""
                             leak_check_done = False
@@ -2023,6 +2099,7 @@ def run_cli():
                             pass
 
                     if tool_call_match:
+                        raw_tc = ""
                         try:
                             raw_tc = tool_call_match.group(1).strip()
                             json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
@@ -2316,7 +2393,8 @@ if __name__ == "__main__":
         run_cli()
     except SystemExit as e:
         import os
-        os._exit(e.code if e.code is not None else 0)
+        exit_code = e.code if isinstance(e.code, int) else 0
+        os._exit(exit_code)
     except Exception:
         pass
     finally:

@@ -13,9 +13,19 @@ class PermissionManager:
         if not tool_def:
             return PermissionResult(allowed=False, reason=f"Tool '{request.tool_name}' is not registered.", risk_level="high")
             
-        # Special case for terminal.run where we need to parse the inner command
+        # Special case for terminal.run where we need to parse the inner command or apply sandboxing
         if request.tool_name == "terminal.run":
             command = request.kwargs.get("command", "")
+            if request.permission_level == "sandboxed":
+                from lmms_sandbox.runner import default_runner
+                pol_res = default_runner.evaluate_command(command)
+                if pol_res.action.value == "deny":
+                    return PermissionResult(allowed=False, reason=pol_res.reason, risk_level="critical")
+                elif pol_res.action.value == "ask":
+                    return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="high", requires_confirmation=True)
+                else:
+                    return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="low", requires_confirmation=False)
+
             try:
                 parsed_cmds = parse_shell_command(command)
             except CommandParserError as e:
@@ -63,7 +73,7 @@ class PermissionManager:
             return PermissionResult(allowed=True, reason="Destructive tool requires confirmation", risk_level="critical", requires_confirmation=True)
 
         # 2. Is scope valid and active?
-        scope = load_scope(request.workspace)
+        scope = load_scope(request.workspace) or {}
         if not is_scope_active(scope):
             # If scope is not active, tools requiring target authorization (like nmap, curl) or offensive tools are blocked.
             if tool_def.requires_target_authorization or tool_def.category == "security_offensive":

@@ -33,7 +33,10 @@ CLI_COMMANDS = {
     "/doctor": "Diagnose system dependencies, permissions, and tools.",
     "/cloud": "Switch backend to a cloud API (e.g., /cloud openai).",
     "/routing": "Toggle intelligent background agent routing.",
-    "/gui": "Launch the graphical user interface (PyQt6).",
+    "/mcp": "Model Context Protocol (MCP) servers, tools, and live dashboard.",
+    "/perm": "Set or view permission tiers: sandboxed (bwrap/landlock), low, medium, or full.",
+    "/worktree": "Git worktree isolation: /worktree on|off|status|diff|apply|discard.",
+    "/gui": "Launch Desktop Studio (e.g. /gui tools to open MCP & Tools).",
     "/exit": "Exit LMMs CLI."
 }
 

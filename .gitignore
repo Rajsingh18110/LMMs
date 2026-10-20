@@ -21,6 +21,12 @@ test_*.py
 !tests/test_executor_end_to_end.py
 !tests/eval_model_level_tools.py
 !tests/measure_n_ctx_vram.py
+!tests/test_mcp_core.py
+!tests/test_sandbox.py
+!tests/test_worktree.py
+!tests/test_sessions.py
+!tests/test_app_server.py
+
 patch_*.py
 build_*.py
 download_*.py

@@ -71,3 +71,9 @@ SpeechRecognition
 PyAudio
 gTTS
 pygame
+
+# =========================================
+# Model Context Protocol (MCP) Subsystem
+# =========================================
+mcp>=2.3.0
+fastmcp>=4.1.1

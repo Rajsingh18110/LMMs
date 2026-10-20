@@ -1,7 +1,7 @@
 import subprocess
 import os
 import shlex
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from lmms.backend.tools.core import default_registry, default_executor, ToolDefinition, Permission
 from lmms.backend.config.config import ConfigManager
@@ -21,9 +21,15 @@ config = ConfigManager()
 
 def get_workspace_dir() -> str:
     # Resolve the workspace from the existing LMMs config architecture
-    return config.get("workspace_dir", os.getcwd())
+    ws = config.get("workspace_dir", os.getcwd())
+    base_ws = str(ws) if ws else os.getcwd()
+    try:
+        from lmms_worktree.manager import default_worktree_manager
+        return default_worktree_manager.get_active_workspace(base_ws)
+    except Exception:
+        return base_ws
 
-def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]:
+def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandboxed: bool = False) -> Dict[str, Any]:
     # Check if dangerous
     for blocked in BLOCKED_COMMANDS:
         if blocked in command:
@@ -35,6 +41,20 @@ def canonical_terminal_callback(command: str, cwd: str = None) -> Dict[str, Any]
     # Boundary enforcement
     if not is_within_workspace(target_cwd, workspace_dir):
         raise PermissionError("CWD is outside the allowed workspace boundary.")
+
+    if sandboxed or config.get("permission_level") == "sandboxed":
+        from lmms_sandbox.runner import default_runner
+        res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, enforce_sandbox=True)
+        if not res.success and res.exit_code == -1:
+            raise PermissionError(res.stderr)
+        return {
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "exit_code": res.exit_code,
+            "output": res.output,
+            "sandboxed": True,
+            "backend": res.backend_used,
+        }
 
     try:
         if isinstance(command, str):
@@ -79,7 +99,7 @@ class TerminalTool:
     def __init__(self, agent: Any = None):
         self.agent = agent
 
-    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False) -> Any:
+    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False, sandboxed=False) -> Any:
         # Check if dangerous
         for blocked in BLOCKED_COMMANDS:
             if blocked in command:
@@ -99,9 +119,17 @@ class TerminalTool:
                 "command": command
             })
 
+        workspace_dir = cwd if cwd else get_workspace_dir()
+        target_cwd = cwd if cwd else workspace_dir
+
+        if sandboxed or config.get("permission_level") == "sandboxed":
+            from lmms_sandbox.runner import default_runner
+            res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, require_confirm=False, enforce_sandbox=True)
+            if return_exit_code:
+                return (res.exit_code, res.output)
+            return res.output
+
         try:
-            workspace_dir = get_workspace_dir()
-            target_cwd = cwd if cwd else workspace_dir
             if not is_within_workspace(target_cwd, workspace_dir):
                 msg = "CWD is outside the allowed workspace boundary."
                 return (-1, msg) if return_exit_code else msg
