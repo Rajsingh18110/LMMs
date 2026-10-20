@@ -234,9 +234,22 @@ class MCPServerManager:
         except Exception as e:
             return False, str(e), []
 
+    def list_tools(self) -> List[Dict[str, Any]]:
+        """Aggregates all discovered tools across connected or known servers."""
+        all_tools: List[Dict[str, Any]] = []
+        for name, state in self.states.items():
+            for t in state.tools:
+                item = dict(t)
+                item["server"] = name
+                all_tools.append(item)
+        return all_tools
+
     async def stop_all(self) -> None:
         """Gracefully terminates all active server sessions."""
         self._closing = True
         server_names = list(self.states.keys())
         for name in server_names:
             await self.stop_server(name)
+
+
+default_mcp_manager = MCPServerManager()
