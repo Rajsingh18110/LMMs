@@ -452,6 +452,15 @@ class MainWindow(QMainWindow):
         # Wire: click on extension → open detail tab in main editor area
         self.extensions_dock.open_detail_requested.connect(self._open_extension_detail)
 
+        # 7. MCP & Tools Dock
+        from lmms.gui.pages.mcp_page import MCPToolsPage
+        self.mcp_dock = QDockWidget("MCP & Tools", self.inner_window)
+        self.mcp_dock.setObjectName("MCPToolsDock")
+        self.mcp_page = MCPToolsPage()
+        self.mcp_dock.setWidget(self.mcp_page)
+        self.docks["MCP & Tools"] = self.mcp_dock
+        self.mcp_dock.hide()
+
         # Init Source Control Workspace
         if not self.is_empty_workspace and hasattr(self.source_control_dock, 'set_workspace'):
             cwd = ConfigManager().get("workspace_dir", os.getcwd())
@@ -471,6 +480,7 @@ class MainWindow(QMainWindow):
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.search_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.source_control_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.extensions_dock)
+        self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.mcp_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.model_dock)
         self.inner_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.chat_dock)
         
@@ -480,8 +490,8 @@ class MainWindow(QMainWindow):
         explorer_w = int(screen_w * 0.19) # ~242px
         chat_w = int(screen_w * 0.26)     # ~333px
         self.inner_window.resizeDocks(
-            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.model_dock],
-            [explorer_w, explorer_w, explorer_w, explorer_w, explorer_w],
+            [self.explorer_dock, self.search_dock, self.source_control_dock, self.extensions_dock, self.mcp_dock, self.model_dock],
+            [explorer_w, explorer_w, explorer_w, explorer_w, explorer_w, explorer_w],
             Qt.Orientation.Horizontal
         )
         self.inner_window.resizeDocks(
@@ -530,6 +540,7 @@ class MainWindow(QMainWindow):
             ("🔍", "Search", os.path.join(assets_dir, "icon_search.svg")),
             ("🌿", "Source Control", os.path.join(assets_dir, "icon_source_control.svg")),
             ("🧩", "Extensions", os.path.join(assets_dir, "icon_extensions.svg")),
+            ("🛠️", "MCP & Tools", None),
             ("📦", "Models", os.path.join(assets_dir, "icon_models.svg")),
             ("⚙", "Settings", os.path.join(assets_dir, "icon_settings.svg")),
         ]

@@ -26,6 +26,8 @@ test_*.py
 !tests/test_worktree.py
 !tests/test_sessions.py
 !tests/test_app_server.py
+!tests/test_app_server_hardening.py
+!tests/test_mcp_gui.py
 
 patch_*.py
 build_*.py
@@ -33,6 +35,7 @@ download_*.py
 list_*.py
 find_*.py
 *.png
+!docs/screenshots/*.png
 *.log
 recovered_*.txt
 dist/

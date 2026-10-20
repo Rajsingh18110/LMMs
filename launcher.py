@@ -309,6 +309,10 @@ def main():
         from lmms_server.server import run_app_server_cli
         sys.exit(run_app_server_cli(args[1:]))
 
+    if args[0] == "audit":
+        from lmms_server.audit_cli import handle_audit_cli
+        sys.exit(handle_audit_cli(args[1:]))
+
     # Engine commands should be routed directly to the engine
     engine_commands = [
         "run", "list", "ls", "ps", "pull", "info", "benchmark", "bench",

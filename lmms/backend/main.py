@@ -2383,6 +2383,10 @@ if __name__ == "__main__":
         from lmms_server.server import run_app_server_cli
         sys.exit(run_app_server_cli(sys.argv[2:]))
 
+    if len(sys.argv) > 1 and sys.argv[1] == "audit":
+        from lmms_server.audit_cli import handle_audit_cli
+        sys.exit(handle_audit_cli(sys.argv[2:]))
+
     import argparse
     parser = argparse.ArgumentParser(description="LMMs Backend OS")
     parser.add_argument("--api", action="store_true", help="Run the Backend API Server alongside CLI")
