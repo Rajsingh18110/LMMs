@@ -10,7 +10,10 @@ import os
 import sys
 import time
 import subprocess
-from llama_cpp import Llama
+import pytest
+
+llama_cpp = pytest.importorskip("llama_cpp")
+Llama = llama_cpp.Llama
 
 def get_vram_used_mb() -> int:
     try:

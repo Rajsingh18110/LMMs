@@ -16,14 +16,16 @@ from lmms_server.server import get_default_socket_path
 
 
 class GUIAppServerClient(QObject):
-    """Qt-compatible JSON-RPC 2.0 Client for App-Server."""
+    """Qt-compatible JSON-RPC 2.0 Client for App-Server with auto-reconnect and lifecycle management."""
 
     connected = pyqtSignal()
     disconnected = pyqtSignal()
+    reconnecting = pyqtSignal(int, float)
     notification_received = pyqtSignal(str, dict)
     mcp_status_changed = pyqtSignal(dict)
     mcp_tool_call = pyqtSignal(dict)
     mcp_log = pyqtSignal(dict)
+    tool_permission_request = pyqtSignal(dict)
 
     def __init__(self, socket_path: Optional[str] = None, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -34,7 +36,30 @@ class GUIAppServerClient(QObject):
         self._pending_responses: Dict[int, asyncio.Future[Any]] = {}
         self._is_running = False
         self._listener_task: Optional[asyncio.Task[None]] = None
+        self._reconnect_task: Optional[asyncio.Task[None]] = None
+        self.auto_reconnect_enabled = True
         self.mock_dispatcher: Optional[Any] = None
+
+    async def ensure_server_running(self) -> bool:
+        """Starts app-server background process if not already running."""
+        if os.path.exists(self.socket_path):
+            if await self.connect():
+                return True
+
+        import subprocess
+        import sys
+
+        cmd = [sys.executable, "-m", "lmms_server.server", "--socket", self.socket_path]
+        try:
+            subprocess.Popen(cmd, start_new_session=True)
+            for _ in range(20):
+                await asyncio.sleep(0.1)
+                if os.path.exists(self.socket_path):
+                    if await self.connect():
+                        return True
+        except Exception:
+            pass
+        return False
 
     async def connect(self) -> bool:
         """Establishes connection to the app-server Unix socket."""
@@ -49,11 +74,27 @@ class GUIAppServerClient(QObject):
         try:
             self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path)
             self._is_running = True
+            if self._reconnect_task and not self._reconnect_task.done():
+                self._reconnect_task.cancel()
+                self._reconnect_task = None
             self._listener_task = asyncio.create_task(self._listen_loop())
             self.connected.emit()
             return True
         except Exception:
             return False
+
+    async def _reconnect_loop(self) -> None:
+        """Exponential backoff reconnect loop (1s, 2s, 4s, 8s, 16s)."""
+        delay = 1.0
+        attempt = 1
+        while self.auto_reconnect_enabled and not self._is_running:
+            self.reconnecting.emit(attempt, delay)
+            await asyncio.sleep(delay)
+            if await self.connect():
+                break
+            delay = min(delay * 2.0, 16.0)
+            attempt += 1
+        self._reconnect_task = None
 
     async def _listen_loop(self) -> None:
         """Reads incoming JSON-RPC lines from the server socket."""
@@ -90,21 +131,30 @@ class GUIAppServerClient(QObject):
                         self.mcp_tool_call.emit(params)
                     elif method == "mcp.log":
                         self.mcp_log.emit(params)
+                    elif method == "tool.permission_request":
+                        self.tool_permission_request.emit(params)
 
         except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
             pass
         finally:
             self._is_running = False
             self.disconnected.emit()
+            if self.auto_reconnect_enabled and (self._reconnect_task is None or self._reconnect_task.done()):
+                self._reconnect_task = asyncio.create_task(self._reconnect_loop())
 
     async def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """Sends a JSON-RPC request and awaits result."""
         if self.mock_dispatcher:
             # Synchronous in-memory dispatch for unit tests
             async def _dummy_emit(m: str, p: Any):
-                self.notification_received.emit(m, p if isinstance(p, dict) else {})
-                if m == "mcp.status_changed" and isinstance(p, dict):
-                    self.mcp_status_changed.emit(p)
+                p_dict = p if isinstance(p, dict) else {}
+                self.notification_received.emit(m, p_dict)
+                if m == "mcp.status_changed":
+                    self.mcp_status_changed.emit(p_dict)
+                elif m == "mcp.tool_call":
+                    self.mcp_tool_call.emit(p_dict)
+                elif m == "tool.permission_request":
+                    self.tool_permission_request.emit(p_dict)
 
             return await self.mock_dispatcher.dispatch(
                 method=method,

@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
             self.file_model.setReadOnly(False)
             self.file_model.setIconProvider(VscodeIconProvider())
             self.file_model.fileRenamed.connect(self.on_file_renamed)
-            cwd = ConfigManager().get("workspace_dir", os.getcwd())
+            cwd = str(ConfigManager().get("workspace_dir", os.getcwd()))
             if not os.path.exists(cwd):
                 cwd = os.getcwd()
             
@@ -1271,6 +1271,13 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
                 
+        if os.environ.get("LMMS_GUI_AUTO_SERVER") == "1":
+            try:
+                from lmms.api.service import stop_server_daemon
+                stop_server_daemon()
+            except Exception:
+                pass
+
         super().closeEvent(event)
 
     def toggle_bottom_panel(self):
@@ -1323,6 +1330,8 @@ class MainWindow(QMainWindow):
             self._add_nav_item(text_icon, title, full_icon_path, is_extension=True)
             
         # Optional: Prompt for API keys if required
+        rec_opt = self.ext_manager._records.get(ext_id)
+        ext_title = (rec_opt.manifest.get("displayName") or rec_opt.manifest.get("name")) if rec_opt else "Extension"
         configuration = contributes.get("configuration", {})
         if configuration:
             props = configuration.get("properties", {})
@@ -1331,7 +1340,7 @@ class MainWindow(QMainWindow):
                     desc = val.get("description", "").lower()
                     if "api key" in desc or "token" in desc or "api" in key.lower() or "key" in key.lower():
                         from PyQt6.QtWidgets import QInputDialog, QMessageBox
-                        text, ok = QInputDialog.getText(self, f"Configure {title}", f"Please enter {key}:")
+                        text, ok = QInputDialog.getText(self, f"Configure {ext_title}", f"Please enter {key}:")
                         if ok and text:
                             # Send configuration to JS context (or save globally)
                             pass # TODO: push to Workspace Configuration
@@ -1380,15 +1389,3 @@ class MainWindow(QMainWindow):
                     except Exception as e:
                         print(f"Error sending extension manifest to JS: {e}")
 
-    def closeEvent(self, event):
-        try:
-            import os
-            if os.environ.get("LMMS_GUI_AUTO_SERVER") == "1":
-                try:
-                    from lmms.api.service import stop_server_daemon
-                    stop_server_daemon()
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        super().closeEvent(event)

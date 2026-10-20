@@ -94,9 +94,10 @@ class PythonBridge(QObject):
 class EditorWebPage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
         # Suppress annoying monaco-vscode-api / web worker fallback warnings
-        if "Could not create web worker" in message: return
-        if "Failed to get document symbols" in message: return
-        if "unsupported" in message: return
+        if message:
+            if "Could not create web worker" in message: return
+            if "Failed to get document symbols" in message: return
+            if "unsupported" in message: return
         super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
 # ── Monaco-based CodeEditor ────────────────────────────────────────────────────

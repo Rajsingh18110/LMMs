@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any
 
@@ -131,6 +132,7 @@ class MCPConfig:
     def __init__(self, config_path: str = DEFAULT_CONFIG_PATH):
         self.config_path = os.path.abspath(os.path.expanduser(config_path))
         self.servers: Dict[str, MCPServerConfig] = {}
+        self.last_internal_write_time: float = 0.0
         self.load()
 
     def load(self) -> None:
@@ -148,20 +150,35 @@ class MCPConfig:
                 name: MCPServerConfig.from_dict(name, sdata)
                 for name, sdata in raw_servers.items()
             }
-        except Exception as e:
+        except Exception:
             # Fallback to empty if corrupted
             self.servers = {}
 
     def save(self) -> None:
-        """Saves current configuration to ~/.lmms/mcp.json."""
-        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+        """Saves current configuration atomically to ~/.lmms/mcp.json."""
+        cfg_dir = os.path.dirname(self.config_path)
+        os.makedirs(cfg_dir, exist_ok=True)
         data = {
             "mcpServers": {
                 name: s.to_dict() for name, s in self.servers.items()
             }
         }
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        # Atomic write: write to temp file in same filesystem, sync to disk, then atomic rename
+        temp_file = os.path.join(cfg_dir, f".mcp.json.tmp.{os.getpid()}.{time.time_ns()}")
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_file, self.config_path)
+            self.last_internal_write_time = time.time()
+        except Exception:
+            if os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except OSError:
+                    pass
+            raise
 
     def add_server(
         self,

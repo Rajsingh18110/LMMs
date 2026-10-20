@@ -101,12 +101,19 @@ class TemplateCard(QFrame):
 class AddMCPServerDialog(QDialog):
     """Dialog for adding or configuring an MCP server."""
 
-    def __init__(self, client: GUIAppServerClient, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        client: GUIAppServerClient,
+        server_data: Optional[Dict[str, Any]] = None,
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent)
         self.client = client
+        self.server_data = server_data
         self.created_server: Optional[Dict[str, Any]] = None
 
-        self.setWindowTitle("Add MCP Server")
+        title_text = f"Edit MCP Server - {server_data.get('name')}" if server_data else "Add MCP Server"
+        self.setWindowTitle(title_text)
         self.resize(680, 560)
         self.setStyleSheet("""
             QDialog {
@@ -306,21 +313,41 @@ class AddMCPServerDialog(QDialog):
 
         # Dialog Buttons
         btn_layout = QHBoxLayout()
-        test_btn = QPushButton("🔍 Test Connection")
-        test_btn.clicked.connect(self._test_connection)
-        btn_layout.addWidget(test_btn)
+        self.test_btn = QPushButton("🔍 Test Connection")
+        self.test_btn.clicked.connect(self._test_connection)
+        btn_layout.addWidget(self.test_btn)
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
-        add_btn = QPushButton("✔ Add Server")
+        add_btn = QPushButton("✔ Update Server" if self.server_data else "✔ Add Server")
         add_btn.setObjectName("PrimaryBtn")
         add_btn.clicked.connect(self._submit)
         btn_layout.addWidget(add_btn)
 
         main_layout.addLayout(btn_layout)
+
+        if self.server_data:
+            self.tabs.setCurrentIndex(1)
+            self._populate_existing(self.server_data)
+
+    def _populate_existing(self, data: Dict[str, Any]) -> None:
+        name = data.get("name", "")
+        self.name_edit.setText(name)
+        self.name_edit.setEnabled(False)
+        transport = data.get("transport", "stdio")
+        self.trans_combo.setCurrentText(transport)
+        self.cmd_edit.setText(data.get("command", data.get("url", "")))
+        self.args_edit.setText(" ".join(data.get("args", [])))
+        sandbox_val = data.get("sandbox", "none")
+        self.sand_combo.setCurrentIndex(0 if sandbox_val == "bwrap" else 1)
+        self.env_table.setRowCount(0)
+        for k, v in data.get("env", {}).items():
+            self._add_env_row(k, str(v))
+        self.status_lbl.setText(f"Editing server '{name}'.")
+        self.status_lbl.setStyleSheet("color: #58a6ff;")
 
     def _apply_template(self, key: str, tmpl: Dict[str, Any]) -> None:
         """Loads a chosen curated template into custom form and focuses it."""
@@ -336,13 +363,10 @@ class AddMCPServerDialog(QDialog):
         else:
             self.sand_combo.setCurrentIndex(1)
 
-        # Populate environment
+        # Populate environment with masked values
         self.env_table.setRowCount(0)
         for k, v in tmpl.get("env", {}).items():
-            r = self.env_table.rowCount()
-            self.env_table.insertRow(r)
-            self.env_table.setItem(r, 0, QTableWidgetItem(k))
-            self.env_table.setItem(r, 1, QTableWidgetItem(str(v)))
+            self._add_env_row(k, str(v))
 
         self.status_lbl.setText(f"Template '{key}' applied. Ready to test or add.")
         self.status_lbl.setStyleSheet("color: #58a6ff;")
@@ -358,11 +382,40 @@ class AddMCPServerDialog(QDialog):
             self.cmd_edit.setPlaceholderText("e.g. http://localhost:8080/sse")
             self.args_row.setEnabled(False)
 
-    def _add_env_row(self) -> None:
+    def _add_env_row(self, key: str = "KEY", val: str = "") -> None:
         r = self.env_table.rowCount()
         self.env_table.insertRow(r)
-        self.env_table.setItem(r, 0, QTableWidgetItem("KEY"))
-        self.env_table.setItem(r, 1, QTableWidgetItem(""))
+        self.env_table.setItem(r, 0, QTableWidgetItem(key))
+
+        # Column 1: Password-masked input with Show/Hide toggle button
+        cell = QWidget()
+        cell_layout = QHBoxLayout(cell)
+        cell_layout.setContentsMargins(4, 2, 4, 2)
+        cell_layout.setSpacing(4)
+
+        val_edit = QLineEdit(val)
+        val_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        val_edit.setStyleSheet("border: none; background: transparent; color: #c9d1d9;")
+        val_edit.setObjectName("ValEdit")
+
+        eye_btn = QPushButton("👁")
+        eye_btn.setFixedSize(26, 22)
+        eye_btn.setToolTip("Show / Hide secret")
+        eye_btn.setStyleSheet("padding: 0; margin: 0; font-size: 11px;")
+
+        def _toggle_mask():
+            if val_edit.echoMode() == QLineEdit.EchoMode.Password:
+                val_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+                eye_btn.setText("🔒")
+            else:
+                val_edit.setEchoMode(QLineEdit.EchoMode.Password)
+                eye_btn.setText("👁")
+
+        eye_btn.clicked.connect(_toggle_mask)
+        cell_layout.addWidget(val_edit)
+        cell_layout.addWidget(eye_btn)
+
+        self.env_table.setCellWidget(r, 1, cell)
 
     def _remove_env_row(self) -> None:
         r = self.env_table.currentRow()
@@ -379,9 +432,21 @@ class AddMCPServerDialog(QDialog):
         env: Dict[str, str] = {}
         for r in range(self.env_table.rowCount()):
             k_item = self.env_table.item(r, 0)
-            v_item = self.env_table.item(r, 1)
-            if k_item and k_item.text().strip():
-                env[k_item.text().strip()] = v_item.text() if v_item else ""
+            k_text = k_item.text().strip() if k_item else ""
+            if not k_text:
+                continue
+
+            cell = self.env_table.cellWidget(r, 1)
+            v_text = ""
+            if cell:
+                edit = cell.findChild(QLineEdit)
+                if edit:
+                    v_text = edit.text()
+            else:
+                v_item = self.env_table.item(r, 1)
+                v_text = v_item.text() if v_item else ""
+
+            env[k_text] = v_text
 
         payload = {
             "name": name,
@@ -399,20 +464,36 @@ class AddMCPServerDialog(QDialog):
         return payload
 
     def _test_connection(self) -> None:
+        if getattr(self, "_is_testing", False):
+            # User requested test cancellation
+            task = getattr(self, "_test_task", None)
+            if task and not task.done():
+                task.cancel()
+            self._is_testing = False
+            self.test_btn.setText("🔍 Test Connection")
+            self.status_lbl.setText("Test cancelled by user.")
+            self.status_lbl.setStyleSheet("color: #8b949e;")
+            return
+
         payload = self._get_form_payload()
         if not payload["name"] or not (payload.get("command") or payload.get("url")):
             self.status_lbl.setText("Error: Server name and command/URL are required to test.")
             self.status_lbl.setStyleSheet("color: #f85149;")
             return
 
-        self.status_lbl.setText("Testing connection...")
+        self._is_testing = True
+        self.test_btn.setText("❌ Cancel Test")
+        self.status_lbl.setText("Testing connection (timeout: 10s)...")
         self.status_lbl.setStyleSheet("color: #d29922;")
 
         async def _do_test():
             try:
-                # Add server temporarily then test
+                # Add server temporarily then test with 10s timeout
                 await self.client.call("mcp.add", payload)
-                res = await self.client.call("mcp.test", {"name": payload["name"]})
+                res = await asyncio.wait_for(
+                    self.client.call("mcp.test", {"name": payload["name"]}),
+                    timeout=10.0,
+                )
                 if res.get("connected"):
                     tool_cnt = len(res.get("tools", []))
                     self.status_lbl.setText(f"✔ Connection successful! Discovered {tool_cnt} tools.")
@@ -421,11 +502,17 @@ class AddMCPServerDialog(QDialog):
                     err = res.get("error", "Unknown error")
                     self.status_lbl.setText(f"✖ Test failed: {err}")
                     self.status_lbl.setStyleSheet("color: #f85149;")
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                self.status_lbl.setText("✖ Test timed out or was cancelled.")
+                self.status_lbl.setStyleSheet("color: #f85149;")
             except Exception as e:
                 self.status_lbl.setText(f"✖ Error: {e}")
                 self.status_lbl.setStyleSheet("color: #f85149;")
+            finally:
+                self._is_testing = False
+                self.test_btn.setText("🔍 Test Connection")
 
-        run_coro_safe(_do_test())
+        self._test_task = run_coro_safe(_do_test())
 
     def _submit(self) -> None:
         payload = self._get_form_payload()
@@ -440,13 +527,17 @@ class AddMCPServerDialog(QDialog):
             QMessageBox.warning(self, "Validation Error", "URL is required for network transport.")
             return
 
-        async def _do_add():
+        async def _do_save():
             try:
-                res = await self.client.call("mcp.add", payload)
+                if self.server_data:
+                    res = await self.client.call("mcp.update", payload)
+                else:
+                    res = await self.client.call("mcp.add", payload)
                 self.created_server = res
                 self.accept()
             except Exception as e:
-                QMessageBox.critical(self, "Failed to Add Server", str(e))
+                action = "Update" if self.server_data else "Add"
+                QMessageBox.critical(self, f"Failed to {action} Server", str(e))
 
-        run_coro_safe(_do_add())
+        run_coro_safe(_do_save())
 

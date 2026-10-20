@@ -15,6 +15,7 @@ import os
 import secrets
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
@@ -241,7 +242,7 @@ class AppServer:
                 self.dispatcher.active_tasks.pop(str(req_id), None)
 
     async def _watch_mcp_config_loop(self) -> None:
-        """Watches ~/.lmms/mcp.json for changes made by external CLI commands and broadcasts updates."""
+        """Watches ~/.lmms/mcp.json for changes made by external CLI commands with debounce and echo suppression."""
         cfg_path = self.dispatcher.mcp_config.config_path
         try:
             if os.path.exists(cfg_path):
@@ -250,12 +251,17 @@ class AppServer:
             pass
 
         while self._is_running:
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(0.3)  # 300ms debounce
             try:
                 if os.path.exists(cfg_path):
                     mtime = os.path.getmtime(cfg_path)
                     if mtime > self._last_mcp_mtime:
                         self._last_mcp_mtime = mtime
+                        # Echo suppression: ignore writes made recently by app-server itself
+                        last_internal = getattr(self.dispatcher.mcp_config, "last_internal_write_time", 0.0)
+                        if abs(time.time() - last_internal) < 0.6:
+                            continue
+
                         self.dispatcher.mcp_config.load()
                         # Broadcast notification to all connected clients
                         event_msg = format_notification(

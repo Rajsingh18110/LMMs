@@ -1,7 +1,15 @@
 """
 lmms.gui.pages.mcp_page - MCP & Tools Studio Page.
-Displays a responsive grid of MCP server cards, real-time status telemetry,
-pulsing status indicators, quick add templates, and interactive server controls.
+Includes:
+- Top Reconnect/Offline Banner with automatic backoff updates and manual Retry button.
+- 5 Unified Studio Tabs:
+  1. Servers: Responsive card grid, telemetry chips, templates, enable/disable/restart/edit/remove.
+  2. Tool Browser: Searchable grouped tree, dynamic JSON schema form generator, execution runner, JSON tree/raw text/image viewer.
+  3. Live Call Log: Real-time mcp.tool_call stream, audit log history, filters, duration, secret redaction, and pyqtgraph latency chart.
+  4. Permissions: Per-server and per-tool allow/ask/deny matrix, and non-blocking approval banner.
+  5. Sandbox: bwrap/Landlock diagnostic status, prominent "NOT isolated" warning, and ExecPolicy editor.
+- Empty, Loading, and Error States.
+- Dark and Light Theme support.
 """
 
 from __future__ import annotations
@@ -17,27 +25,31 @@ from lmms.gui.qt import (
     QCursor,
     QEasingCurve,
     QFrame,
-    QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QGridLayout,
     QHBoxLayout,
-    QIcon,
     QLabel,
     QLineEdit,
     QMenu,
     QMessageBox,
     QPoint,
+    QProgressBar,
     QPropertyAnimation,
     QPushButton,
-    QRect,
     QScrollArea,
     QSizePolicy,
-    Qt,
-    QTimer,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
     pyqtSignal,
     run_coro_safe,
+    Qt,
+)
+from lmms.gui.widgets.mcp_tabs import (
+    LiveCallLogWidget,
+    PermissionsWidget,
+    SandboxWidget,
+    ToolBrowserWidget,
 )
 
 
@@ -48,7 +60,6 @@ class PulsingDot(QWidget):
         super().__init__(parent)
         self.setFixedSize(12, 12)
         self._color = QColor("#8b949e")
-        self._opacity = 1.0
 
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
@@ -77,12 +88,12 @@ class PulsingDot(QWidget):
         else:
             self.anim.stop()
             self.opacity_effect.setOpacity(0.6)
-            self._color = QColor("#8b949e")  # Gray (disabled / stopped)
+            self._color = QColor("#8b949e")  # Gray
 
         self.update()
 
     def paintEvent(self, a0: Any) -> None:
-        from lmms.gui.qt import QBrush, QPainter, QPen
+        from lmms.gui.qt import QBrush, QPainter
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -191,7 +202,7 @@ class ServerCard(QFrame):
         target_lbl.setWordWrap(True)
         layout.addWidget(target_lbl)
 
-        # Badges row (Transport badge, Sandbox badge, Tool count badge)
+        # Badges row
         badges_row = QHBoxLayout()
         badges_row.setSpacing(6)
 
@@ -217,7 +228,7 @@ class ServerCard(QFrame):
 
         layout.addStretch()
 
-        # Footer row: Enable/Disable Toggle button
+        # Footer row: Toggle & Restart
         bottom_row = QHBoxLayout()
         self.is_enabled = self.server.get("enabled", True)
         self.toggle_btn = QPushButton("Enabled" if self.is_enabled else "Disabled")
@@ -287,6 +298,10 @@ class ServerCard(QFrame):
             }
         """)
 
+        act_edit = QAction("Edit Server...", self)
+        act_edit.triggered.connect(self._edit_server)
+        menu.addAction(act_edit)
+
         act_restart = QAction("Restart Server", self)
         act_restart.triggered.connect(self._restart_server)
         menu.addAction(act_restart)
@@ -302,6 +317,11 @@ class ServerCard(QFrame):
         menu.addAction(act_remove)
 
         menu.exec(self.menu_btn.mapToGlobal(QPoint(0, self.menu_btn.height())))
+
+    def _edit_server(self) -> None:
+        dlg = AddMCPServerDialog(client=self.client, server_data=self.server, parent=self)
+        if dlg.exec():
+            self.on_refresh()
 
     def _view_logs(self) -> None:
         name = self.server.get("name", "")
@@ -341,48 +361,77 @@ class MCPToolsPage(QWidget):
     def __init__(self, client: Optional[GUIAppServerClient] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.client = client or default_gui_client
-        self.client.mcp_status_changed.connect(lambda _: self.load_servers())
 
         self.servers_data: List[Dict[str, Any]] = []
         self._is_light_theme = False
 
         self._build_ui()
+        self._wire_client_signals()
         self.load_servers()
+
+    def _wire_client_signals(self) -> None:
+        self.client.mcp_status_changed.connect(lambda _: self.load_servers())
+        self.client.reconnecting.connect(self._on_reconnecting)
+        self.client.connected.connect(self._on_connected)
+        self.client.disconnected.connect(self._on_disconnected)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setSpacing(14)
 
-        # Header Area
+        # 1. Top Reconnect / Status Banner (Hidden by default)
+        self.reconnect_banner = QFrame()
+        self.reconnect_banner.setStyleSheet("""
+            QFrame {
+                background-color: #d2992222;
+                border: 1px solid #d29922;
+                border-radius: 6px;
+                padding: 8px 12px;
+            }
+        """)
+        rb_layout = QHBoxLayout(self.reconnect_banner)
+        rb_layout.setContentsMargins(8, 4, 8, 4)
+
+        self.banner_icon = QLabel("⚠️")
+        self.banner_icon.setStyleSheet("font-size: 14px;")
+        rb_layout.addWidget(self.banner_icon)
+
+        self.banner_text = QLabel("Connecting to LMMs App-Server...")
+        self.banner_text.setStyleSheet("color: #d29922; font-weight: bold; font-size: 12px;")
+        rb_layout.addWidget(self.banner_text)
+
+        rb_layout.addStretch()
+
+        self.banner_retry_btn = QPushButton("Retry Now")
+        self.banner_retry_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d29922;
+                color: #000000;
+                font-weight: bold;
+                padding: 4px 12px;
+                border-radius: 4px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #e3b341;
+            }
+        """)
+        self.banner_retry_btn.clicked.connect(self._manual_retry_connection)
+        rb_layout.addWidget(self.banner_retry_btn)
+
+        self.reconnect_banner.hide()
+        layout.addWidget(self.reconnect_banner)
+
+        # 2. Main Page Header
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
 
-        title_lbl = QLabel("🛠️ MCP & Tools")
-        title_lbl.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
-        header_row.addWidget(title_lbl)
+        self.title_lbl = QLabel("🛠️ MCP & Tools Studio")
+        self.title_lbl.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        header_row.addWidget(self.title_lbl)
 
         header_row.addStretch()
-
-        # Search Bar
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search servers and tools...")
-        self.search_box.setFixedWidth(240)
-        self.search_box.setStyleSheet("""
-            QLineEdit {
-                background-color: #21262d;
-                color: #ffffff;
-                border: 1px solid #30363d;
-                border-radius: 6px;
-                padding: 6px 10px;
-                font-size: 12px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #58a6ff;
-            }
-        """)
-        self.search_box.textChanged.connect(self._filter_servers)
-        header_row.addWidget(self.search_box)
 
         # Add Server Button
         self.add_btn = QPushButton("+ Add Server")
@@ -405,26 +454,121 @@ class MCPToolsPage(QWidget):
 
         layout.addLayout(header_row)
 
-        # Summary Chips Bar
-        chips_row = QHBoxLayout()
-        chips_row.setSpacing(10)
+        # 3. Studio Tabs (Servers, Tool Browser, Live Call Log, Permissions, Sandbox)
+        self.main_tabs = QTabWidget()
+        self.main_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #30363d;
+                background-color: #161b22;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QTabBar::tab {
+                background: #21262d;
+                color: #8b949e;
+                padding: 8px 18px;
+                border: 1px solid #30363d;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                margin-right: 4px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QTabBar::tab:hover {
+                background: #272c35;
+                color: #c9d1d9;
+            }
+            QTabBar::tab:selected {
+                background: #161b22;
+                color: #58a6ff;
+                font-weight: bold;
+                border-bottom: 2px solid #58a6ff;
+            }
+        """)
+
+        # Tab 0: Servers Tab
+        self.servers_tab = QWidget()
+        self._build_servers_tab()
+        self.main_tabs.addTab(self.servers_tab, "🛠️ Servers")
+
+        # Tab 1: Tool Browser Tab
+        self.tool_browser_tab = ToolBrowserWidget(client=self.client)
+        self.main_tabs.addTab(self.tool_browser_tab, "⚡ Tool Browser")
+
+        # Tab 2: Live Call Log Tab
+        self.call_log_tab = LiveCallLogWidget(client=self.client)
+        self.main_tabs.addTab(self.call_log_tab, "📜 Live Call Log")
+
+        # Tab 3: Permissions Tab
+        self.permissions_tab = PermissionsWidget(client=self.client)
+        self.main_tabs.addTab(self.permissions_tab, "🛡️ Permissions")
+
+        # Tab 4: Sandbox Tab
+        self.sandbox_tab = SandboxWidget(client=self.client)
+        self.main_tabs.addTab(self.sandbox_tab, "📦 Sandbox")
+
+        layout.addWidget(self.main_tabs)
+
+    def _build_servers_tab(self) -> None:
+        st_layout = QVBoxLayout(self.servers_tab)
+        st_layout.setContentsMargins(8, 8, 8, 8)
+        st_layout.setSpacing(12)
+
+        # Search Bar & Telemetry Row
+        telemetry_row = QHBoxLayout()
+        telemetry_row.setSpacing(10)
+
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("🔍 Search servers and tools...")
+        self.search_box.setFixedWidth(260)
+        self.search_box.setStyleSheet("""
+            QLineEdit {
+                background-color: #21262d;
+                color: #ffffff;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #58a6ff;
+            }
+        """)
+        self.search_box.textChanged.connect(self._filter_servers)
+        telemetry_row.addWidget(self.search_box)
 
         self.chip_connected = QLabel("🟢 0 Connected")
         self.chip_connected.setStyleSheet("background-color: #3fb95022; color: #3fb950; border: 1px solid #3fb950; border-radius: 12px; padding: 4px 12px; font-size: 11px; font-weight: bold;")
-        chips_row.addWidget(self.chip_connected)
+        telemetry_row.addWidget(self.chip_connected)
 
         self.chip_errors = QLabel("🔴 0 Errors")
         self.chip_errors.setStyleSheet("background-color: #f8514922; color: #f85149; border: 1px solid #f85149; border-radius: 12px; padding: 4px 12px; font-size: 11px; font-weight: bold;")
-        chips_row.addWidget(self.chip_errors)
+        telemetry_row.addWidget(self.chip_errors)
 
         self.chip_total = QLabel("⚡ 0 Tools Total")
         self.chip_total.setStyleSheet("background-color: #30363d; color: #c9d1d9; border: 1px solid #484f58; border-radius: 12px; padding: 4px 12px; font-size: 11px; font-weight: bold;")
-        chips_row.addWidget(self.chip_total)
+        telemetry_row.addWidget(self.chip_total)
 
-        chips_row.addStretch()
-        layout.addLayout(chips_row)
+        telemetry_row.addStretch()
+        st_layout.addLayout(telemetry_row)
 
-        # Main Scroll Content (Server Cards Grid & States)
+        # Loading Indicator State
+        self.loading_widget = QFrame()
+        self.loading_widget.setStyleSheet("background: transparent;")
+        lw_layout = QVBoxLayout(self.loading_widget)
+        lw_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setRange(0, 0)
+        self.loading_bar.setFixedWidth(200)
+        lw_layout.addWidget(self.loading_bar)
+        loading_text = QLabel("Querying MCP servers and health status...")
+        loading_text.setStyleSheet("color: #8b949e; font-size: 12px;")
+        lw_layout.addWidget(loading_text, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.loading_widget.hide()
+        st_layout.addWidget(self.loading_widget)
+
+        # Server Cards Grid Scroll Area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("background: transparent; border: none;")
@@ -435,7 +579,7 @@ class MCPToolsPage(QWidget):
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area.setWidget(self.scroll_content)
-        layout.addWidget(self.scroll_area)
+        st_layout.addWidget(self.scroll_area)
 
         # Empty State Container
         self.empty_state_widget = QFrame()
@@ -471,15 +615,88 @@ class MCPToolsPage(QWidget):
         e_btn.clicked.connect(self._open_add_dialog)
         empty_layout.addWidget(e_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        layout.addWidget(self.empty_state_widget)
+        st_layout.addWidget(self.empty_state_widget)
         self.empty_state_widget.hide()
+
+        # Error State Container
+        self.error_state_widget = QFrame()
+        self.error_state_widget.setStyleSheet("""
+            QFrame {
+                background-color: #f851491a;
+                border: 2px solid #f85149;
+                border-radius: 10px;
+                padding: 30px;
+            }
+        """)
+        err_layout = QVBoxLayout(self.error_state_widget)
+        err_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        err_layout.setSpacing(10)
+
+        err_icon = QLabel("⚠️")
+        err_icon.setStyleSheet("font-size: 40px;")
+        err_layout.addWidget(err_icon, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.err_title = QLabel("Cannot Connect to LMMs App-Server")
+        self.err_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #f85149;")
+        err_layout.addWidget(self.err_title, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.err_sub = QLabel("The daemon socket is unreachable. The server may have stopped or is starting.")
+        self.err_sub.setStyleSheet("font-size: 12px; color: #c9d1d9;")
+        err_layout.addWidget(self.err_sub, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        err_retry_btn = QPushButton("🔄 Start App-Server & Retry")
+        err_retry_btn.setStyleSheet("background-color: #238636; color: #ffffff; padding: 8px 20px; border-radius: 6px; font-weight: bold;")
+        err_retry_btn.clicked.connect(self._manual_retry_connection)
+        err_layout.addWidget(err_retry_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        st_layout.addWidget(self.error_state_widget)
+        self.error_state_widget.hide()
+
+    def _on_reconnecting(self, attempt: int, delay: float) -> None:
+        self.banner_icon.setText("⚠️")
+        self.banner_text.setText(f"Reconnecting to app-server (attempt {attempt} in {delay:.1f}s)...")
+        self.reconnect_banner.setStyleSheet("background-color: #d2992222; border: 1px solid #d29922; border-radius: 6px; padding: 8px 12px;")
+        self.reconnect_banner.show()
+
+    def _on_connected(self) -> None:
+        self.reconnect_banner.hide()
+        self.error_state_widget.hide()
+        self.load_servers()
+        self.tool_browser_tab.load_tools()
+        self.call_log_tab.load_history()
+        self.permissions_tab.load_permissions()
+        self.sandbox_tab.load_status()
+
+    def _on_disconnected(self) -> None:
+        self.banner_icon.setText("🔴")
+        self.banner_text.setText("App-Server connection dropped. Attempting automatic reconnection...")
+        self.reconnect_banner.setStyleSheet("background-color: #f8514922; border: 1px solid #f85149; border-radius: 6px; padding: 8px 12px;")
+        self.reconnect_banner.show()
+
+    def _manual_retry_connection(self) -> None:
+        self.banner_text.setText("Connecting to app-server...")
+
+        async def _do_retry():
+            ok = await self.client.ensure_server_running()
+            if ok:
+                self.reconnect_banner.hide()
+                self.error_state_widget.hide()
+                self.load_servers()
+            else:
+                self.error_state_widget.show()
+                self.scroll_area.hide()
+                self.empty_state_widget.hide()
+
+        run_coro_safe(_do_retry())
 
     def set_theme(self, is_light: bool) -> None:
         """Dynamically applies light or dark theme styling to the page."""
         self._is_light_theme = is_light
-        bg = "#ffffff" if is_light else "#1e1e1e"
+        bg = "#f6f8fa" if is_light else "#0d1117"
         fg = "#1f2328" if is_light else "#ffffff"
         self.setStyleSheet(f"background-color: {bg}; color: {fg};")
+        if hasattr(self, "title_lbl"):
+            self.title_lbl.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {fg};")
         self.load_servers()
 
     def _open_add_dialog(self) -> None:
@@ -491,16 +708,11 @@ class MCPToolsPage(QWidget):
         """Queries app-server for configured servers and updates card grid."""
         async def _fetch():
             try:
-                # Query templates & active tools
                 tools = await self.client.call("mcp.tools")
-                perms = await self.client.call("permissions.get")
-
-                # Reconstruct servers from dispatcher config
                 if hasattr(self.client, "mock_dispatcher") and self.client.mock_dispatcher:
                     cfg_servers = self.client.mock_dispatcher.mcp_config.list_servers()
                     servers = [s.to_dict() for s in cfg_servers]
                 else:
-                    # In live app-server, query tools and construct active list
                     servers = []
                     seen_servers = set()
                     for t in (tools or []):
@@ -517,11 +729,16 @@ class MCPToolsPage(QWidget):
                             })
 
                 self.servers_data = servers
+                self.error_state_widget.hide()
                 self._render_cards(self.servers_data)
 
-            except Exception as e:
-                # If server not yet running, display mock fallback or clean empty state
-                self._render_cards([])
+            except Exception:
+                if not self.client.mock_dispatcher:
+                    self.scroll_area.hide()
+                    self.empty_state_widget.hide()
+                    self.error_state_widget.show()
+                else:
+                    self._render_cards([])
 
         run_coro_safe(_fetch())
 

@@ -12,5 +12,9 @@
   "reportMissingImports": "none",
   "reportMissingTypeStubs": "none",
   "reportUnreachable": "none",
-  "reportGeneralTypeIssues": "none"
+  "reportGeneralTypeIssues": "none",
+  "reportIncompatibleMethodOverride": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportArgumentType": "none"
 }

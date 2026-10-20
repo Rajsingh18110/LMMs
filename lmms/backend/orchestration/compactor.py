@@ -115,6 +115,7 @@ class ContextCompactor:
                 summary_applied=False
             )
 
+        summary_applied = False
         # Stage 3: Condense oldest turns into an explicit summary message
         # Keep system prompt [0] and recent turns
         if len(compacted) > (self.recent_turns_to_preserve + 2):
@@ -140,6 +141,7 @@ class ContextCompactor:
             new_messages.extend(compacted[end_idx:])
 
             tokens_saved += 400
+            summary_applied = True
             current_tokens = self._estimate_tokens(new_messages, model_name)
             if current_tokens <= usable_budget:
                 return new_messages, CompactionReport(
@@ -176,7 +178,7 @@ class ContextCompactor:
             compacted_turns=len(compacted),
             observations_pruned=obs_pruned,
             tokens_saved_estimate=tokens_saved,
-            summary_applied=False
+            summary_applied=summary_applied
         )
 
     def _compact_observation(self, observation_str: str) -> str:

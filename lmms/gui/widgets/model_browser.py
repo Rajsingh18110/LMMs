@@ -349,6 +349,7 @@ class LogoLoader(QObject):
 
     def _on_logo_reply(self, reply, org, urls, idx):
         self._in_flight.pop(org, None)
+        pixmap = QPixmap()
         ok = (reply.error() == QNetworkReply.NetworkError.NoError)
         if ok:
             data = bytes(reply.readAll())
@@ -366,7 +367,6 @@ class LogoLoader(QObject):
                 except:
                     pass
                     
-            pixmap = QPixmap()
             ok = pixmap.loadFromData(data)
             if not ok and len(data) > 0:
                 try:

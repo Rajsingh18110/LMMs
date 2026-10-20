@@ -464,15 +464,139 @@ def test_cli_app_server_shared_state_sync(temp_runtime_dir):
     asyncio.run(_run())
 
 
-def test_real_model_opt_in_or_skip():
-    """Opt-in integration test with real local model. Skipped if no model installed."""
-    from lmms.backend.logic.manager import BackendManager
-    bm = BackendManager()
-    models = bm.registry.load_models() if hasattr(bm.registry, "load_models") else {}
+def test_real_model_opt_in_or_skip(temp_runtime_dir):
+    """Integration test with real local model: streaming + cancellation over AppServer."""
+    from lmms.backend.core.registry.service import RegistryService
+    reg = RegistryService()
+    models = reg.load_models()
     if not models:
-        pytest.skip("No real local model installed in registry. Opt-in integration test skipped.")
+        pytest.skip("No real local model registered in ~/.lmms/models.json.")
 
-    # If model is installed, verify inference and cancellation
-    first_model = list(models.keys())[0]
-    cli = AppServer()
-    assert first_model is not None
+    from lmms.cli.client import CLIClient
+    cli_client = CLIClient()
+    try:
+        health = cli_client.get_health()
+        if health.get("engine") != "running":
+            pytest.skip("Local engine is not running.")
+    except Exception:
+        pytest.skip("Could not connect to local engine on 11435.")
+
+    active = health.get("active_models", []) or health.get("manager", {}).get("loaded_models", [])
+    if "qwen2.5-1.5b-instruct-q5_k_m" in active:
+        model_name = "qwen2.5-1.5b-instruct-q5_k_m"
+    elif active:
+        model_name = active[0]
+    else:
+        model_name = list(models.keys())[0]
+
+    async def _run():
+        sock_path = os.path.join(temp_runtime_dir, "real_model_test.sock")
+        server = AppServer(socket_path=sock_path)
+        server_task = asyncio.create_task(server.start())
+        await asyncio.sleep(0.1)
+
+        try:
+            reader, writer = await asyncio.open_unix_connection(sock_path)
+
+            # 1. Create session
+            sess_resp = await _send_request(reader, writer, "session.create", {"title": "Real Model Test"}, req_id=1)
+            session_id = sess_resp["result"]["session_id"]
+
+            # 2. Test Real Token Streaming
+            send_payload = {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "message.send",
+                "params": {
+                    "session_id": session_id,
+                    "content": "Count from 1 to 5.",
+                    "model": model_name,
+                },
+            }
+            writer.write((json.dumps(send_payload) + "\n").encode("utf-8"))
+            await writer.drain()
+
+            tokens_received = []
+            final_resp = None
+            while True:
+                line = await asyncio.wait_for(reader.readline(), timeout=30.0)
+                msg = json.loads(line.decode("utf-8").strip())
+                if msg.get("method") == "message.token":
+                    tokens_received.append(msg["params"]["token"])
+                elif msg.get("id") == 2:
+                    final_resp = msg
+                    break
+
+            assert len(tokens_received) > 0, "Expected at least one token from real engine"
+            assert final_resp is not None
+            full_text = "".join(tokens_received)
+            assert any(num in full_text for num in ["1", "2", "3", "4", "5"])
+
+            # 3. Test Real Cancellation
+            cancel_payload = {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "message.send",
+                "params": {
+                    "session_id": session_id,
+                    "content": "Write a 500 word story about an astronaut.",
+                    "model": model_name,
+                },
+            }
+            writer.write((json.dumps(cancel_payload) + "\n").encode("utf-8"))
+            await writer.drain()
+
+            # Wait for at least 1 token so we know generation has started
+            cancel_tokens = []
+            while True:
+                line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                msg = json.loads(line.decode("utf-8").strip())
+                if msg.get("method") == "message.token":
+                    cancel_tokens.append(msg["params"]["token"])
+                    if len(cancel_tokens) >= 1:
+                        break
+
+            # Now immediately send message.cancel
+            cancel_req = {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "message.cancel",
+                "params": {"request_id": 3},
+            }
+            writer.write((json.dumps(cancel_req) + "\n").encode("utf-8"))
+            await writer.drain()
+
+            cancel_ack = None
+            req3_resp = None
+            for _ in range(100):
+                try:
+                    line = await asyncio.wait_for(reader.readline(), timeout=3.0)
+                    msg = json.loads(line.decode("utf-8").strip())
+                    if msg.get("id") == 4:
+                        cancel_ack = msg
+                    elif msg.get("id") == 3:
+                        req3_resp = msg
+                    if cancel_ack is not None and req3_resp is not None:
+                        break
+                except asyncio.TimeoutError:
+                    break
+
+            assert cancel_ack is not None
+            assert cancel_ack["result"]["cancelled"] is True
+            assert req3_resp is not None
+            assert "error" in req3_resp
+            assert req3_resp["error"]["code"] == REQUEST_CANCELLED
+
+            writer.close()
+            await writer.wait_closed()
+
+        finally:
+            await server.stop()
+            server_task.cancel()
+            try:
+                await server_task
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(_run())
+

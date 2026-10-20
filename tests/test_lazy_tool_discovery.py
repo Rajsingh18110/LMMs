@@ -15,8 +15,11 @@ import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import pytest
+llama_cpp = pytest.importorskip("llama_cpp")
+Llama = llama_cpp.Llama
+
 from lmms.backend.orchestration.pipeline import OrchestrationPipeline
-from llama_cpp import Llama
 
 MODEL_PATH = os.path.expanduser("~/.lmms/models/Qwen3-8B-Q4_K_M.gguf")
 

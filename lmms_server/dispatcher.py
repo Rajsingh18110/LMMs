@@ -9,6 +9,7 @@ import asyncio
 import os
 import re
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import asdict
@@ -163,6 +164,10 @@ class MethodDispatcher:
             return await self.handle_permissions_get(params_dict)
         elif method == "permissions.set":
             return await self.handle_permissions_set(params_dict)
+
+        # Audit Log
+        elif method == "audit.list":
+            return await self.handle_audit_list(params_dict)
 
         # Sandbox
         elif method == "sandbox.status":
@@ -329,23 +334,58 @@ class MethodDispatcher:
 
                     try:
                         cli_client = CLIClient()
-                        stream_gen = cli_client.stream_chat(
-                            model_name=model_name,
-                            messages=api_messages,
-                            mode=params.get("mode", "deep"),
-                            think=params.get("think", True),
-                        )
-                        for chunk in stream_gen:
-                            await asyncio.sleep(0)  # cooperative yield for cancellation
-                            full_response += chunk
-                            await emit_notification(
-                                "message.token",
-                                {
-                                    "session_id": session_id,
-                                    "request_id": request_id,
-                                    "token": chunk,
-                                },
-                            )
+                        loop = asyncio.get_running_loop()
+                        token_queue: asyncio.Queue[Union[str, Exception, None]] = asyncio.Queue()
+                        stop_event = threading.Event()
+
+                        def _stream_worker() -> None:
+                            try:
+                                stream_gen = cli_client.stream_chat(
+                                    model_name=model_name,
+                                    messages=api_messages,
+                                    mode=params.get("mode", "deep"),
+                                    think=params.get("think", True),
+                                )
+                                for chunk in stream_gen:
+                                    if stop_event.is_set() or loop.is_closed():
+                                        break
+                                    loop.call_soon_threadsafe(token_queue.put_nowait, chunk)
+                            except Exception as e:
+                                if not stop_event.is_set() and not loop.is_closed():
+                                    try:
+                                        loop.call_soon_threadsafe(token_queue.put_nowait, e)
+                                    except RuntimeError:
+                                        pass
+                            finally:
+                                if not loop.is_closed():
+                                    try:
+                                        loop.call_soon_threadsafe(token_queue.put_nowait, None)
+                                    except RuntimeError:
+                                        pass
+
+                        worker_thread = threading.Thread(target=_stream_worker, daemon=True)
+                        worker_thread.start()
+
+                        try:
+                            while True:
+                                item = await token_queue.get()
+                                if item is None:
+                                    break
+                                if isinstance(item, Exception):
+                                    raise item
+                                full_response += item
+                                await emit_notification(
+                                    "message.token",
+                                    {
+                                        "session_id": session_id,
+                                        "request_id": request_id,
+                                        "token": item,
+                                    },
+                                )
+                                # Cooperative sleep to allow incoming cancellation requests
+                                await asyncio.sleep(0.01)
+                        finally:
+                            stop_event.set()
                     except Exception as engine_err:
                         # Fallback response when engine is offline or model not loaded
                         echo_chunk = f"Echo: {content}"
@@ -482,8 +522,16 @@ class MethodDispatcher:
         raise JsonRpcError(INVALID_PARAMS, f"Pending tool permission prompt '{prompt_id}' not found")
 
     async def handle_mcp_list(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Lists active MCP servers and registered tools."""
-        return default_mcp_manager.list_tools()
+        """Lists configured MCP servers and registered tools with secrets redacted."""
+        active_tools = default_mcp_manager.list_tools()
+        servers = []
+        for s in self.mcp_config.list_servers():
+            s_dict = s.to_dict()
+            if "env" in s_dict and isinstance(s_dict["env"], dict):
+                s_dict["env"] = {k: ("***REDACTED***" if v else "") for k, v in s_dict["env"].items()}
+            s_dict["tools"] = [t for t in active_tools if t.get("server") == s.name]
+            servers.append(s_dict)
+        return servers
 
     async def handle_mcp_call(
         self,
@@ -527,7 +575,15 @@ class MethodDispatcher:
         err_msg = ""
 
         try:
-            res = await default_mcp_manager.call_tool(server_name, tool_name, arguments)
+            if hasattr(self, "mock_tool_handler") and callable(self.mock_tool_handler):
+                mock_fn = self.mock_tool_handler
+                import inspect
+                if inspect.iscoroutinefunction(mock_fn):
+                    res = await mock_fn(server_name, tool_name, arguments)
+                else:
+                    res = mock_fn(server_name, tool_name, arguments)
+            else:
+                res = await default_mcp_manager.call_tool(server_name, tool_name, arguments)
             return {"result": res}
         except Exception as e:
             status = "error"
@@ -592,7 +648,10 @@ class MethodDispatcher:
             "mcp.status_changed",
             {"server": name, "status": "stopped", "enabled": enabled},
         )
-        return cfg.to_dict()
+        res = cfg.to_dict()
+        if "env" in res and isinstance(res["env"], dict):
+            res["env"] = {k: ("***REDACTED***" if v else "") for k, v in res["env"].items()}
+        return res
 
     async def handle_mcp_remove(
         self,
@@ -649,7 +708,10 @@ class MethodDispatcher:
             "mcp.status_changed",
             {"server": name, "status": "updated", "enabled": server.enabled},
         )
-        return server.to_dict()
+        res = server.to_dict()
+        if "env" in res and isinstance(res["env"], dict):
+            res["env"] = {k: ("***REDACTED***" if v else "") for k, v in res["env"].items()}
+        return res
 
     async def handle_mcp_enable(
         self,
@@ -764,7 +826,10 @@ class MethodDispatcher:
         limit = params.get("limit", 100)
         state = default_mcp_manager.states.get(name)
         if state:
-            return state.logs[-limit:]
+            return [
+                re.sub(r'(?i)(token|key|secret|password|bearer)[=:\s]+[^\s]+', r'\1=***REDACTED***', line)
+                for line in state.logs[-limit:]
+            ]
         return []
 
     async def handle_mcp_templates(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -798,6 +863,12 @@ class MethodDispatcher:
         if not ok:
             raise JsonRpcError(INVALID_PARAMS, f"Server '{server}' not found")
         return {"server": server, "tool": tool, "policy": policy}
+
+    async def handle_audit_list(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Returns the most recent audit records from ~/.lmms/audit.jsonl."""
+        limit = int(params.get("limit", 100))
+        server = params.get("server")
+        return default_audit_logger.view(limit=limit, server=server)
 
     async def handle_sandbox_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Returns detailed isolation and security status of sandbox backends."""
