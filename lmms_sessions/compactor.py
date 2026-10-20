@@ -4,7 +4,7 @@ Preserves system prompt, pinned items, open tasks, and recent N turns.
 Saves pre-compact history to SQLite so messages can always be restored.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 from lmms_sessions.models import CompactionResult, SessionMessage
 from lmms_sessions.store import SessionStore
@@ -17,7 +17,51 @@ def default_estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+def find_tool_safe_cutoff(messages: List[SessionMessage], target_recent_count: int) -> int:
+    """
+    Computes a cutoff index separating middle candidates (to summarize)
+    from recent messages (to preserve at tail) such that no tool_call
+    is ever separated from its tool_result.
+    """
+    total = len(messages)
+    if total <= target_recent_count:
+        return 0
+
+    cutoff = total - target_recent_count
+
+    while cutoff > 0:
+        # 1. If message at cutoff is a tool result, move backward
+        if (
+            messages[cutoff].role in ("tool", "tool_result", "function")
+            or bool(messages[cutoff].metadata.get("tool_call_id"))
+            or "<observation>" in messages[cutoff].content
+        ):
+            cutoff -= 1
+            continue
+
+        # 2. If message right before cutoff is an assistant tool call paired with tool results at/after cutoff
+        if (
+            messages[cutoff - 1].role == "assistant"
+            and (
+                bool(messages[cutoff - 1].metadata.get("tool_calls"))
+                or "<tool_call>" in messages[cutoff - 1].content
+            )
+            and (
+                messages[cutoff].role in ("tool", "tool_result", "function")
+                or bool(messages[cutoff].metadata.get("tool_call_id"))
+                or "<observation>" in messages[cutoff].content
+            )
+        ):
+            cutoff -= 1
+            continue
+
+        break
+
+    return max(0, cutoff)
+
+
 class SessionCompactor:
+
     """
     Manages manual and automatic context compaction.
     Auto-compact triggers at configurable context window threshold (default 80%).
@@ -35,14 +79,32 @@ class SessionCompactor:
 
     def should_auto_compact(
         self,
-        current_tokens: int,
-        context_window: Optional[int] = None,
+        current_tokens: Optional[Union[int, str]] = None,
+        context_window: Optional[Union[int, SessionStore]] = None,
         ratio: Optional[float] = None,
+        session_id: Optional[str] = None,
+        store: Optional[SessionStore] = None,
     ) -> bool:
-        """Determines if token count has reached the auto-compaction threshold (default 80%)."""
-        limit = context_window or self.context_window
+        """
+        Determines if token count has reached the auto-compaction threshold (default 80%).
+        Supports either:
+        - should_auto_compact(current_tokens=3200)
+        - should_auto_compact(session_id="abc", store=session_store)
+        - should_auto_compact(3200)
+        - should_auto_compact("abc", session_store)
+        """
+        sid = session_id or (current_tokens if isinstance(current_tokens, str) else None)
+        st = store or (context_window if isinstance(context_window, SessionStore) else None)
+        if sid and st:
+            msgs = st.get_messages(sid)
+            toks = sum(m.token_count for m in msgs)
+            limit = self.context_window
+        else:
+            toks = current_tokens if isinstance(current_tokens, int) else 0
+            limit = context_window if isinstance(context_window, int) else self.context_window
+
         threshold = ratio if ratio is not None else self.auto_compact_ratio
-        return current_tokens >= int(limit * threshold)
+        return toks >= int(limit * threshold)
 
     def compact(
         self,
@@ -95,9 +157,11 @@ class SessionCompactor:
                 messages_compacted=0,
             )
 
-        # 2. Recent turns (always kept at tail)
-        recent_messages = non_system[-recent_count:]
-        middle_candidates = non_system[:-recent_count]
+        # 2. Recent turns (always kept at tail without splitting tool call pairs)
+        cutoff_idx = find_tool_safe_cutoff(non_system, recent_count)
+        middle_candidates = non_system[:cutoff_idx]
+        recent_messages = non_system[cutoff_idx:]
+
 
         # 3. Pinned items and open tasks inside middle candidates (always kept!)
         pinned_messages: List[SessionMessage] = []

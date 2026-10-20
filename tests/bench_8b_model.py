@@ -125,14 +125,16 @@ def run_8b_benchmark(runs_per_prompt: int = 3, max_tokens: int = 96):
             generated_text = ""
             tokens_generated = 0
 
-            stream = llm.create_chat_completion(
-                messages=ctx.messages,
+            from typing import Any, cast
+            stream = cast(Any, llm.create_chat_completion(
+                messages=cast(Any, ctx.messages),
                 max_tokens=256 if is_tool_prompt else 32,
                 stream=True,
                 temperature=0.0
-            )
+            ))
 
-            for chunk in stream:
+            for chunk_raw in stream:
+                chunk = cast(dict, chunk_raw)
                 if "choices" in chunk and len(chunk["choices"]) > 0:
                     delta = chunk["choices"][0].get("delta", {})
                     token = delta.get("content", "")
@@ -172,7 +174,7 @@ def run_8b_benchmark(runs_per_prompt: int = 3, max_tokens: int = 96):
                                 schema_valid = True
                                 schema_valid_count += 1
                                 emitted_name = parsed.get("tool") or parsed.get("name")
-                                if emitted_name == expected_tool or emitted_name.startswith(expected_tool.split(".")[0]):
+                                if emitted_name and (emitted_name == expected_tool or emitted_name.startswith(expected_tool.split(".")[0])):
                                     correct_tool = True
                                     correct_tool_count += 1
                         except Exception:

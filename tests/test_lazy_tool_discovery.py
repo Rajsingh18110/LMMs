@@ -86,12 +86,13 @@ def run_lazy_discovery_test():
 
         # Generate response from 8B model with only compact index
         t0 = time.perf_counter()
-        res = llm.create_chat_completion(
-            messages=ctx.messages,
+        from typing import Any, cast
+        res = cast(dict, llm.create_chat_completion(
+            messages=cast(Any, ctx.messages),
             max_tokens=150,
             temperature=0.0
-        )
-        content = res["choices"][0]["message"]["content"]
+        ))
+        content = cast(str, res["choices"][0]["message"].get("content", "") or "")
         gen_time = time.perf_counter() - t0
 
         has_tool_call = "<tool_call>" in content

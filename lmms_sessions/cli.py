@@ -3,7 +3,7 @@ lmms_sessions.cli - CLI Command Handler for /sessions, /fork, /resume, /rename, 
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -23,7 +23,21 @@ class SessionCLI:
         self.store = store or SessionStore()
         self.compactor = compactor or SessionCompactor()
         self.active_session_id: str = ""
+        self.on_context_change: Optional[Callable[[List[Dict[str, Any]]], None]] = None
         self._ensure_initial_session()
+
+    def get_live_messages(self) -> List[Dict[str, Any]]:
+        """Returns message dicts for the active session to feed into LLM chat loops."""
+        cur_id = self._ensure_initial_session()
+        raw_msgs = self.store.get_messages(cur_id)
+        return [
+            {
+                "role": m.role,
+                "content": m.content,
+                "metadata": m.metadata,
+            }
+            for m in raw_msgs
+        ]
 
     def _ensure_initial_session(self) -> str:
         """Ensures at least one session exists and sets it as active."""
@@ -82,6 +96,8 @@ class SessionCLI:
         try:
             forked = self.store.fork_session(cur_id, new_title=title)
             self.active_session_id = forked.session_id
+            if self.on_context_change:
+                self.on_context_change(self.get_live_messages())
             console.print(Panel(
                 f"[bold green]✓ Session Forked Successfully[/bold green]\n\n"
                 f"[dim]New Session ID:[/dim]    [yellow]{forked.session_id}[/yellow]\n"
@@ -143,6 +159,8 @@ class SessionCLI:
             session = self.store.get_session(target_id)
             if session:
                 self.active_session_id = target_id
+                if self.on_context_change:
+                    self.on_context_change(self.get_live_messages())
                 console.print(f"[bold green]✓ Resumed session:[/bold green] [cyan]{session.session_id}[/cyan] ({session.title})")
             else:
                 console.print(f"[bold red]Failed to load session '{target_id}'.[/bold red]")
@@ -168,6 +186,8 @@ class SessionCLI:
         if args and args[0].lower() == "restore":
             ok = self.store.restore_compaction(cur_id)
             if ok:
+                if self.on_context_change:
+                    self.on_context_change(self.get_live_messages())
                 msgs = self.store.get_messages(cur_id)
                 console.print(Panel(
                     f"[bold green]✓ Pre-Compaction History Restored[/bold green]\n\n"
@@ -191,6 +211,9 @@ class SessionCLI:
                 border_style="yellow",
             ))
             return
+
+        if self.on_context_change:
+            self.on_context_change(self.get_live_messages())
 
         saved_tokens = max(0, result.tokens_before - result.tokens_after)
         pct = (saved_tokens / result.tokens_before * 100.0) if result.tokens_before > 0 else 0.0

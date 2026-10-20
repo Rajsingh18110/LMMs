@@ -3,13 +3,14 @@ lmms_sessions.store - SQLite-backed session store with branching lineage (parent
 and schema migration safety using standard library sqlite3.
 """
 
+import contextlib
 import json
 import os
 import sqlite3
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 from lmms_sessions.models import Session, SessionMessage
 
@@ -19,25 +20,56 @@ CURRENT_SCHEMA_VERSION = 1
 class SessionStore:
     """Manages sessions, messages, and compaction history in SQLite."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None, max_snapshots_per_session: int = 5):
+        self.max_snapshots_per_session = max_snapshots_per_session
         if db_path is None:
             home = Path.home()
             lmms_dir = home / ".lmms"
             lmms_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chmod(str(lmms_dir), 0o700)
+            except OSError:
+                pass
             self.db_path = str(lmms_dir / "sessions.db")
         else:
             self.db_path = db_path
             parent = os.path.dirname(os.path.abspath(self.db_path))
             if parent:
                 os.makedirs(parent, exist_ok=True)
+                try:
+                    os.chmod(parent, 0o700)
+                except OSError:
+                    pass
+
+        # Secure file permissions 0600 on creation
+        if not os.path.exists(self.db_path):
+            try:
+                fd = os.open(self.db_path, os.O_WRONLY | os.O_CREAT, 0o600)
+                os.close(fd)
+            except OSError:
+                pass
+        else:
+            try:
+                os.chmod(self.db_path, 0o600)
+            except OSError:
+                pass
 
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
+    @contextlib.contextmanager
+    def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
+        conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        return conn
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
 
     def _init_db(self) -> None:
         """Applies schema migrations based on PRAGMA user_version."""
@@ -340,19 +372,19 @@ class SessionStore:
         tokens_before: int,
         tokens_after: int,
         summary: str,
-        pre_compact_messages: List[SessionMessage],
+        pre_compact_messages: Union[List[SessionMessage], List[Dict[str, Any]]],
     ) -> int:
         """Stores pre-compact message snapshot in compaction_history."""
         now = time.time()
         serialized = json.dumps([
             {
-                "id": m.id,
-                "role": m.role,
-                "content": m.content,
-                "pinned": m.pinned,
-                "token_count": m.token_count,
-                "created_at": m.created_at,
-                "metadata": m.metadata,
+                "id": getattr(m, "id", None) if not isinstance(m, dict) else m.get("id"),
+                "role": getattr(m, "role", "user") if not isinstance(m, dict) else m.get("role", "user"),
+                "content": getattr(m, "content", "") if not isinstance(m, dict) else m.get("content", ""),
+                "pinned": getattr(m, "pinned", False) if not isinstance(m, dict) else m.get("pinned", False),
+                "token_count": getattr(m, "token_count", 0) if not isinstance(m, dict) else m.get("token_count", 0),
+                "created_at": getattr(m, "created_at", now) if not isinstance(m, dict) else m.get("created_at", now),
+                "metadata": getattr(m, "metadata", {}) if not isinstance(m, dict) else m.get("metadata", {}),
             }
             for m in pre_compact_messages
         ])
@@ -365,7 +397,30 @@ class SessionStore:
                 """,
                 (session_id, now, tokens_before, tokens_after, summary, serialized),
             )
-            return int(cur.lastrowid or 0)
+            new_id = int(cur.lastrowid or 0)
+
+            # Enforce snapshot retention limit per session
+            if self.max_snapshots_per_session > 0:
+                cur_old = conn.execute(
+                    """
+                    SELECT id FROM compaction_history
+                    WHERE session_id = ?
+                    ORDER BY id DESC
+                    LIMIT -1 OFFSET ?
+                    """,
+                    (session_id, self.max_snapshots_per_session),
+                )
+                old_ids = [r[0] for r in cur_old.fetchall()]
+                if old_ids:
+                    placeholders = ",".join("?" for _ in old_ids)
+                    conn.execute(
+                        f"DELETE FROM compaction_history WHERE id IN ({placeholders})",
+                        old_ids,
+                    )
+
+            return new_id
+
+
 
     def get_latest_compaction(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves the most recent compaction snapshot for the session."""

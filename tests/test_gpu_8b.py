@@ -53,14 +53,16 @@ for r in range(1, 4):
     gen_text = ""
     gen_tokens = 0
 
-    stream = llm.create_chat_completion(
-        messages=[{"role": "user", "content": prompt}],
+    from typing import Any, cast
+    stream = cast(Any, llm.create_chat_completion(
+        messages=[{"role": "user", "content": prompt}],  # type: ignore
         max_tokens=150,
         stream=True,
         temperature=0.0
-    )
+    ))
 
-    for chunk in stream:
+    for chunk_raw in stream:
+        chunk = cast(dict, chunk_raw)
         delta = chunk["choices"][0].get("delta", {})
         tok = delta.get("content", "")
         if tok:

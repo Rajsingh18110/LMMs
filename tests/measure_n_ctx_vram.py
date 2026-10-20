@@ -53,12 +53,13 @@ def test_context_size(n_ctx: int):
         print(f"VRAM after:  {vram_after} MiB (KV Cache + Model Delta: +{delta} MiB)")
         
         # Test inference token generation
-        res = llm.create_chat_completion(
-            messages=[{"role": "user", "content": "Explain binary search in 1 paragraph.\n/no_think"}],
+        from typing import Any, cast
+        res = cast(dict, llm.create_chat_completion(
+            messages=[{"role": "user", "content": "Explain binary search in 1 paragraph.\n/no_think"}],  # type: ignore
             max_tokens=30,
             temperature=0.0
-        )
-        text = res["choices"][0]["message"].get("content", "")
+        ))
+        text = cast(str, res["choices"][0]["message"].get("content", "") or "")
         vram_active = get_vram_used_mb()
         print(f"Inference verified: generated {len(text.split())} words. Peak VRAM: {vram_active} MiB")
         return {"n_ctx": n_ctx, "success": True, "vram_mb": vram_active, "delta_mb": delta}

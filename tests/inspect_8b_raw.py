@@ -12,8 +12,10 @@ messages = [
     {"role": "user", "content": "Search for the latest Python documentation about asyncio."}
 ]
 
+from typing import Any, cast
+
 print("=== RAW OUTPUT WITHOUT MODIFICATIONS ===")
-res = llm.create_chat_completion(messages=messages, max_tokens=200, temperature=0.0)
+res = cast(dict, llm.create_chat_completion(messages=cast(Any, messages), max_tokens=200, temperature=0.0))
 content = res["choices"][0]["message"]["content"]
 print(repr(content))
 print("--- PRINTED CONTENT ---")

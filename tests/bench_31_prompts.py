@@ -16,7 +16,7 @@ import sys
 import json
 import time
 import statistics
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -200,26 +200,28 @@ def run_benchmark():
                 conversation_history=history
             )
             max_tok = 60 if (r_idx == 0 and needs_tool) else 15
-            stream = llm.create_chat_completion(
-                messages=ctx.messages,
+            stream = cast(Any, llm.create_chat_completion(
+                messages=cast(Any, ctx.messages),
                 max_tokens=max_tok,
                 stream=True,
                 temperature=0.0
-            )
+            ))
             stream_iter = iter(stream)
             t0 = time.perf_counter()
-            first_chunk = next(stream_iter, None)
+            first_chunk_raw = next(stream_iter, None)
             ttft = time.perf_counter() - t0
             
             gen_text = ""
-            if first_chunk and "choices" in first_chunk and len(first_chunk["choices"]) > 0:
-                tok = first_chunk["choices"][0].get("delta", {}).get("content", "")
+            if first_chunk_raw and isinstance(first_chunk_raw, dict) and "choices" in first_chunk_raw and len(first_chunk_raw["choices"]) > 0:
+                first_chunk = cast(dict, first_chunk_raw)
+                tok = first_chunk["choices"][0].get("delta", {}).get("content", "") or ""
                 gen_text += tok
                 
             if r_idx == 0 and needs_tool:
-                for chunk in stream_iter:
-                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                        tok = chunk["choices"][0].get("delta", {}).get("content", "")
+                for chunk_raw in stream_iter:
+                    chunk = cast(dict, chunk_raw)
+                    if isinstance(chunk, dict) and "choices" in chunk and len(chunk["choices"]) > 0:
+                        tok = chunk["choices"][0].get("delta", {}).get("content", "") or ""
                         gen_text += tok
                 leg_tool_eval = evaluate_tool_output(gen_text, target_tool)
             elif r_idx == 0 and not needs_tool:
@@ -240,26 +242,28 @@ def run_benchmark():
                 conversation_history=history
             )
             max_tok = 60 if (r_idx == 0 and needs_tool) else 15
-            stream = llm.create_chat_completion(
-                messages=ctx.messages,
+            stream = cast(Any, llm.create_chat_completion(
+                messages=cast(Any, ctx.messages),
                 max_tokens=max_tok,
                 stream=True,
                 temperature=0.0
-            )
-            stream_iter = iter(stream)
+            ))
+            stream_iter = iter(cast(Any, stream))
             t0 = time.perf_counter()
-            first_chunk = next(stream_iter, None)
+            first_chunk_raw = next(stream_iter, None)
             ttft = time.perf_counter() - t0
             
             gen_text = ""
-            if first_chunk and "choices" in first_chunk and len(first_chunk["choices"]) > 0:
-                tok = first_chunk["choices"][0].get("delta", {}).get("content", "")
+            if first_chunk_raw and isinstance(first_chunk_raw, dict) and "choices" in first_chunk_raw and len(first_chunk_raw["choices"]) > 0:
+                first_chunk = cast(dict, first_chunk_raw)
+                tok = first_chunk["choices"][0].get("delta", {}).get("content", "") or ""
                 gen_text += tok
                 
             if r_idx == 0 and needs_tool:
-                for chunk in stream_iter:
-                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                        tok = chunk["choices"][0].get("delta", {}).get("content", "")
+                for chunk_raw in stream_iter:
+                    chunk = cast(dict, chunk_raw)
+                    if isinstance(chunk, dict) and "choices" in chunk and len(chunk["choices"]) > 0:
+                        tok = chunk["choices"][0].get("delta", {}).get("content", "") or ""
                         gen_text += tok
                 new_tool_eval = evaluate_tool_output(gen_text, target_tool)
             elif r_idx == 0 and not needs_tool:

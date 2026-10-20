@@ -8,10 +8,11 @@ from __future__ import annotations
 import readline  # enables arrow key navigation & command history
 import sys
 import time
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from lmms.cli.client import CLIClient
 from lmms.cli.remote import RemoteManager
+from lmms_sessions.cli import default_session_cli
 
 # ANSI Formatting
 COLOR_RESET = "\033[0m"
@@ -31,9 +32,18 @@ class InteractiveChat:
         self.model_name = model_name
         self.client = CLIClient(base_url)
         self.remote_mgr = self.client.remote_mgr
-        self.messages: List[Dict[str, str]] = []
+        self.session_cli = default_session_cli
+        self.session_cli.on_context_change = self._on_context_changed
+        live = self.session_cli.get_live_messages()
+        self.messages: List[Dict[str, Any]] = [
+            {"role": m["role"], "content": m["content"]} for m in live
+        ]
         self.mode = "deep"
         self.think = True
+
+    def _on_context_changed(self, new_messages: List[Dict[str, Any]]) -> None:
+        """Callback triggered when session switches, forks, or is compacted/restored."""
+        self.messages = [{"role": m["role"], "content": m["content"]} for m in new_messages]
 
     def run(self) -> None:
         """Start the interactive chat session."""
@@ -72,8 +82,10 @@ class InteractiveChat:
                     break
                 continue
 
-            # Add to history
+            # Add to live history and SQLite session store
             self.messages.append({"role": "user", "content": user_input})
+            cur_id = self.session_cli._ensure_initial_session()
+            self.session_cli.store.add_message(cur_id, role="user", content=user_input)
 
             # Stream Assistant Response
             sys.stdout.write(f"\n{COLOR_CYAN}lmms{COLOR_RESET} {COLOR_DIM}›{COLOR_RESET} ")
@@ -99,12 +111,26 @@ class InteractiveChat:
                 tok_per_sec = token_count / elapsed
 
                 self.messages.append({"role": "assistant", "content": full_response})
+                self.session_cli.store.add_message(cur_id, role="assistant", content=full_response)
 
                 # Stream Metrics Bar (Node.js/Yarn Dim Style)
                 sys.stdout.write(
                     f"\n\n{COLOR_DIM}— {token_count} chunks · {tok_per_sec:.1f} tok/s · {elapsed:.2f}s{COLOR_RESET}\n\n"
                 )
                 sys.stdout.flush()
+
+                # Turn-by-turn auto-compaction check
+                if self.session_cli.compactor.should_auto_compact(cur_id, self.session_cli.store):
+                    comp_res = self.session_cli.compactor.compact(cur_id, self.session_cli.store)
+                    if comp_res.success:
+                        self.messages = [
+                            {"role": m["role"], "content": m["content"]}
+                            for m in self.session_cli.get_live_messages()
+                        ]
+                        sys.stdout.write(
+                            f"{COLOR_DIM}[Auto-compacted context: {comp_res.tokens_before} → {comp_res.tokens_after} tokens]{COLOR_RESET}\n\n"
+                        )
+                        sys.stdout.flush()
 
             except Exception as e:
                 sys.stdout.write(f"\n{COLOR_RED}✖ Error:{COLOR_RESET} {e}\n\n")
@@ -257,6 +283,8 @@ class InteractiveChat:
 
         elif cmd == "/clear":
             self.messages.clear()
+            cur_id = self.session_cli._ensure_initial_session()
+            self.session_cli.store.replace_messages(cur_id, [])
             sys.stdout.write("\033[2J\033[H")
             sys.stdout.write(f"{COLOR_DIM}Screen & conversation memory cleared.{COLOR_RESET}\n\n")
 

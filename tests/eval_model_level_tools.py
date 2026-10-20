@@ -163,13 +163,14 @@ def main():
             if "/no_think" not in user_content:
                 effective_messages[-1] = {"role": "user", "content": user_content + "\n/no_think"}
 
-        res = llm.create_chat_completion(
-            messages=effective_messages,
+        from typing import Any, cast
+        res = cast(dict, llm.create_chat_completion(
+            messages=cast(Any, effective_messages),
             max_tokens=256,
             temperature=0.0
-        )
+        ))
 
-        gen_text = res["choices"][0]["message"].get("content", "")
+        gen_text = cast(str, res["choices"][0]["message"].get("content", "") or "")
         ev = evaluate_output(gen_text, q, expected_intent)
 
         if ev["emitted"]:
