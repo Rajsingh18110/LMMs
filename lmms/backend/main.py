@@ -193,7 +193,7 @@ _cli_session_auto_started = False
 
 
 def check_engine_health() -> bool:
-    clean_url = str(ENGINE_URL).rstrip("/")
+    clean_url = ENGINE_URL.rstrip("/")
     candidates = [f"{clean_url}/ping", f"{clean_url}/v1/health", f"{clean_url}/webhook"]
     if "127.0.0.1" not in clean_url and "localhost" not in clean_url:
         candidates.extend(["http://127.0.0.1:11435/ping", "http://127.0.0.1:11435/webhook"])
@@ -980,9 +980,11 @@ def run_cli():
     
     context_manager = ContextManager()
     cap_manager = CapabilityManager()
+    vsession = None
 
     while True:
         voice_mode_active = False
+        vsession = None
         try:
             with patch_stdout():
                 cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
@@ -2052,7 +2054,7 @@ def run_cli():
                                             chunk_text = chunk.get("content", "")
                                             full_reply += chunk_text
                                             
-                                            if voice_mode_active:
+                                            if voice_mode_active and vsession is not None:
                                                 vsession.update_ai_response(full_reply)
                                                 if not hasattr(vsession, "sentence_buffer"):
                                                     vsession.sentence_buffer = ""
@@ -2465,7 +2467,7 @@ def run_cli():
                             pass
                     threading.Thread(target=_async_gen_title, args=(current_chat_id, cmd), daemon=True, name="Async-Chat-Title").start()
                 
-                if voice_mode_active:
+                if voice_mode_active and vsession is not None:
                     try:
                         if hasattr(vsession, "sentence_buffer") and vsession.sentence_buffer.strip():
                             from lmms.backend.voice import stream_audio
@@ -2486,10 +2488,11 @@ def run_cli():
 
         except KeyboardInterrupt:
             if 'voice_mode_active' in locals() and voice_mode_active:
-                try:
-                    vsession.stop_animation()
-                except Exception:
-                    pass
+                if 'vsession' in locals() and vsession is not None:
+                    try:
+                        vsession.stop_animation()
+                    except Exception:
+                        pass
                 voice_mode_active = False
             console.print("\n[dim]Type 'exit' to quit.[/dim]")
         except EOFError:

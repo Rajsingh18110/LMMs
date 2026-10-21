@@ -246,10 +246,9 @@ class AirLoader:
         except Exception:
             p_cores = min(psutil.cpu_count(logical=False) or 4, 6)
 
-        # 3. Dynamic Safety Reserves Formulation
-        # Tailored VRAM reserve: 300MB headroom is sufficient for OS display server
-        v_reserve_gb = max(0.30, 0.05 * vram_total_gb) if vram_total_gb > 0 else 0.0
-        r_reserve_gb = max(1.50, 0.10 * ram_total_gb)
+        # 3. Dynamic Safety Reserves Formulation (Proportional to any user's hardware)
+        v_reserve_gb = min(1.0, max(0.25, 0.04 * vram_total_gb)) if vram_total_gb > 0 else 0.0
+        r_reserve_gb = min(4.0, max(1.2, 0.08 * ram_total_gb))
         
         v_usable_gb = max(0.0, vram_available_gb - v_reserve_gb)
         r_usable_gb = max(0.0, ram_available_gb - r_reserve_gb)
@@ -271,18 +270,25 @@ class AirLoader:
         kv_layer_gb = kv_total_gb / total_layers
 
         # Compute & Context Workspace: CUDA runtime context + scratch graph + buffers
-        compute_scratch_gb = 0.25
+        compute_scratch_gb = min(1.0, max(0.25, 0.03 * size_gb))
 
         # Total working memory if 100% on GPU
         m_working_gpu = size_gb + kv_total_gb + compute_scratch_gb
         m_working_total = size_gb + kv_total_gb + compute_scratch_gb
 
         # 5. Tri-Regime Selection Architecture
-        total_sys_capacity_gb = v_usable_gb + ram_total_gb - r_reserve_gb
+        # Total combined memory available for inference (Usable VRAM + Usable RAM)
+        total_sys_capacity_gb = v_usable_gb + r_usable_gb
 
-        # If model size fits in available VRAM (allowing ~0.5GB for KV cache + overhead),
-        # run 100% Pure GPU mode (Regime 1) for maximum speed.
-        if vram_available_gb > 0 and (size_gb + 0.5 <= vram_available_gb or size_gb <= v_usable_gb or size_gb <= vram_available_gb * 0.88):
+        # Condition 1: Pure GPU Offload (Regime 1)
+        # Model + KV Cache + Scratch buffer comfortably fits in GPU VRAM
+        fits_in_gpu = vram_available_gb > 0 and (
+            m_working_gpu <= v_usable_gb or 
+            m_working_gpu <= vram_available_gb * 0.92 or
+            (size_gb + compute_scratch_gb <= v_usable_gb and kv_total_gb <= v_usable_gb * 0.25)
+        )
+
+        if fits_in_gpu:
             # REGIME 1: PURE GPU OFFLOAD
             regime = 1
             optimal_gpu_layers = -1
@@ -293,14 +299,15 @@ class AirLoader:
             expected_decode_tps = min(120.0, 140.0 / max(size_gb, 0.5))
             expected_prefill_tps = expected_decode_tps * 4.0
 
-        elif total_sys_capacity_gb >= m_working_total or size_gb <= 35.0:
+        elif total_sys_capacity_gb >= m_working_total:
             # REGIME 2: DYNAMIC HYBRID PARTITIONING (GPU VRAM + DDR5 System RAM with mmap)
+            # Fits in combined memory. Dynamically offload as many layers as fit in available VRAM,
+            # and place the remainder in CPU RAM. No hardcoded caps for any GPU/RAM size.
             regime = 2
             v_layer_budget_gb = max(0.0, v_usable_gb - w_embed_gb - compute_scratch_gb)
             s_layer_gpu = w_layer_gb + kv_layer_gb
             
             allocated_gpu_layers = int(v_layer_budget_gb / s_layer_gpu) if (s_layer_gpu > 0 and vram_available_gb > 0) else 0
-            # Allocate all layers that can fit into VRAM safely without artificial caps
             allocated_gpu_layers = max(0, min(total_layers, allocated_gpu_layers))
             
             optimal_gpu_layers = allocated_gpu_layers

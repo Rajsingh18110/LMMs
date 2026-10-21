@@ -165,7 +165,7 @@ def animate_siri_wave_slim():
             now = time.perf_counter()
             dt, last_t = now - last_t, now
             
-            is_active = bool("Speaking" in _status_text or "Listening" in _status_text)
+            is_active = ("Speaking" in _status_text) or ("Listening" in _status_text)
             level = voice.update(now - t0, dt) if is_active else 0.15
             for i, layer in enumerate(LAYERS):
                 phases[i] += layer[1] * (0.7 + level) * dt * 3.0
@@ -180,7 +180,7 @@ def animate_siri_wave_slim():
             header_str = pad + f"\033[1;36m╭{'─' * header_dashes} \033[1;37m{header_title}\033[1;36m {'─' * max(0, W - _vis_len(header_title) - 4 - header_dashes)}╮\033[0m"
             
             # 2. User Box (Top)
-            user_display = _heard_text if _heard_text else "Listening to your voice... Speak now and press ENTER"
+            user_display = _heard_text or "Listening to your voice... Speak now and press ENTER"
             user_title = "👤 You"
             user_box_lines = _make_box(user_title, user_display, W, height=2, border_color="\033[1;36m", title_color="\033[1;37m", text_color="\033[0;37m")
             
@@ -198,7 +198,7 @@ def animate_siri_wave_slim():
             # Dynamic height for AI Box based on available terminal height
             fixed_rows = 1 + len(user_box_lines) + ROWS + 3 + 2
             ai_height = max(3, min(14, lines - fixed_rows))
-            ai_display = _ai_text if _ai_text else "(Waiting for model response...)"
+            ai_display = _ai_text or "(Waiting for model response...)"
             ai_box_lines = _make_box(ai_title, ai_display, W, height=ai_height, border_color=border_c, title_color="\033[1;35m", text_color="\033[1;37m")
             
             # 4. Status / Wave section
