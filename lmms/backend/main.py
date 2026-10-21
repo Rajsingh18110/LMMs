@@ -2295,14 +2295,18 @@ def run_cli():
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
 
-                            # 1. Answer Delivery Guard:
-                            # If model already generated a substantive answer (>180 chars with content)
-                            # AND the tool is an exploratory/search tool (web_search, browser.open_url)
+                            # 1. Universal Answer Delivery Guard:
+                            # If model already generated a substantive answer (>150 chars with useful content)
                             # AND we have already performed at least 1 tool observation in this turn,
-                            # the user's question has been answered! Suppress redundant follow-up calls.
+                            # the user's question has been answered! Do not let the model wander into redundant
+                            # searches or unrequested terminal commands (like git clone or random ls).
                             clean_text_before_tool = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
                             clean_text_before_tool = re.sub(r"<think>.*?</think>", "", clean_text_before_tool, flags=re.DOTALL).strip()
-                            has_substantive_answer = len(clean_text_before_tool) >= 180 and any(kw in clean_text_before_tool.lower() for kw in ["here ", "here are", "1.", "2.", "discord", "https://", "found", "community", "options", "server", "groups"])
+                            has_substantive_answer = (
+                                len(clean_text_before_tool) >= 150 and
+                                iter_count >= 2 and
+                                any(marker in clean_text_before_tool for marker in ["\n1.", "\n2.", "\n- ", "\n* ", "\n• ", "http", "here are", "Based on the"])
+                            )
 
                             # 2. Duplicate tool call guard:
                             tool_sig = f"{t_name}:{json.dumps(t_kwargs, sort_keys=True)}"
@@ -2312,15 +2316,24 @@ def run_cli():
                             if t_name in ("web_search", "browser.open_url"):
                                 search_tool_count += 1
 
-                            should_terminate_search = (
-                                (t_name in ("web_search", "browser.open_url") and search_tool_count > 2) or
-                                (is_duplicate and iter_count >= 2) or
-                                (has_substantive_answer and t_name in ("web_search", "browser.open_url") and iter_count >= 2)
+                            # 4. Block unauthorized actions during pure search/informational intents:
+                            is_unauthorized_terminal = (
+                                intent_res.intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH, IntentType.GENERAL_KNOWLEDGE)
+                                and t_name == "terminal.run"
+                                and any(danger in t_kwargs.get("command", "").lower() for danger in ["git clone", "rm ", "curl -o", "wget ", "mkdir ", "chmod "])
+                                and not any(explicit in cmd.lower() for explicit in ["clone", "install", "download", "run ", "execute", "setup"])
                             )
 
-                            if should_terminate_search:
-                                # Finalize with the substantive answer already delivered by the model
-                                final_ans = clean_text_before_tool or full_reply
+                            should_terminate = (
+                                (t_name in ("web_search", "browser.open_url") and search_tool_count > 2) or
+                                (is_duplicate and iter_count >= 2) or
+                                (has_substantive_answer and iter_count >= 2) or
+                                is_unauthorized_terminal
+                            )
+
+                            if should_terminate:
+                                final_ans = clean_text_before_tool if len(clean_text_before_tool) > 50 else full_reply
+                                final_ans = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", final_ans, flags=re.DOTALL).strip()
                                 console.print(f"\n[dim green]✓ Sufficient results obtained. Finalizing response...[/dim green]")
                                 reply = final_ans
                                 break
