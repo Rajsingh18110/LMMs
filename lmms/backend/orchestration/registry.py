@@ -295,6 +295,78 @@ class ToolRegistry:
         self.register(
             DynamicToolDefinition(
                 metadata=ToolMetadata(
+                    id="browser.crawl_url",
+                    name="Browser Deep Web Crawler",
+                    category="browser",
+                    summary="Autonomous deep web crawler using Crawl4AI. Extracts clean, full markdown text and links from any website, article, or documentation page.",
+                    tags=["browser", "crawl", "crawl4ai", "scrape", "research", "web"],
+                    risk_level="low",
+                    estimated_tokens=50
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Webpage URL to crawl"},
+                        "css_selector": {"type": "string", "description": "Optional CSS selector to narrow crawling focus"}
+                    },
+                    "required": ["url"]
+                },
+                instruction_module="browser"
+            ),
+            aliases=["browser.crawl", "crawl_url", "crawl4ai"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="rag.search",
+                    name="RAG Semantic Search",
+                    category="rag",
+                    summary="Search indexed workspace documents and crawled web knowledge using semantic vector search.",
+                    tags=["rag", "search", "vector", "memory", "knowledge"],
+                    risk_level="safe",
+                    estimated_tokens=45
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Semantic query to search for in vector memory"},
+                        "k": {"type": "integer", "description": "Number of top results to retrieve", "default": 5}
+                    },
+                    "required": ["query"]
+                },
+                instruction_module="rag"
+            ),
+            aliases=["vector_db.search"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="rag.crawl_url",
+                    name="RAG Ingest Web URL",
+                    category="rag",
+                    summary="Crawl an external website or documentation URL with Crawl4AI and ingest it into the workspace vector knowledge base for RAG.",
+                    tags=["rag", "crawl", "ingest", "web", "learn"],
+                    risk_level="low",
+                    estimated_tokens=50
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Target webpage or documentation URL to crawl and index"},
+                        "css_selector": {"type": "string", "description": "Optional CSS selector"}
+                    },
+                    "required": ["url"]
+                },
+                instruction_module="rag"
+            ),
+            aliases=["rag.ingest_url"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
                     id="browser.screenshot",
                     name="Browser Screenshot",
                     category="browser",

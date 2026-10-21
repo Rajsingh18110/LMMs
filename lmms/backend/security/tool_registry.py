@@ -26,8 +26,14 @@ def register_default_tools():
         rl = "high" if t == "rm" else "low"
         registry.register(ToolDefinition(name=t, category="filesystem", risk_level=rl, destructive=(t=="rm")))
 
-    # Process/System
-    for t in ["ps", "top", "uname", "whoami", "id", "env", "free", "uptime", "journalctl"]:
+    # Process/System & Shell Builtins
+    for t in [
+        "ps", "top", "uname", "whoami", "id", "env", "free", "uptime", "journalctl",
+        "echo", "printf", "which", "whereis", "type", "true", "false", "test",
+        "clear", "sleep", "wc", "sort", "uniq", "cut", "tr", "tee", "xargs",
+        "tar", "gzip", "gunzip", "zip", "unzip", "bzip2", "xz", "dirname", "basename",
+        "readlink", "realpath", "seq", "date", "cal", "diff", "patch", "export", "source"
+    ]:
         registry.register(ToolDefinition(name=t, category="system", risk_level="safe"))
         
     for t in ["kill", "pkill", "systemctl"]:
@@ -69,11 +75,16 @@ def register_default_tools():
     registry.register(ToolDefinition(name="browser.get_interactive_dom", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="browser.scrape", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="browser.scrape_live", category="internal", risk_level="safe", requires_network=True))
+    registry.register(ToolDefinition(name="browser.crawl_url", category="internal", risk_level="safe", requires_network=True))
+    registry.register(ToolDefinition(name="browser.crawl", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="browser.screenshot", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.scroll", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.open_authenticated", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
     registry.register(ToolDefinition(name="web_search", category="internal", risk_level="safe", requires_network=True))
     registry.register(ToolDefinition(name="vector_db.search", category="internal", risk_level="safe"))
+    registry.register(ToolDefinition(name="rag.search", category="internal", risk_level="safe"))
+    registry.register(ToolDefinition(name="rag.crawl_url", category="internal", risk_level="safe", requires_network=True))
+    registry.register(ToolDefinition(name="rag.ingest", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="security.generate_report", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="app.launch", category="system", risk_level="low"))
     registry.register(ToolDefinition(name="os.launch_app", category="system", risk_level="low"))

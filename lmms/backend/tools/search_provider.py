@@ -16,9 +16,12 @@ class DDGSSearchProvider(SearchProvider):
         results = []
         try:
             try:
-                from duckduckgo_search import DDGS
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    from ddgs import DDGS
             except ImportError:
-                from ddgs import DDGS
+                from duckduckgo_search import DDGS
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=max_results):
                     results.append({

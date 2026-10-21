@@ -283,9 +283,11 @@ class ContextBuilder:
         )
 
         search_rules = (
-            "\n## Anti-Hallucination & Web Search Rules\n"
-            "1. DO NOT GUESS OR HALLUCINATE numbers, prices, APIs, or facts. You MUST use tools to find them.\n"
-            "2. If `web_search` returns summaries that DO NOT contain exact numbers, use `browser.open_url` to read full page content.\n"
+            "\n## Autonomous Deep Research & Anti-Hallucination Rules\n"
+            "1. **Never Guess or Surrender**: DO NOT guess, hallucinate, or claim 'I cannot find information' without doing deep research.\n"
+            "2. **Autonomous Deep Crawling**: When `web_search` returns URLs (e.g. for questions about companies, people, founders, docs, technical details), DO NOT just read the short snippet if the answer is missing! IMMEDIATELY and AUTONOMOUSLY call `browser.crawl_url` (powered by Crawl4AI) on the top relevant URLs (like /team, /about, /contact, or docs) to extract the full markdown content.\n"
+            "3. **Multi-Hop Investigation**: If the first URL does not have the answer, crawl the other URLs found in search results or search with a more specific query.\n"
+            "4. **RAG Integration**: Use `rag.search` to query local workspace documentation, and `rag.crawl_url` to index long documentation sites into vector memory.\n"
         )
 
         full_system = f"{base_prompt}\n\n{tool_schemas}\n\n{few_shots}\n\n{persona_rules}\n\n{search_rules}"
