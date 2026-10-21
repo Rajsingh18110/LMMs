@@ -70,6 +70,15 @@ class ContextBuilder:
                 "4. Live JS content can be retrieved using `browser.scrape_live`."
             )
 
+        # 2b. Web search & information retrieval guidelines
+        if "web_search" in instruction_modules or intent_result.intent in (IntentType.WEB_SEARCH, IntentType.RESEARCH):
+            sections.append(
+                "## Search Rules\n"
+                "1. Keep search queries specific and focused.\n"
+                "2. Execute at most 1-2 searches. Once observation results are returned, immediately synthesize them into a clear, direct answer for the user.\n"
+                "3. DO NOT repeatedly call web search with slightly different variations if you already have relevant information."
+            )
+
         # 3. Multi-step progress rules (only for multi-step workflows)
         if intent_result.intent == IntentType.MULTI_STEP_WORKFLOW:
             sections.append(

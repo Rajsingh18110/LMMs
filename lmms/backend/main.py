@@ -1956,6 +1956,8 @@ def run_cli():
                     continue
                     
                 reply = ""
+                executed_tool_calls = []
+                search_tool_count = 0
                 while iter_count < MAX_ITERATIONS:
                     iter_count += 1
                     
@@ -2290,7 +2292,39 @@ def run_cli():
                                     raise ValueError(f"Invalid JSON/Dict format: {e}")
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
-                            
+
+                            # 1. Answer Delivery Guard:
+                            # If model already generated a substantive answer (>180 chars with content)
+                            # AND the tool is an exploratory/search tool (web_search, browser.open_url)
+                            # AND we have already performed at least 1 tool observation in this turn,
+                            # the user's question has been answered! Suppress redundant follow-up calls.
+                            clean_text_before_tool = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
+                            clean_text_before_tool = re.sub(r"<think>.*?</think>", "", clean_text_before_tool, flags=re.DOTALL).strip()
+                            has_substantive_answer = len(clean_text_before_tool) >= 180 and any(kw in clean_text_before_tool.lower() for kw in ["here ", "here are", "1.", "2.", "discord", "https://", "found", "community", "options", "server", "groups"])
+
+                            # 2. Duplicate tool call guard:
+                            tool_sig = f"{t_name}:{json.dumps(t_kwargs, sort_keys=True)}"
+                            is_duplicate = tool_sig in executed_tool_calls
+
+                            # 3. Search frequency guard:
+                            if t_name in ("web_search", "browser.open_url"):
+                                search_tool_count += 1
+
+                            should_terminate_search = (
+                                (t_name in ("web_search", "browser.open_url") and search_tool_count > 2) or
+                                (is_duplicate and iter_count >= 2) or
+                                (has_substantive_answer and t_name in ("web_search", "browser.open_url") and iter_count >= 2)
+                            )
+
+                            if should_terminate_search:
+                                # Finalize with the substantive answer already delivered by the model
+                                final_ans = clean_text_before_tool or full_reply
+                                console.print(f"\n[dim green]✓ Sufficient results obtained. Finalizing response...[/dim green]")
+                                reply = final_ans
+                                break
+
+                            executed_tool_calls.append(tool_sig)
+
                             # Append assistant's partial reply
                             messages.append({"role": "assistant", "content": full_reply})
                             
