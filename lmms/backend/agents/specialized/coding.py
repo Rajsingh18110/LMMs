@@ -97,6 +97,17 @@ class CodingAgent(BaseAgent):
 
         from lmms.backend.tools.core import default_executor
         
+        # Enable ephemeral worktree isolation if git workspace is present
+        ws = getattr(context, "workspace_id", None) or os.getcwd()
+        wt_session = None
+        try:
+            from lmms_worktree.manager import default_worktree_manager
+            if default_worktree_manager.is_git_repo(ws):
+                wt_session = default_worktree_manager.enable(ws)
+                yield f"[Worktree] Isolated ephemeral workspace active: {wt_session.worktree_path}\n"
+        except Exception:
+            wt_session = None
+
         files_to_read = set(context.files if context.files else [])
         if context.task:
             mentioned_files = re.findall(r'[\w/.-]+\.(?:py|js|ts|html|css|json|yaml|dart|go|rs)', context.task.description)
@@ -256,8 +267,25 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                     validation_successful = False
                     
             if edits_successful and validation_successful:
+                if wt_session:
+                    try:
+                        from lmms_worktree.manager import default_worktree_manager
+                        applied, app_msg = default_worktree_manager.apply(ws)
+                        if applied:
+                            yield f"[Worktree] Verified edits merged cleanly back to {ws}\n"
+                        else:
+                            yield f"[Worktree] Merge warning: {app_msg}\n"
+                    except Exception as e:
+                        yield f"[Worktree] Apply error: {e}\n"
                 yield "Execution completed successfully.\n"
             else:
+                if wt_session:
+                    try:
+                        from lmms_worktree.manager import default_worktree_manager
+                        default_worktree_manager.discard(ws)
+                        yield f"[Worktree] Edits failed validation. Worktree cleanly discarded without modifying {ws}.\n"
+                    except Exception:
+                        pass
                 yield "Execution completed with validation errors. Rolling back changes...\n"
                 for p, old_val in backups.items():
                     try:
