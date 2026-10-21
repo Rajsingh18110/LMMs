@@ -269,10 +269,10 @@ class CyberpunkVoiceApp(App):
     is_muted = reactive(False)
     typing_speed = reactive(45.0) # chars per second
 
-    def __init__(self, fps: int = 60, theme_name: str = "cyberpunk", no_anim: bool = False, ascii_only: bool = False):
+    def __init__(self, fps: int = 20, theme_name: str = "executive", no_anim: bool = False, ascii_only: bool = False):
         super().__init__()
         self.target_fps = fps
-        self.cyber_theme = THEMES.get(theme_name, Theme.CYBERPUNK)
+        self.cyber_theme = THEMES.get(theme_name, Theme.EXECUTIVE)
         self.no_anim = no_anim
         self.ascii_only = ascii_only
         
@@ -461,9 +461,9 @@ class CyberpunkVoiceApp(App):
             self.exit()
 
 def main():
-    parser = argparse.ArgumentParser(description="LMMs CyberVoice LIVE - Cinematic Cyberpunk TUI")
-    parser.add_argument("--fps", type=int, default=60, help="Target frames per second (default: 60)")
-    parser.add_argument("--theme", type=str, default="cyberpunk", choices=["cyberpunk", "synthwave", "matrix", "monochrome"], help="Color theme")
+    parser = argparse.ArgumentParser(description="LMMs CyberVoice LIVE - Professional Voice TUI")
+    parser.add_argument("--fps", type=int, default=20, help="Target frames per second (default: 20)")
+    parser.add_argument("--theme", type=str, default="executive", choices=["executive", "cyberpunk", "synthwave", "matrix", "monochrome"], help="Color theme")
     parser.add_argument("--no-animation", action="store_true", help="Disable animations for low-end / remote SSH terminals")
     parser.add_argument("--ascii", action="store_true", help="Use plain ASCII characters without Unicode")
     args = parser.parse_args()

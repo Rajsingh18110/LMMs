@@ -99,8 +99,28 @@ class Theme:
         "spark_mid": "#cccccc",
         "spark_high": "#ffffff",
     }
+    
+    EXECUTIVE = {
+        "name": "executive",
+        "bg": "#0b0f17",
+        "panel_bg": "#111827",
+        "cyan": "#38bdf8",
+        "green": "#10b981",
+        "magenta": "#38bdf8",
+        "purple": "#334155",
+        "amber": "#38bdf8",
+        "red": "#f43f5e",
+        "dim_text": "#64748b",
+        "bright_text": "#f8fafc",
+        "thought_border": "#1e293b",
+        "thought_text": "#64748b",
+        "spark_low": "#38bdf8",
+        "spark_mid": "#0ea5e9",
+        "spark_high": "#f43f5e",
+    }
 
 THEMES = {
+    "executive": Theme.EXECUTIVE,
     "cyberpunk": Theme.CYBERPUNK,
     "synthwave": Theme.SYNTHWAVE,
     "matrix": Theme.MATRIX,

@@ -20,43 +20,41 @@ from rich.table import Table
 from rich.markdown import Markdown
 from rich import box
 
-from lmms.backend.voice_engine import (
-    AudioAnalyzer,
-    SystemStats,
-    StateMachine,
-    TextEffects,
-    Theme,
-    THEMES,
-    interpolate_color
-)
-
-# Global synchronization events and queues
+# Synchronization & State
 _stop_event = threading.Event()
 _anim_thread = None
 _status_text = "Listening..."
-_heard_text = ""         # What user said (shown in User box)
-_ai_text = ""            # Clean spoken AI reply (rendered in rich Markdown)
-_thoughts_text = ""      # Internal reasoning (isolated in muted Thought box)
-_visualizer_mode = "mirrored" # "bars", "mirrored", "braille"
+_heard_text = ""         # User transcribed input
+_ai_text = ""            # Spoken dialogue (rendered cleanly in Markdown)
+_thoughts_text = ""      # Internal reasoning (<think>), hidden by default
+_show_thoughts = False   # Drop-down toggle: False by default per user specification
+_is_speaking_audio = False
+
 _tts_queue = queue.Queue()
 _playback_queue = queue.Queue()
 
-# Global Audio & Telemetry Singletons
-_analyzer = AudioAnalyzer(num_bars=48)
-_sys_stats = SystemStats(history_len=24)
-_state_machine = StateMachine(initial_state="listening")
-_active_theme = Theme.CYBERPUNK
-_session_start_time = time.time()
-_is_speaking_audio = False
+# Performance & Flicker Prevention Cache
+_last_rendered_ai_text = None
+_cached_ai_markdown = None
 
-# Timing state for decode animation
-_heard_received_time = 0.0
-_last_heard_cache = ""
+# Professional Executive Slate Theme (Clean, No Clashing Rainbow Colors)
+THEME = {
+    "bg": "#0B0F17",           # Deep Slate Charcoal
+    "panel_bg": "#111827",     # Dark Slate Container
+    "border_idle": "#1E293B",  # Muted Dark Slate
+    "border_active": "#38BDF8",# Ice Blue
+    "border_user": "#334155",  # Steel Slate
+    "text_bright": "#F8FAFC",  # Pure Crisp White
+    "text_dim": "#64748B",     # Muted Slate Gray
+    "accent_speaking": "#10B981", # Clean Emerald Green
+    "accent_thinking": "#38BDF8", # Ice Blue
+    "accent_listen": "#94A3B8",   # Light Slate
+}
 
 def extract_thoughts_and_response(text: str) -> Tuple[str, str]:
     """
-    Separates <think>...</think> internal reasoning from the actual spoken dialogue.
-    Guarantees that TTS and the spoken response box never contain thinking tags.
+    Separates <think>...</think> reasoning from spoken response.
+    Guarantees that TTS and the spoken reply NEVER contain thinking tags.
     """
     thoughts = ""
     spoken_text = text
@@ -67,195 +65,180 @@ def extract_thoughts_and_response(text: str) -> Tuple[str, str]:
                 thoughts = match.group(1).strip()
             spoken_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
         else:
-            # Model is still thinking (closing tag not yet generated)
             parts = text.split("<think>", 1)
             thoughts = parts[1].strip()
             spoken_text = parts[0].strip()
     return thoughts, spoken_text
 
-def build_cyberpunk_frame(
+def render_sleek_equalizer(t: float, width: int = 50, is_active: bool = False) -> str:
+    """
+    Renders an elegant, low-profile soundwave in Ice-Blue using 8x sub-cell blocks.
+    Zero jitter, smooth fluid motion.
+    """
+    blocks = [" ", " ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    chars = []
+    level = (0.75 + 0.25 * math.sin(t * 8.0)) if is_active else 0.12
+    for x in range(width):
+        norm_x = (x - width / 2.0) / (width * 0.40)
+        env = math.exp(-norm_x * norm_x)
+        h = (
+            math.sin(x * 0.32 + t * 5.0) * 0.48 +
+            math.sin(x * 0.65 - t * 3.2) * 0.32 +
+            math.cos(x * 0.20 + t * 2.0) * 0.20
+        )
+        val = max(0.05, abs(h) * env * level)
+        idx = int(val * 8)
+        chars.append(blocks[min(8, max(0, idx))])
+        
+    wave_str = "".join(chars)
+    color = THEME["accent_speaking"] if is_active else THEME["border_active"]
+    return f"[{color}]{wave_str}[/]"
+
+def build_professional_frame(
     t: float,
     status: str,
     heard: str,
     thoughts: str,
     ai_text: str,
-    dt: float = 0.016,
-    theme: Optional[Dict[str, str]] = None,
-    mode: str = "mirrored"
 ) -> Group:
     """
-    Assembles the 60 FPS Cinematic Cyberpunk terminal HUD with:
-    - Live Telemetry & rolling sparklines (CPU, RAM, Net, Time)
-    - User query with Matrix decode effect
-    - Collapsible Neural Reasoning with token counter & elapsed time
-    - Real Markdown rendering for spoken AI response
-    - 8x Sub-cell / Braille audio-reactive visualizer with peak hold & gradient
-    - Context-aware footer with keycaps
+    Assembles a clean, executive, clutter-free Terminal Voice Interface:
+    1. Minimalist Top Bar (Hardware stats + Time in muted slate)
+    2. User Query Box (Clean text, subtle border)
+    3. AI Response Box (Ice-Blue accent, Rich Markdown)
+    4. Optional Collapsible Thought Box (Hidden by default, shown only when _show_thoughts=True)
+    5. Sleek Audio Waveform + Single-line Footer
     """
-    global _heard_received_time, _last_heard_cache
-    theme = theme or _active_theme
+    global _last_rendered_ai_text, _cached_ai_markdown
 
-    # 1. State Machine & Color Transition
-    cur_state = "speaking" if ("Speaking" in status or _is_speaking_audio) else (
-        "thinking" if ("Thinking" in status or "Synthesizing" in status) else (
-            "transcribing" if "Transcribing" in status else "listening"
-        )
-    )
-    _state_machine.set_state(cur_state)
-    glow_color = _state_machine.get_color()
-    status_badge = _state_machine.get_badge()
+    is_speaking = ("Speaking" in status or _is_speaking_audio)
+    is_thinking = ("Thinking" in status or "Synthesizing" in status)
+    
+    if is_speaking:
+        active_border = THEME["accent_speaking"]
+        status_dot = f"[bold {THEME['accent_speaking']}]● Speaking[/]"
+    elif is_thinking:
+        active_border = THEME["accent_thinking"]
+        status_dot = f"[bold {THEME['accent_thinking']}]● Processing[/]"
+    else:
+        active_border = THEME["border_active"]
+        status_dot = f"[bold {THEME['border_active']}]● Listening[/]"
 
-    # 2. Update Audio Analyzer & Smoothing Physics
-    energy = 1.2 if cur_state == "speaking" else (0.6 if cur_state == "listening" else 0.25)
-    _analyzer.update(cur_state, dt, energy_boost=energy)
-
-    # 3. System Telemetry Bar (Header with Rolling Sparklines)
-    cols, rows = shutil.get_terminal_size((100, 30))
+    # 1. Minimalist Top Bar
+    cols, _ = shutil.get_terminal_size((100, 30))
     time_str = datetime.now().strftime("%H:%M:%S")
-    cpu_spark = _sys_stats.render_sparkline(_sys_stats.cpu_history, 100.0, theme)
-    ram_spark = _sys_stats.render_sparkline(_sys_stats.ram_history, 100.0, theme)
-    ram_gb = psutil.virtual_memory()
+    cpu = psutil.cpu_percent()
+    ram = psutil.virtual_memory()
 
     hdr_tbl = Table.grid(expand=True)
-    hdr_tbl.add_column("title", justify="left")
-    hdr_tbl.add_column("stats", justify="right")
-
-    hdr_left = f"[bold {theme['cyan']}]⚡ LMMs[/] [bold {theme['magenta']}]CYBERVOICE LIVE[/] [dim {theme['dim_text']}]v2.5 (60 FPS)[/]"
-    hdr_right = (
-        f"[bold {theme['green']}]CPU:[/] {_sys_stats.cur_cpu:.0f}% {cpu_spark}  "
-        f"[bold {theme['cyan']}]RAM:[/] {ram_gb.used/(1024**3):.1f}/{ram_gb.total/(1024**3):.1f}GB {ram_spark}  "
-        f"[bold {theme['magenta']}]NET:[/] ↑{_sys_stats.cur_up_kb:.1f} ↓{_sys_stats.cur_down_kb:.1f}KB/s  "
-        f"[bold {theme['amber']}]TIME:[/] {time_str}"
+    hdr_tbl.add_column("left", justify="left")
+    hdr_tbl.add_column("right", justify="right")
+    hdr_tbl.add_row(
+        f"[bold {THEME['text_bright']}]LMMs Voice[/] [dim {THEME['text_dim']}]• Live[/]",
+        f"[dim {THEME['text_dim']}]CPU {cpu:.0f}%  RAM {ram.used/(1024**3):.1f}GB  {time_str}[/]"
     )
-    hdr_tbl.add_row(hdr_left, hdr_right)
     hdr_panel = Panel(
         hdr_tbl,
-        style=f"on {theme['bg']}",
-        border_style=theme["purple"],
+        style=f"on {THEME['bg']}",
+        border_style=THEME["border_idle"],
         box=box.ROUNDED,
         padding=(0, 1)
     )
 
-    # 4. User Query Panel (with Matrix Scramble Effect)
+    # 2. User Query Panel
     if heard:
-        if heard != _last_heard_cache:
-            _heard_received_time = t
-            _last_heard_cache = heard
-        scramble_elapsed = t - _heard_received_time
-        decoded_text = TextEffects.decode_scramble(heard, scramble_elapsed, duration=0.35)
-        user_content = Text(decoded_text, style=f"bold {theme['bright_text']}")
+        user_body = Text(heard, style=f"bold {THEME['text_bright']}")
     else:
-        spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        sp = spinner_chars[int(t * 12) % len(spinner_chars)]
-        user_content = Text(f"{sp} Listening to microphone... Speak clearly and press ENTER to submit", style=f"dim {theme['cyan']}")
-
+        user_body = Text("Listening... Speak now and press ENTER to submit", style=f"dim {THEME['text_dim']}")
+        
     user_panel = Panel(
-        user_content,
-        title=f"[bold {theme['cyan']}] 👤 USER AUDIO QUERY [/]",
-        border_style=theme["cyan"],
+        user_body,
+        title=f"[{THEME['text_dim']}] You [/{THEME['text_dim']}]",
+        title_align="left",
+        border_style=THEME["border_user"],
         box=box.ROUNDED,
-        style=f"on {theme['panel_bg']}",
+        style=f"on {THEME['panel_bg']}",
         padding=(0, 1)
     )
 
-    # 5. Neural Reasoning Panel (Collapsible, Muted, Token & Time Counters)
+    # 3. Optional Reasoning Panel (Only if user explicitly enabled it)
     thought_panel = None
-    if thoughts:
-        token_count = len(thoughts.split())
-        elapsed_sec = t
-        disp_thoughts = thoughts if len(thoughts) <= 350 else thoughts[-347:] + "..."
-        thought_body = Text(disp_thoughts, style=f"dim {theme['thought_text']}")
+    if _show_thoughts and thoughts:
+        disp = thoughts if len(thoughts) <= 400 else thoughts[-397:] + "..."
         thought_panel = Panel(
-            thought_body,
-            title=f"[bold {theme['thought_border']}] 💭 NEURAL REASONING  [dim]• {token_count} tokens  ⏱ {elapsed_sec:.1f}s[/] [/]",
-            border_style=theme["thought_border"],
+            Text(disp, style=f"dim {THEME['text_dim']}"),
+            title=f"[{THEME['text_dim']}] Internal Reasoning (T to hide) [/{THEME['text_dim']}]",
+            title_align="left",
+            border_style=THEME["border_idle"],
             box=box.ROUNDED,
-            style=f"on {theme['bg']}",
+            style=f"on {THEME['bg']}",
             padding=(0, 1)
         )
 
-    # 6. Spoken AI Response Panel (REAL MARKDOWN RENDERING!)
+    # 4. Spoken AI Response Panel (Cached Rich Markdown for ZERO Flicker)
     if ai_text:
-        # Render real rich Markdown so headers, bold, bullets, and inline code look stunning!
-        ai_markdown = Markdown(ai_text)
-        # Typewriter cursor at the end while speaking
-        ai_content = ai_markdown
+        if ai_text != _last_rendered_ai_text:
+            _cached_ai_markdown = Markdown(ai_text)
+            _last_rendered_ai_text = ai_text
+        ai_content = _cached_ai_markdown
     else:
-        if cur_state == "thinking":
-            ai_content = Text("⚡ Synthesizing neural response and voice stream...", style=f"italic {theme['amber']}")
+        if is_thinking:
+            ai_content = Text("Generating response...", style=f"dim {THEME['text_dim']}")
         else:
-            ai_content = Text("(Waiting for model response...)", style=f"dim {theme['dim_text']}")
+            ai_content = Text("Waiting for speech...", style=f"dim {THEME['text_dim']}")
 
     ai_panel = Panel(
         ai_content,
-        title=f"[bold {glow_color}] 🤖 LMMs NEURAL VOICE [{status_badge}] [/]",
-        border_style=glow_color,
+        title=f"[bold {active_border}] Assistant [/]",
+        title_align="left",
+        border_style=active_border,
         box=box.ROUNDED,
-        style=f"on {theme['panel_bg']}",
+        style=f"on {THEME['panel_bg']}",
         padding=(0, 1)
     )
 
-    # 7. Audio-Reactive Cyber Visualizer (8x Sub-cell / Braille Oscilloscope)
-    vis_width = max(36, min(cols - 10, 84))
-    vis_height = 4 if rows < 32 else 5
+    # 5. Sleek Audio Waveform Bar (Compact, Noisy Labels Removed)
+    wave_w = max(30, min(cols - 16, 70))
+    wave_markup = render_sleek_equalizer(t, width=wave_w, is_active=(is_speaking or not heard))
+    wave_text = Text.from_markup(wave_markup, justify="center")
 
-    if mode == "braille":
-        vis_lines = _analyzer.render_braille_wave(vis_width, vis_height, theme, t)
-    elif mode == "bars":
-        vis_lines = _analyzer.render_bars(vis_width, vis_height, theme, t)
-    else:
-        # Default: mirrored spectrum with dim fade reflection
-        vis_lines = _analyzer.render_mirrored(vis_width, vis_height, theme, t)
-
-    # Subtle frequency axis labels beneath the visualizer
-    freq_labels = f"[dim {theme['dim_text']}]80Hz             250Hz             1kHz             4kHz             8kHz[/]"
-    vis_content = Text.from_markup("\n".join(vis_lines) + "\n" + freq_labels, justify="center")
-
-    eq_panel = Panel(
-        vis_content,
-        title=f"[bold {glow_color}] 🔊 CYBER ACOUSTIC VISUALIZER [{mode.upper()}] [/]",
-        border_style=glow_color,
-        box=box.ROUNDED,
-        style=f"on {theme['bg']}",
-        padding=(0, 1)
-    )
-
-    # 8. Context-Aware Footer with Highlighted Keycaps
+    # 6. Minimalist Footer
     ftr_tbl = Table.grid(expand=True)
-    ftr_tbl.add_column("controls", justify="left")
-    ftr_tbl.add_column("status", justify="right")
-
-    controls_markup = (
-        f"[bold {theme['cyan']} on #141b2d] ⏎ ENTER [/] Send  "
-        f"[bold {theme['magenta']} on #141b2d] V [/] Waveform ({mode})  "
-        f"[bold {theme['green']} on #141b2d] T [/] Toggle Thoughts  "
-        f"[bold {theme['red']} on #141b2d] ^C [/] Cancel"
+    ftr_tbl.add_column("left", justify="left")
+    ftr_tbl.add_column("center", justify="center")
+    ftr_tbl.add_column("right", justify="right")
+    
+    thought_hint = "T: Reasoning" if thoughts else ""
+    ftr_tbl.add_row(
+        f"[dim {THEME['text_dim']}]Press ENTER to submit • Ctrl+C to cancel {thought_hint}[/]",
+        wave_text,
+        status_dot
     )
-    ftr_tbl.add_row(controls_markup, f"[bold {glow_color}]{status_badge}[/]")
     ftr_panel = Panel(
         ftr_tbl,
-        style=f"on {theme['bg']}",
-        border_style=glow_color,
+        style=f"on {THEME['bg']}",
+        border_style=THEME["border_idle"],
         box=box.ROUNDED,
         padding=(0, 1)
     )
 
-    # Assemble layout panels cleanly
     items = [hdr_panel, user_panel]
     if thought_panel is not None:
         items.append(thought_panel)
-    items.extend([ai_panel, eq_panel, ftr_panel])
+    items.extend([ai_panel, ftr_panel])
     return Group(*items)
 
 def animate_cyberpunk_voice():
-    """60 FPS Fixed-timestep animation loop with truecolor terminal rendering."""
-    global _status_text, _heard_text, _ai_text, _thoughts_text, _visualizer_mode
+    """
+    Zero-Flicker 20 FPS Terminal Display Loop.
+    20 FPS is optimal for Linux terminals (QTerminal / Alacritty), eliminating tearing
+    while maintaining fluid soundwave animation.
+    """
+    global _status_text, _heard_text, _ai_text, _thoughts_text
     console = Console(force_terminal=True, color_system="truecolor")
     
     t0 = time.perf_counter()
-    last_frame_time = t0
-    last_poll_time = t0
-    TARGET_FPS = 60
+    TARGET_FPS = 20
     FRAME_INTERVAL = 1.0 / TARGET_FPS
 
     # Enable Alternate Screen Buffer and hide cursor
@@ -266,34 +249,23 @@ def animate_cyberpunk_voice():
         with Live(console=console, screen=True, refresh_per_second=TARGET_FPS) as live:
             while not _stop_event.is_set():
                 now = time.perf_counter()
-                dt = now - last_frame_time
-                last_frame_time = now
                 t = now - t0
 
-                # Periodic telemetry polling (every 0.5s)
-                if now - last_poll_time >= 0.5:
-                    _sys_stats.poll()
-                    last_poll_time = now
-
-                frame = build_cyberpunk_frame(
+                frame = build_professional_frame(
                     t=t,
                     status=_status_text,
                     heard=_heard_text,
                     thoughts=_thoughts_text,
-                    ai_text=_ai_text,
-                    dt=dt,
-                    theme=_active_theme,
-                    mode=_visualizer_mode
+                    ai_text=_ai_text
                 )
                 live.update(frame)
 
-                # Precision sleep for constant 60 FPS
                 elapsed = time.perf_counter() - now
                 sleep_time = FRAME_INTERVAL - elapsed
                 if sleep_time > 0:
                     time.sleep(sleep_time)
     finally:
-        # Restore normal terminal screen and cursor
+        # Restore normal terminal screen and cursor cleanly
         sys.stdout.write("\033[?1049l\033[?25h")
         sys.stdout.flush()
 
@@ -326,7 +298,7 @@ def detect_language(text: str) -> str:
     return 'english'
 
 def clean_text_for_tts(text: str) -> str:
-    """Strips Markdown symbols, code blocks, emojis, and stray think tags for TTS voice clarity."""
+    """Strips Markdown symbols, code blocks, emojis, and stray think tags for fast TTS playback."""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = text.replace("<think>", "").replace("</think>", "")
     text = text.replace("*", "").replace("#", "").replace("`", "")
@@ -338,7 +310,7 @@ def tts_download_worker():
     import uuid
     while not _stop_event.is_set():
         try:
-            item = _tts_queue.get(timeout=0.1)
+            item = _tts_queue.get(timeout=0.05)
             if item is None:
                 _tts_queue.task_done()
                 continue
@@ -357,7 +329,7 @@ def tts_download_worker():
             tmp_file = f"/tmp/tts_{uuid.uuid4().hex}.mp3"
             downloaded = False
             
-            # 1. Primary: In-process edge_tts (Neural voice quality)
+            # Primary: Fast in-process edge_tts
             try:
                 import edge_tts
                 async def _save_edge():
@@ -369,7 +341,7 @@ def tts_download_worker():
             except Exception:
                 downloaded = False
                 
-            # 2. Secondary fallback: gTTS
+            # Secondary fallback: gTTS
             if not downloaded:
                 try:
                     from gtts import gTTS
@@ -399,7 +371,7 @@ def audio_play_worker():
     while not _stop_event.is_set():
         original_queue = None
         try:
-            item = _playback_queue.get(timeout=0.1)
+            item = _playback_queue.get(timeout=0.05)
             if item is None:
                 continue
             tmp_file, text, original_queue = item
@@ -409,7 +381,6 @@ def audio_play_worker():
             _is_speaking_audio = True
             
             played = False
-            # 1. Prefer mpg123
             mpg_bin = shutil.which("mpg123")
             if mpg_bin:
                 try:
@@ -423,7 +394,6 @@ def audio_play_worker():
                 except Exception:
                     played = False
                     
-            # 2. Fallback to ffplay
             if not played:
                 ffplay_bin = shutil.which("ffplay")
                 if ffplay_bin:
@@ -438,7 +408,6 @@ def audio_play_worker():
                     except Exception:
                         played = False
                         
-            # 3. Fallback to pygame.mixer
             if not played:
                 try:
                     os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1"
@@ -479,13 +448,14 @@ def wait_for_tts():
     _tts_queue.join()
 
 class VoiceSession:
-    """Manages an active voice assistant session with HUD animation and audio playback."""
+    """Manages an active voice assistant session with professional HUD animation and low-latency audio."""
     def __init__(self):
         self.thread = None
         self.tts_dl_thread = None
         self.tts_play_thread = None
         self.sentence_buffer = ""
         self.last_spoken_len = 0
+        self.first_chunk_sent = False
 
     def start_animation(self, text: str = "Listening..."):
         global _stop_event, _anim_thread, _status_text, _heard_text, _ai_text, _thoughts_text, _is_speaking_audio
@@ -496,6 +466,7 @@ class VoiceSession:
         _is_speaking_audio = False
         self.sentence_buffer = ""
         self.last_spoken_len = 0
+        self.first_chunk_sent = False
         _stop_event.clear()
         
         while not _tts_queue.empty():
@@ -536,10 +507,9 @@ class VoiceSession:
         global _ai_text
         _ai_text = text
 
-    def set_visualizer_mode(self, mode: str):
-        global _visualizer_mode
-        if mode in ("bars", "mirrored", "braille"):
-            _visualizer_mode = mode
+    def toggle_thoughts(self):
+        global _show_thoughts
+        _show_thoughts = not _show_thoughts
 
     def stop_animation(self):
         global _stop_event, _is_speaking_audio

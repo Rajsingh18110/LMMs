@@ -75,8 +75,8 @@ class DemoVoiceApp(CyberpunkVoiceApp):
 
 def main():
     parser = argparse.ArgumentParser(description="LMMs CyberVoice Visualizer Demo")
-    parser.add_argument("--fps", type=int, default=60, help="Target FPS (default: 60)")
-    parser.add_argument("--theme", type=str, default="cyberpunk", choices=["cyberpunk", "synthwave", "matrix", "monochrome"], help="HUD color theme")
+    parser.add_argument("--fps", type=int, default=20, help="Target FPS (default: 20)")
+    parser.add_argument("--theme", type=str, default="executive", choices=["executive", "cyberpunk", "synthwave", "matrix", "monochrome"], help="HUD color theme")
     parser.add_argument("--no-animation", action="store_true", help="Disable animations for slow/SSH connections")
     parser.add_argument("--manual", action="store_true", help="Disable auto-cycle and control manually with Space/V/T/M")
     args = parser.parse_args()

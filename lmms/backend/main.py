@@ -1986,9 +1986,11 @@ def run_cli():
                             # In voice mode: zero thinking, direct conversational answers
                             req_messages = clean_messages
                             req_think = show_thoughts
+                            req_mode = current_mode.strip("/")
                             if voice_mode_active:
                                 req_think = False
-                                voice_instruction = "You are LMMs Voice Assistant. Speak directly and conversationally in the user's language. STRICT: DO NOT use <think> tags. DO NOT output internal reasoning or monologue. Begin immediately with your spoken answer."
+                                req_mode = "fast"
+                                voice_instruction = "You are LMMs Voice Assistant. Speak directly, concisely, and conversationally in the user's language. STRICT: NEVER use <think> tags. NEVER output internal reasoning, analysis, or monologue. Begin immediately with your spoken answer in 1-2 short sentences."
                                 voice_msg_copy = [dict(m) for m in clean_messages]
                                 if voice_msg_copy and voice_msg_copy[0].get("role") == "system":
                                     voice_msg_copy[0]["content"] += f"\n\n{voice_instruction}"
@@ -2003,7 +2005,7 @@ def run_cli():
                                 "temperature": req_temp,
                                 "top_p": req_top_p,
                                 "repetition_penalty": 1.15,
-                                "mode": current_mode.strip("/"),
+                                "mode": req_mode,
                                 "think": req_think
                             }, stream=True, timeout=(10, 3600))
                             resp.raise_for_status()
@@ -2080,21 +2082,46 @@ def run_cli():
                                                         vsession.update_status("Speaking...")
                                                     if not hasattr(vsession, "last_spoken_len"):
                                                         vsession.last_spoken_len = 0
+                                                    if not hasattr(vsession, "first_chunk_sent"):
+                                                        vsession.first_chunk_sent = False
                                                         
                                                     new_spoken = cur_spoken[vsession.last_spoken_len:]
                                                     vsession.last_spoken_len = len(cur_spoken)
                                                     
                                                     vsession.sentence_buffer += new_spoken
-                                                    if any(p in new_spoken for p in [".", "?", "!", "\n", "।"]):
+                                                    buf = vsession.sentence_buffer
+                                                    
+                                                    # Ultra-low latency voice start:
+                                                    # Dispatch first 3-4 words or any punctuation break immediately
+                                                    if not vsession.first_chunk_sent:
                                                         import re
-                                                        parts = re.split(r'([.?!।]\s+|\n)', vsession.sentence_buffer)
-                                                        if len(parts) > 1:
-                                                            completed = "".join(parts[:-1]).strip()
+                                                        clause_match = re.search(r'([,!?:;\n।])', buf)
+                                                        words = buf.split()
+                                                        if clause_match:
+                                                            end_pos = clause_match.end()
+                                                            completed = buf[:end_pos].strip()
                                                             if completed:
                                                                 stream_audio(completed, voice="female")
-                                                            vsession.sentence_buffer = parts[-1]
+                                                                vsession.sentence_buffer = buf[end_pos:].lstrip()
+                                                                vsession.first_chunk_sent = True
+                                                        elif len(words) >= 4:
+                                                            completed = " ".join(words[:4])
+                                                            stream_audio(completed, voice="female")
+                                                            vsession.sentence_buffer = " ".join(words[4:]).lstrip()
+                                                            vsession.first_chunk_sent = True
+                                                    else:
+                                                        # Subsequent sentences and clauses
+                                                        if any(p in new_spoken for p in [".", "?", "!", "\n", "।", ","]):
+                                                            import re
+                                                            parts = re.split(r'([.?!।]\s+|\n|,\s+)', vsession.sentence_buffer)
+                                                            if len(parts) > 1:
+                                                                completed = "".join(parts[:-1]).strip()
+                                                                if completed and len(completed) >= 3:
+                                                                    stream_audio(completed, voice="female")
+                                                                vsession.sentence_buffer = parts[-1].lstrip()
                                                 elif cur_thoughts:
                                                     vsession.update_status("Thinking...")
+
                                             
                                             if not leak_check_done:
                                                 if len(full_reply) < 80:
