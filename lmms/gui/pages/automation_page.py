@@ -31,6 +31,9 @@ from lmms.gui.branding import AutomationBranding
 from lmms.gui.widgets.automation_canvas import AutomationCanvas
 from lmms.gui.widgets.automation_drawer import AutomationDrawer
 from lmms.gui.widgets.automation_inspector import AutomationInspector
+from lmms.gui.widgets.automation_runner import WorkflowExecutionEngine, WorkflowHistoryStore
+from lmms.gui.widgets.automation_executions_view import AutomationExecutionsView
+from lmms.gui.qt import run_coro_safe
 
 
 class AutomationHeader(QFrame):
@@ -252,8 +255,11 @@ class AutomationPage(QWidget):
         self.header = AutomationHeader(self)
         main_layout.addWidget(self.header)
 
-        # 2. Main Canvas & Drawer Splitter
-        self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        # 2. Main Content Stack (Editor / Executions / Evaluations)
+        self.content_stack = QStackedWidget(self)
+
+        # Mode 0: Editor Canvas & Drawer Splitter
+        self.splitter = QSplitter(Qt.Orientation.Horizontal, self.content_stack)
         self.splitter.setHandleWidth(1)
         self.splitter.setStyleSheet("""
             QSplitter::handle {
@@ -277,10 +283,23 @@ class AutomationPage(QWidget):
         self.right_stack.addWidget(self.inspector)    # Index 1: Node Inspector
 
         self.splitter.addWidget(self.right_stack)
-
-        # Set default proportions: canvas takes majority, drawer 360px
         self.splitter.setSizes([900, 360])
-        main_layout.addWidget(self.splitter)
+        self.content_stack.addWidget(self.splitter)   # Index 0: Editor
+
+        # Mode 1: Executions Dashboard
+        self.executions_view = AutomationExecutionsView(parent=self.content_stack)
+        self.content_stack.addWidget(self.executions_view)  # Index 1: Executions
+
+        # Mode 2: Evaluations
+        self.evals_view = QWidget(self.content_stack)
+        evals_layout = QVBoxLayout(self.evals_view)
+        evals_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_eval = QLabel("Evaluation benchmarks & test datasets appear here.")
+        lbl_eval.setStyleSheet("color: #71717a; font-size: 13px;")
+        evals_layout.addWidget(lbl_eval)
+        self.content_stack.addWidget(self.evals_view)  # Index 2: Evaluations
+
+        main_layout.addWidget(self.content_stack)
 
         # Bottom Bar (Logs & quick info)
         self.bottom_bar = QFrame(self)
@@ -312,6 +331,7 @@ class AutomationPage(QWidget):
         self.header.save_workflow_requested.connect(self.save_workflow)
         self.header.clear_workflow_requested.connect(self.clear_workflow)
         self.header.test_workflow_requested.connect(self.run_workflow)
+        self.header.mode_changed.connect(self._on_mode_changed)
 
         # Catalog Drawer signals
         self.drawer.node_selected.connect(self._on_drawer_node_selected)
@@ -411,8 +431,18 @@ class AutomationPage(QWidget):
         self.canvas.update_empty_state()
         self.update_status_bar()
 
+    def _on_mode_changed(self, mode: str):
+        """Switches central view between Editor, Executions dashboard, and Evaluations."""
+        if mode == "Editor":
+            self.content_stack.setCurrentIndex(0)
+        elif mode == "Executions":
+            self.executions_view.reload_history()
+            self.content_stack.setCurrentIndex(1)
+        elif mode == "Evaluations":
+            self.content_stack.setCurrentIndex(2)
+
     def run_workflow(self):
-        """Executes current workflow nodes in topological pipeline order with status animation."""
+        """Executes current workflow nodes via WorkflowExecutionEngine, recording SQLite traces."""
         nodes = self.canvas.graph.all_nodes()
         if not nodes:
             self.lbl_status.setText("Cannot run: workflow has no nodes")
@@ -421,44 +451,33 @@ class AutomationPage(QWidget):
         self.lbl_status.setText(f"Executing {len(nodes)} nodes...")
         self.header.btn_test.setEnabled(False)
 
-        # Order nodes: triggers first, then downstream
+        # Topological sorting: triggers first, then downstream
         triggers = [n for n in nodes if getattr(n, "CATEGORY", "") == "trigger"]
         others = [n for n in nodes if n not in triggers]
-        ordered_nodes = triggers + others
+        pipeline = triggers + others
 
-        # Reset all nodes to idle
-        for n in ordered_nodes:
-            if hasattr(n, "set_status"):
-                n.set_status("idle")
+        # Create or reuse execution runner
+        if not hasattr(self, "runner") or self.runner is None:
+            self.runner = WorkflowExecutionEngine()
 
-        step_idx = 0
+        def _on_step_update(node, status, payload):
+            if hasattr(node, "set_status"):
+                node.set_status(status)
+            if self.inspector.current_node == node:
+                self.inspector.inspect_node(node)
+            self.lbl_status.setText(f"Step {status}: {node.name()}")
 
-        def _step():
-            nonlocal step_idx
-            if step_idx < len(ordered_nodes):
-                cur_node = ordered_nodes[step_idx]
-                if hasattr(cur_node, "set_status"):
-                    cur_node.set_status("running")
-                self.lbl_status.setText(f"Running step {step_idx + 1}/{len(ordered_nodes)}: {cur_node.name()}...")
+        async def _run_async():
+            res = await self.runner.run_pipeline(
+                nodes=pipeline,
+                workflow_name=self.header.get_workflow_name(),
+                on_step_update=_on_step_update,
+            )
+            self.header.btn_test.setEnabled(True)
+            self.lbl_status.setText(
+                f"Workflow completed: {res['status'].upper()} in {res['duration_ms']}ms ({len(pipeline)} steps)"
+            )
+            # Update history table
+            self.executions_view.reload_history()
 
-                def _step_done():
-                    nonlocal step_idx
-                    if hasattr(cur_node, "set_status"):
-                        cur_node.set_status("success")
-                    cur_node.last_output = {
-                        "status": "success",
-                        "node": cur_node.name(),
-                        "step": step_idx + 1,
-                        "data": {"result": f"Executed successfully at step {step_idx + 1}"},
-                    }
-                    if self.inspector.current_node == cur_node:
-                        self.inspector.inspect_node(cur_node)
-                    step_idx += 1
-                    QTimer.singleShot(100, _step)
-
-                QTimer.singleShot(220, _step_done)
-            else:
-                self.header.btn_test.setEnabled(True)
-                self.lbl_status.setText(f"Workflow completed successfully ({len(ordered_nodes)} steps executed)")
-
-        _step()
+        run_coro_safe(_run_async())
