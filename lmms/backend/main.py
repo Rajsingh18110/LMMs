@@ -2187,6 +2187,20 @@ def run_cli():
                     reserve = budget.output_reserve
                     available_for_input = budget.usable_context
 
+                    # RuleRouter Deterministic Execution Graph & Event Bus
+                    try:
+                        from lmms.backend.router.rule_router import RuleRouter
+                        from lmms.backend.events.bus import get_event_bus
+                        eb = get_event_bus()
+                        rule_router = RuleRouter()
+                        exec_graph = rule_router.route(cmd)
+                        eb.emit("execution_graph_planned", {
+                            "intent": intent_res.intent.value,
+                            "steps": [{"agent": s.agent_name, "action": s.action_type} for s in exec_graph.steps]
+                        })
+                    except Exception:
+                        pass
+
                     # Multimodal parsing
                     valid_img_paths = []
                     potential_path = cmd.strip("'\" ")
@@ -2327,10 +2341,21 @@ def run_cli():
                                 except Exception:
                                     pass
                             if "context length" in error_detail.lower() or "too large" in error_detail.lower() or "exceeded" in error_detail.lower():
-                                console.print(f"\n[bold yellow]⚠️ Context Overflow detected! Auto-truncating and retrying...[/bold yellow]")
-                                for idx, m in enumerate(messages):
-                                    if isinstance(m["content"], str) and "<observation>" in m["content"]:
-                                        messages[idx]["content"] = m["content"][:1000] + "\n...[Force Truncated]\n</observation>"
+                                console.print(f"\n[bold yellow]⚠️ Context Overflow detected! Auto-compacting with ContextCompactor...[/bold yellow]")
+                                try:
+                                    from lmms.backend.orchestration.compactor import ContextCompactor
+                                    compactor = ContextCompactor(token_count_fn=count_tokens)
+                                    messages, report = compactor.compact(
+                                        messages,
+                                        usable_budget=int(available_for_input * 0.75),
+                                        current_prompt_tokens=int(available_for_input * 1.1),
+                                        model_name=current_model
+                                    )
+                                    console.print(f"[dim yellow]⚡ Context compacted: saved ~{report.tokens_saved_estimate} tokens (observations pruned: {report.observations_pruned}).[/dim yellow]")
+                                except Exception:
+                                    for idx, m in enumerate(messages):
+                                        if isinstance(m["content"], str) and "<observation>" in m["content"]:
+                                            messages[idx]["content"] = m["content"][:1000] + "\n...[Force Truncated]\n</observation>"
                                 iter_count -= 1
                                 continue
                             console.print(f"\n[bold red]❌ Engine Error: {error_detail}[/bold red]")
@@ -2508,12 +2533,22 @@ def run_cli():
 
                         
                         if iter_count < MAX_ITERATIONS and total_msg_cost > available_for_input * 0.8:
-                            console.print(f"\n[bold yellow]⚠️ Silent generation failure (likely context overflow). Auto-truncating...[/bold yellow]")
-                            for idx, m in enumerate(messages):
-                                if isinstance(m["content"], str) and "<observation>" in m["content"]:
-                                    messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
+                            console.print(f"\n[bold yellow]⚠️ Silent generation failure (context pressure). Auto-compacting with ContextCompactor...[/bold yellow]")
+                            try:
+                                from lmms.backend.orchestration.compactor import ContextCompactor
+                                compactor = ContextCompactor(token_count_fn=count_tokens)
+                                messages, report = compactor.compact(
+                                    messages,
+                                    usable_budget=int(available_for_input * 0.75),
+                                    current_prompt_tokens=total_msg_cost,
+                                    model_name=current_model
+                                )
+                                console.print(f"[dim yellow]⚡ Context compacted: saved ~{report.tokens_saved_estimate} tokens.[/dim yellow]")
+                            except Exception:
+                                for idx, m in enumerate(messages):
+                                    if isinstance(m["content"], str) and "<observation>" in m["content"]:
+                                        messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
                             iter_count -= 1
-
                             continue
 
                         full_reply = "No response from AI."
@@ -2635,6 +2670,11 @@ def run_cli():
                             
                             if check_permission(t_name, t_kwargs, current_workspace, current_permission_level):
                                 console.print(f"\n[bold magenta][Step {iter_count}/{MAX_ITERATIONS}] Running:[/bold magenta] [white]{t_name} {t_kwargs}[/white]")
+                                try:
+                                    from lmms.backend.events.bus import get_event_bus
+                                    get_event_bus().tool_start(t_name, t_kwargs, step=iter_count)
+                                except Exception:
+                                    pass
                                 # Dynamic capability discovery (Scenario G):
                                 if t_name not in selection_res.selected_ids:
                                     selection_res = orchestration_pipeline.selector.discover_additional_tool(
@@ -2708,6 +2748,20 @@ def run_cli():
                                 if t_name != "terminal.run":
                                     record_tool_evidence(req, perm, ToolResult(str(observation), "", 0))
                                     
+                                # Broadcast tool completion and results to live event bus (/panel)
+                                try:
+                                    from lmms.backend.events.bus import get_event_bus
+                                    eb = get_event_bus()
+                                    eb.tool_end(t_name, success=("failed" not in str(observation).lower() and "error" not in str(observation).lower()[:20]), output=str(observation))
+                                    if t_name in ("patch.apply", "apply_patch"):
+                                        eb.patch_applied([t_kwargs.get("path", "")], [], diff=str(observation))
+                                    elif t_name == "terminal.run":
+                                        cmd_str = t_kwargs.get("command", "")
+                                        if any(k in cmd_str for k in ["pytest", "unittest", "cargo test", "npm test", "go test"]):
+                                            eb.test_result(cmd_str, exit_code, exit_code == 0, output=str(observation))
+                                except Exception:
+                                    pass
+
                                 # Truncate observation for display
                                 disp_obs = str(observation)
                                 if len(disp_obs) > 500:

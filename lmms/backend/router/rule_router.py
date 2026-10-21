@@ -29,7 +29,7 @@ class RuleRouter:
             graph.add_step(agent_name="TesterAgent", action_type="VerifyCode", dependencies=["CodingAgent"])
         elif detected_intent == IntentType.WORKSPACE_FILE_OPS or norm in ("file_ops", "files", "workspace"):
             graph.add_step(agent_name="CodingAgent", action_type="FileOps")
-        elif detected_intent == IntentType.TERMINAL or norm in ("terminal", "bash", "command"):
+        elif norm in ("terminal", "bash", "command"):
             graph.add_step(agent_name="CodingAgent", action_type="TerminalRun")
         elif detected_intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH) or norm in ("search", "research"):
             graph.add_step(agent_name="ResearchAgent", action_type="DeepResearch")
