@@ -455,7 +455,7 @@ class SystemStats:
         self.ram_history.append(self.cur_ram)
         self.net_history.append(self.cur_down_kb)
 
-    def render_sparkline(self, values: deque, max_val: float = 100.0, theme: Dict[str, str] = None) -> str:
+    def render_sparkline(self, values: deque, max_val: float = 100.0, theme: Optional[Dict[str, str]] = None) -> str:
         """Returns colored unicode sparkline from history values."""
         theme = theme or Theme.CYBERPUNK
         parts = []

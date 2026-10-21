@@ -9,7 +9,7 @@ import queue
 import re
 import asyncio
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import psutil
 
 from rich.console import Console, Group
@@ -80,7 +80,7 @@ def build_cyberpunk_frame(
     thoughts: str,
     ai_text: str,
     dt: float = 0.016,
-    theme: dict = None,
+    theme: Optional[Dict[str, str]] = None,
     mode: str = "mirrored"
 ) -> Group:
     """
