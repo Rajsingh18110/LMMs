@@ -430,6 +430,16 @@ class ApplyPatchEngine:
                 }
 
             # Commit changes to disk atomically
+            try:
+                from lmms.backend.context.checkpoint import get_turn_checkpoint_manager
+                turn_mgr = get_turn_checkpoint_manager(self.workspace_root)
+                for p in staged_files.keys():
+                    turn_mgr.record_pre_state(p)
+                for p in files_to_delete:
+                    turn_mgr.record_pre_state(p)
+            except Exception:
+                pass
+
             written_files = []
             for path, content in staged_files.items():
                 os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

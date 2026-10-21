@@ -29,6 +29,7 @@ test_*.py
 !tests/test_app_server_hardening.py
 !tests/test_mcp_gui.py
 !tests/test_codex_parity.py
+!tests/test_undo_checkpoint.py
 
 patch_*.py
 build_*.py

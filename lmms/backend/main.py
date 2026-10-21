@@ -2118,37 +2118,27 @@ def run_cli():
                     console.print("[red]Usage: lmms orchestrate <task>[/red]")
                 
             elif base_cmd in ["/undo", "/redo"]:
-                if current_workspace == "None":
-                    console.print("[red]No active workspace. Git version control requires an active workspace.[/red]")
-                    continue
-                if not os.path.exists(os.path.join(current_workspace, ".git")):
-                    console.print("[red]Git is not initialized in this workspace.[/red]")
-                    continue
-                
-                if len(parts) > 2:
-                    flag = parts[1]
-                    target = parts[2]
-                    if base_cmd == "/undo":
-                        if flag in ["-f", "-wf"]:
-                            res = subprocess.run(["git", "checkout", "HEAD~1", "--", target], cwd=current_workspace, capture_output=True, text=True)
-                            if res.returncode == 0:
-                                console.print(f"[green]Undid last change for {target}[/green]")
-                            else:
-                                console.print(f"[red]Undo failed: {res.stderr}[/red]")
-                        else:
-                            console.print("Usage: /undo -f <file> or /undo -wf <folder>")
-                    elif base_cmd == "/redo":
-                        # Simplistic redo logic for AI rollback context
-                        if flag in ["-f", "-wf"]:
-                            res = subprocess.run(["git", "checkout", "HEAD", "--", target], cwd=current_workspace, capture_output=True, text=True)
-                            if res.returncode == 0:
-                                console.print(f"[green]Redid last change for {target}[/green]")
-                            else:
-                                console.print(f"[red]Redo failed: {res.stderr}[/red]")
-                        else:
-                            console.print("Usage: /redo -f <file> or /redo -wf <folder>")
+                from lmms.backend.context.checkpoint import get_turn_checkpoint_manager
+                ws_root = current_workspace if current_workspace != "None" else os.getcwd()
+                turn_mgr = get_turn_checkpoint_manager(ws_root)
+                target_file = None
+                if len(parts) > 2 and parts[1] in ["-f", "--file"]:
+                    target_file = parts[2]
+                elif len(parts) > 1 and not parts[1].startswith("-"):
+                    target_file = parts[1]
+
+                if base_cmd == "/undo":
+                    ok, msg = turn_mgr.undo(target_file=target_file)
+                    if ok:
+                        console.print(f"[bold green]✓ {msg}[/bold green]")
+                    else:
+                        console.print(f"[yellow]{msg}[/yellow]")
                 else:
-                    console.print(f"Usage: {base_cmd} -f <file> or {base_cmd} -wf <folder>")
+                    ok, msg = turn_mgr.redo(target_file=target_file)
+                    if ok:
+                        console.print(f"[bold green]✓ {msg}[/bold green]")
+                    else:
+                        console.print(f"[yellow]{msg}[/yellow]")
 
             elif base_cmd.startswith("/"):
                 if "/" in base_cmd[1:] or os.path.exists(cmd.strip("'\" ")):
@@ -2240,6 +2230,15 @@ def run_cli():
                     console.print(f"[red]Error preparing messages: {e}[/red]")
                     continue
                     
+                # Track turn snapshot for atomic, non-destructive undo/redo
+                try:
+                    from lmms.backend.context.checkpoint import get_turn_checkpoint_manager
+                    ws_root = current_workspace if current_workspace != "None" else os.getcwd()
+                    turn_mgr = get_turn_checkpoint_manager(ws_root)
+                    turn_mgr.start_turn(turn_id=str(uuid.uuid4())[:8], summary=cmd[:60])
+                except Exception:
+                    turn_mgr = None
+
                 reply = ""
                 full_reply = ""
                 executed_tool_calls = []
@@ -2836,6 +2835,13 @@ def run_cli():
                             _s_store.add_message(current_chat_id, role="user", content=u_msg.get("content", ""))
                         if a_msg.get("role") == "assistant":
                             _s_store.add_message(current_chat_id, role="assistant", content=a_msg.get("content", ""))
+                except Exception:
+                    pass
+
+                # Finalize turn snapshot
+                try:
+                    if turn_mgr is not None:
+                        turn_mgr.end_turn()
                 except Exception:
                     pass
                     

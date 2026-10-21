@@ -18,6 +18,14 @@ def get_workspace_dir() -> str:
 def enforce_boundary(path: str):
     return require_workspace_path(path, get_workspace_dir())
 
+def _record_pre_state(path: str):
+    try:
+        from lmms.backend.context.checkpoint import get_turn_checkpoint_manager
+        ws = get_workspace_dir()
+        get_turn_checkpoint_manager(ws).record_pre_state(path)
+    except Exception:
+        pass
+
 def canonical_file_read(path: str) -> Dict[str, Any]:
     enforce_boundary(path)
     if not os.path.exists(path):
@@ -37,6 +45,7 @@ def canonical_file_write(path: str, content: str) -> Dict[str, Any]:
                 "error": f"SyntaxError on line {e.lineno}: {e.msg}. File was NOT saved.",
                 "path": path
             }
+    _record_pre_state(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -252,6 +261,9 @@ class FileTool:
                         f"File was NOT modified. Please fix syntax or indentation and retry."
                     )
 
+            # Record pre-modification state for non-destructive /undo
+            _record_pre_state(path)
+
             # Write changes
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new_content)
@@ -301,6 +313,7 @@ class FileTool:
                     f"File was NOT modified. Please ensure proper Python syntax before writing."
                 )
 
+        _record_pre_state(path)
         try:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
@@ -366,6 +379,7 @@ class FileTool:
         if not confirm:
             return f"Delete operation requires confirm=True to execute. Path: {path}"
 
+        _record_pre_state(path)
         try:
             if os.path.isfile(path):
                 os.remove(path)

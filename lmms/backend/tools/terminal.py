@@ -29,7 +29,7 @@ def get_workspace_dir() -> str:
     except Exception:
         return base_ws
 
-def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandboxed: bool = False) -> Dict[str, Any]:
+def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandboxed: bool = True) -> Dict[str, Any]:
     # Check if dangerous
     for blocked in BLOCKED_COMMANDS:
         if blocked in command:
@@ -99,7 +99,7 @@ class TerminalTool:
     def __init__(self, agent: Any = None):
         self.agent = agent
 
-    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False, sandboxed=False) -> Any:
+    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False, sandboxed: bool = True) -> Any:
         # Check if dangerous
         for blocked in BLOCKED_COMMANDS:
             if blocked in command:
