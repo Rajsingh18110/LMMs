@@ -47,7 +47,10 @@ def register_default_tools():
         registry.register(ToolDefinition(name=t, category="network", risk_level="medium", requires_network=True, requires_target_authorization=True))
 
     # Developer
-    for t in ["git", "python", "python3", "pip", "node", "npm", "npx", "cargo", "rustc", "gcc", "make", "cmake", "g++", "go", "php", "ruby"]:
+    for t in [
+        "git", "python", "python3", "pip", "pip3", "node", "npm", "npx", "yarn", "pnpm", "bun", "deno",
+        "flutter", "dart", "java", "javac", "gradle", "mvn", "cargo", "rustc", "gcc", "g++", "make", "cmake", "go", "php", "ruby"
+    ]:
         registry.register(ToolDefinition(name=t, category="developer", risk_level="low"))
 
     # Containers

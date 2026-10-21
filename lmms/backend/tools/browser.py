@@ -311,7 +311,7 @@ class BrowserTool:
                 return {
                     title: document.title,
                     url: window.location.href,
-                    elements: items.slice(0, 80)
+                    elements: items.slice(0, 35)
                 };
             })()
             """

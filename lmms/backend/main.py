@@ -396,36 +396,52 @@ class ContextManager:
             res += f"- {k}: {v}\n"
         return res
         
-    def check_and_prune(self, current_tokens: int, messages: list, count_tokens_fn, current_model: str) -> list:
+    def check_and_prune(self, current_tokens: int, messages: list, count_tokens_fn, current_model: str, max_allowed: int = None) -> list:
+        limit = max_allowed if max_allowed is not None and max_allowed > 0 else self.usable_context
         # Dynamic check
-        if current_tokens <= self.usable_context:
+        if current_tokens <= limit:
             return messages
             
-        print(f"\n[dim]Context limit nearing (Tokens: {current_tokens}/{self.usable_context}), pruning old observations...[/dim]")
+        print(f"\n[dim]Context limit nearing (Tokens: {current_tokens}/{limit}), pruning observations and conversation history...[/dim]")
         
-        while current_tokens > self.usable_context:
+        # Pass 1: Prune intermediate tool observations
+        while current_tokens > limit:
             obs_idx = -1
             for i, m in enumerate(messages):
-                if m["role"] == "user" and "<observation>" in str(m.get("content", "")):
+                if m.get("role") == "user" and "<observation>" in str(m.get("content", "")):
                     obs_idx = i
                     break
                     
             if obs_idx != -1:
-                content = messages[obs_idx]["content"]
+                content = str(messages[obs_idx].get("content", ""))
                 state = ObservationProcessor.extract_state(content, "")
                 self.update_working_memory(state)
                 
-                if obs_idx > 0 and messages[obs_idx-1]["role"] == "assistant":
-                    messages.pop(obs_idx)
-                    messages.pop(obs_idx-1)
+                # Truncate aggressively to essential snippet first
+                if len(content) > 300:
+                    messages[obs_idx]["content"] = "<observation>\n...[Earlier tool observation summarized to save context window]...\n</observation>"
                 else:
-                    messages.pop(obs_idx)
+                    if obs_idx > 0 and messages[obs_idx-1].get("role") == "assistant":
+                        messages.pop(obs_idx)
+                        messages.pop(obs_idx-1)
+                    else:
+                        messages.pop(obs_idx)
                 
-                # Recompute
+                # Recompute tokens
                 current_tokens = sum(count_tokens_fn(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in messages)
             else:
                 break
-                
+
+        # Pass 2: If still overflowing, prune earliest non-system conversation turns
+        while current_tokens > limit and len(messages) > 2:
+            # Keep system prompt at [0] and latest user prompt at [-1]
+            prune_idx = 1
+            if messages[prune_idx].get("role") != "system":
+                messages.pop(prune_idx)
+                current_tokens = sum(count_tokens_fn(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in messages)
+            else:
+                break
+
         return messages
 
 
@@ -1963,7 +1979,7 @@ def run_cli():
 
                             # Prune context if exceeded
                             tok_count = sum(count_tokens(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in clean_messages)
-                            clean_messages = context_manager.check_and_prune(tok_count, clean_messages, count_tokens, current_model)
+                            clean_messages = context_manager.check_and_prune(tok_count, clean_messages, count_tokens, current_model, max_allowed=available_for_input)
 
                             # Apply AI Mode settings
                             req_temp = 0.5
@@ -2059,7 +2075,15 @@ def run_cli():
                                         try:
                                             chunk = json.loads(data_str)
                                             if "error" in chunk:
-                                                full_reply += f"\n\n❌ **Engine Error:** {chunk['error']}"
+                                                err_text = str(chunk["error"])
+                                                if "context" in err_text.lower() or "exceed" in err_text.lower():
+                                                    console.print(f"\n[bold yellow]⚠️ Context window exceeded during streaming! Auto-truncating earlier turns and retrying...[/bold yellow]")
+                                                    # Prune aggressively and retry
+                                                    messages = context_manager.check_and_prune(tok_count, messages, count_tokens, current_model, max_allowed=int(available_for_input * 0.75))
+                                                    iter_count -= 1
+                                                    full_reply = ""
+                                                    break
+                                                full_reply += f"\n\n❌ **Engine Error:** {err_text}"
                                                 if live_view:
                                                     live_view.update(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False), refresh=True)
                                                 else:
