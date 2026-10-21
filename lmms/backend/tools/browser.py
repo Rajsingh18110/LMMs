@@ -15,6 +15,7 @@ try:
     from scipy.interpolate import interp1d
 except ImportError:
     np = None
+    interp1d = None
 class BrowserTool:
     def __init__(self):
         self.playwright = None
@@ -533,6 +534,8 @@ class BrowserTool:
         
         # Interpolate
         try:
+            if np is None or interp1d is None:
+                raise ImportError("numpy or scipy not available")
             t = np.linspace(0, 1, len(points_x))
             t_new = np.linspace(0, 1, random.randint(25, 45))
             f_x = interp1d(t, points_x, kind='quadratic')

@@ -82,7 +82,7 @@ class UniversalPyTorchRuntime:
             console.print(f"[dim]Loading Universal PyTorch Pipeline for: {model_id} (Task: {self.pipeline_tag})...[/dim]")
             
             # Use device_map="auto" to handle multi-GPU or CPU automatically
-            self._pipe = pipeline(model=model_id, device_map="auto")
+            self._pipe = pipeline(model=model_id, device_map="auto")  # type: ignore
             console.print(f"[bold green]Successfully loaded {model_id} via Universal Pipeline (Task: {self._pipe.task})[/bold green]")
             return True
         except Exception as e:

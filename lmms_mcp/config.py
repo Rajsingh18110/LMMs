@@ -101,6 +101,7 @@ class MCPServerConfig:
     enabled: bool = True
     sandbox: str = "none"  # "none" | "bwrap" | "restricted"
     permissions: Dict[str, str] = field(default_factory=dict)  # {"tool_name": "allow"|"ask"|"deny"}
+    share_on_lan: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -123,6 +124,7 @@ class MCPServerConfig:
             enabled=data.get("enabled", True),
             sandbox=data.get("sandbox", "none"),
             permissions=data.get("permissions", {}),
+            share_on_lan=bool(data.get("share_on_lan", False)),
         )
 
 
@@ -189,6 +191,7 @@ class MCPConfig:
         env: Optional[Dict[str, str]] = None,
         sandbox: str = "none",
         enabled: bool = True,
+        share_on_lan: bool = False,
     ) -> MCPServerConfig:
         """Adds or updates a server configuration."""
         name = name.strip()
@@ -204,6 +207,7 @@ class MCPConfig:
                 env=env,
                 sandbox=sandbox,
                 enabled=enabled,
+                share_on_lan=share_on_lan,
             )
         else:
             config = MCPServerConfig(
@@ -213,11 +217,20 @@ class MCPConfig:
                 env=env,
                 sandbox=sandbox,
                 enabled=enabled,
+                share_on_lan=share_on_lan,
             )
 
         self.servers[name] = config
         self.save()
         return config
+
+    def set_server_share_on_lan(self, name: str, share: bool) -> bool:
+        """Sets LAN sharing status for an MCP server."""
+        if name in self.servers:
+            self.servers[name].share_on_lan = share
+            self.save()
+            return True
+        return False
 
     def remove_server(self, name: str) -> bool:
         """Removes a server by name."""

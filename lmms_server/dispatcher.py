@@ -563,6 +563,33 @@ class MethodDispatcher:
                 PERMISSION_DENIED,
                 f"Execution of tool '{tool_name}' on server '{server_name}' is denied by permission policy",
             )
+        elif tool_policy == "ask":
+            prompt_id = uuid.uuid4().hex[:8]
+            fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+            self.pending_permissions[prompt_id] = fut
+
+            await emit_notification(
+                "tool.permission_request",
+                {
+                    "prompt_id": prompt_id,
+                    "server_name": server_name,
+                    "tool_name": tool_name,
+                    "arguments": redact_secrets(arguments),
+                    "tier": "ask",
+                },
+            )
+
+            try:
+                approved = await asyncio.wait_for(fut, timeout=self.tool_approval_timeout)
+            except (asyncio.TimeoutError, TimeoutError):
+                approved = False
+                self.pending_permissions.pop(prompt_id, None)
+
+            if not approved:
+                raise JsonRpcError(
+                    PERMISSION_DENIED,
+                    f"Execution of tool '{tool_name}' on server '{server_name}' was denied or timed out",
+                )
 
         if isinstance(arguments, dict) and "command" in arguments and isinstance(arguments["command"], str):
             policy_res = default_runner.policy.evaluate(arguments["command"])
@@ -602,6 +629,9 @@ class MethodDispatcher:
                 status=status,
                 result_summary=summary,
                 session_id=params.get("session_id"),
+                origin=params.get("origin", "local"),
+                client_peer_id=params.get("client_peer_id"),
+                client_ip=params.get("client_ip"),
             )
 
             # Emit mcp.tool_call notification
@@ -633,6 +663,7 @@ class MethodDispatcher:
         env = params.get("env", {})
         sandbox = params.get("sandbox", "none")
         enabled = params.get("enabled", True)
+        share_on_lan = bool(params.get("share_on_lan", False))
 
         cfg = self.mcp_config.add_server(
             name=name,
@@ -642,6 +673,7 @@ class MethodDispatcher:
             env=env,
             sandbox=sandbox,
             enabled=enabled,
+            share_on_lan=share_on_lan,
         )
 
         await emit_notification(
@@ -702,6 +734,8 @@ class MethodDispatcher:
             server.sandbox = params["sandbox"]
         if "enabled" in params:
             server.enabled = bool(params["enabled"])
+        if "share_on_lan" in params:
+            server.share_on_lan = bool(params["share_on_lan"])
 
         self.mcp_config.save()
         await emit_notification(
@@ -865,10 +899,11 @@ class MethodDispatcher:
         return {"server": server, "tool": tool, "policy": policy}
 
     async def handle_audit_list(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Returns the most recent audit records from ~/.lmms/audit.jsonl."""
-        limit = int(params.get("limit", 100))
+        """Returns audit records from ~/.lmms/audit.jsonl with pagination."""
+        limit = int(params.get("limit", 200))
+        offset = int(params.get("offset", 0))
         server = params.get("server")
-        return default_audit_logger.view(limit=limit, server=server)
+        return default_audit_logger.view(limit=limit, offset=offset, server=server)
 
     async def handle_sandbox_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Returns detailed isolation and security status of sandbox backends."""
@@ -890,8 +925,30 @@ class MethodDispatcher:
         }
 
     async def handle_sandbox_policy_set(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Updates ExecPolicy rules."""
+        """Updates ExecPolicy rules with validation and weakening detection."""
+        from lmms_sandbox.policy import detect_weakening, validate_policy_dict
+
+        # 1. Validate structure & schema
+        is_valid, err_msg = validate_policy_dict(params)
+        if not is_valid:
+            raise JsonRpcError(INVALID_PARAMS, f"Invalid sandbox policy: {err_msg}")
+
         policy = default_runner.policy
+        old_policy_dict = await self.handle_sandbox_policy_get({})
+
+        # 2. Check for security weakening
+        force = bool(params.get("force", False))
+        weakening_reasons = detect_weakening(old_policy_dict, params)
+
+        if weakening_reasons and not force:
+            return {
+                "warning": True,
+                "weakening_reasons": weakening_reasons,
+                "message": "Policy weakens protection. Pass force=True to confirm.",
+                "policy": old_policy_dict,
+            }
+
+        # 3. Apply updates
         if "default_action" in params:
             val = str(params["default_action"]).lower()
             if val in ("allow", "ask", "deny"):
@@ -904,7 +961,17 @@ class MethodDispatcher:
             policy.isolate_home = bool(params["isolate_home"])
         if "rules" in params and isinstance(params["rules"], list):
             policy.rules = list(params["rules"])
-        return await self.handle_sandbox_policy_get({})
+        if "writable_paths" in params and isinstance(params["writable_paths"], list):
+            policy.writable_paths = list(params["writable_paths"])
+        if "read_only_paths" in params and isinstance(params["read_only_paths"], list):
+            policy.read_only_paths = list(params["read_only_paths"])
+        if "hidden_paths" in params and isinstance(params["hidden_paths"], list):
+            policy.hidden_paths = list(params["hidden_paths"])
+
+        res = await self.handle_sandbox_policy_get({})
+        if weakening_reasons:
+            res["weakening_applied"] = weakening_reasons
+        return res
 
     async def handle_worktree_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Returns worktree isolation status for the given repository path."""

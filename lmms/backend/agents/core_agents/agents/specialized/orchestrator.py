@@ -155,10 +155,10 @@ class OrchestratorAgent(BaseAgent):
                                 chunk += '\n'
                             yield f"  [Researcher] {chunk}"
                     else:
-                        res = researcher.execute(context)
-                        if not res.endswith('\n'):
-                            res += '\n'
-                        yield f"  [Researcher] {res}"
+                        res_str = str(researcher.execute(context))
+                        if not res_str.endswith('\n'):
+                            res_str += '\n'
+                        yield f"  [Researcher] {res_str}"
                     any_step_success = True
                 except ImportError:
                     yield "  [Error] ResearchAgent could not be loaded.\n"

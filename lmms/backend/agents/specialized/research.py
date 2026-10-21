@@ -88,6 +88,7 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                 "stream": False
             }
             
+            llm_text = ""
             try:
                 resp = requests.post("http://localhost:11435/v1/chat/completions", json=payload, timeout=120)
                 resp.raise_for_status()

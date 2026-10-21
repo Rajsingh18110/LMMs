@@ -10,6 +10,7 @@ Includes:
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pyqtgraph as pg
@@ -719,24 +720,95 @@ class LiveCallLogWidget(QWidget):
         splitter.setSizes([220, 120])
         layout.addWidget(splitter)
 
+        # Pagination & Status Bar
+        p_row = QHBoxLayout()
+        self.record_count_lbl = QLabel("Showing 0 records")
+        self.record_count_lbl.setStyleSheet("color: #8b949e; font-size: 11px;")
+        p_row.addWidget(self.record_count_lbl)
+
+        p_row.addStretch()
+
+        self.load_more_btn = QPushButton("⬇️ Load More (200 older records)")
+        self.load_more_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #21262d;
+                color: #58a6ff;
+                border: 1px solid #30363d;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #30363d;
+            }
+            QPushButton:disabled {
+                color: #484f58;
+                border-color: #21262d;
+            }
+        """)
+        self.load_more_btn.clicked.connect(self.load_more)
+        p_row.addWidget(self.load_more_btn)
+
+        layout.addLayout(p_row)
+
     def load_history(self) -> None:
-        """Loads call history from app-server audit log."""
+        """Loads call history from app-server audit log (most recent page)."""
+        self.page_size = 200
         async def _fetch():
             try:
-                entries = await self.client.call("audit.list", {"limit": 100})
-                self.entries = entries or []
+                entries = await self.client.call("audit.list", {"limit": self.page_size, "offset": 0})
+                self.entries = list(reversed(entries or []))
                 self._update_server_filter_options()
-                self._render_table(self.entries)
+                self._apply_filters()
                 self._update_chart()
+                self._update_pagination_ui(len(entries or []))
             except Exception:
-                # Fallback to local ~/.lmms/audit.jsonl
                 from lmms_server.audit import default_audit_logger
-                self.entries = default_audit_logger.view(limit=100)
+                entries = default_audit_logger.view(limit=self.page_size, offset=0)
+                self.entries = list(reversed(entries or []))
                 self._update_server_filter_options()
-                self._render_table(self.entries)
+                self._apply_filters()
                 self._update_chart()
+                self._update_pagination_ui(len(entries or []))
 
         run_coro_safe(_fetch())
+
+    def load_more(self) -> None:
+        """Fetches the next batch of older records from audit log."""
+        self.load_more_btn.setEnabled(False)
+        self.load_more_btn.setText("⏳ Loading older records...")
+        offset = len(self.entries)
+
+        async def _fetch():
+            try:
+                older = await self.client.call("audit.list", {"limit": self.page_size, "offset": offset})
+                if older:
+                    self.entries.extend(reversed(older))
+                    self._update_server_filter_options()
+                    self._apply_filters()
+                self._update_pagination_ui(len(older or []))
+            except Exception:
+                from lmms_server.audit import default_audit_logger
+                older = default_audit_logger.view(limit=self.page_size, offset=offset)
+                if older:
+                    self.entries.extend(reversed(older))
+                    self._update_server_filter_options()
+                    self._apply_filters()
+                self._update_pagination_ui(len(older or []))
+            finally:
+                self.load_more_btn.setEnabled(True)
+                self.load_more_btn.setText("⬇️ Load More (200 older records)")
+
+        run_coro_safe(_fetch())
+
+    def _update_pagination_ui(self, last_fetched_count: int) -> None:
+        self.record_count_lbl.setText(f"Showing {len(self.entries)} records")
+        if last_fetched_count < getattr(self, "page_size", 200):
+            self.load_more_btn.setEnabled(False)
+            self.load_more_btn.setText("✔ All records loaded")
+        else:
+            self.load_more_btn.setEnabled(True)
+            self.load_more_btn.setText("⬇️ Load More (200 older records)")
 
     def add_call_entry(self, entry: Dict[str, Any]) -> None:
         """Real-time slot for mcp.tool_call notification."""
@@ -759,30 +831,34 @@ class LiveCallLogWidget(QWidget):
         self.server_filter.blockSignals(False)
 
     def _render_table(self, rows: List[Dict[str, Any]]) -> None:
-        self.table.setRowCount(len(rows))
-        for r_idx, entry in enumerate(rows):
-            ts = entry.get("timestamp", "")
-            if "T" in ts:
-                ts = ts.split("T")[-1].rstrip("Z")
-            s = entry.get("server", "")
-            t = entry.get("tool", "")
-            st = entry.get("status", "unknown")
-            dur = str(entry.get("duration_ms", 0.0))
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(rows))
+            for r_idx, entry in enumerate(rows):
+                ts = entry.get("timestamp", "")
+                if "T" in ts:
+                    ts = ts.split("T")[-1].rstrip("Z")
+                s = entry.get("server", "")
+                t = entry.get("tool", "")
+                st = entry.get("status", "unknown")
+                dur = str(entry.get("duration_ms", 0.0))
 
-            it_ts = QTableWidgetItem(ts)
-            it_s = QTableWidgetItem(s)
-            it_t = QTableWidgetItem(t)
-            it_st = QTableWidgetItem("🟢 success" if st == "success" else "🔴 error")
-            it_dur = QTableWidgetItem(f"{dur} ms")
+                it_ts = QTableWidgetItem(ts)
+                it_s = QTableWidgetItem(s)
+                it_t = QTableWidgetItem(t)
+                it_st = QTableWidgetItem("🟢 success" if st == "success" else "🔴 error")
+                it_dur = QTableWidgetItem(f"{dur} ms")
 
-            # Store entry data
-            it_ts.setData(Qt.ItemDataRole.UserRole, entry)
+                # Store entry data
+                it_ts.setData(Qt.ItemDataRole.UserRole, entry)
 
-            self.table.setItem(r_idx, 0, it_ts)
-            self.table.setItem(r_idx, 1, it_s)
-            self.table.setItem(r_idx, 2, it_t)
-            self.table.setItem(r_idx, 3, it_st)
-            self.table.setItem(r_idx, 4, it_dur)
+                self.table.setItem(r_idx, 0, it_ts)
+                self.table.setItem(r_idx, 1, it_s)
+                self.table.setItem(r_idx, 2, it_t)
+                self.table.setItem(r_idx, 3, it_st)
+                self.table.setItem(r_idx, 4, it_dur)
+        finally:
+            self.table.setUpdatesEnabled(True)
 
     def _update_chart(self) -> None:
         pts = [float(e.get("duration_ms", 0.0)) for e in reversed(self.entries[:40])]
@@ -1288,22 +1364,41 @@ class SandboxWidget(QWidget):
         h_paths = [p.strip() for p in self.hidden_paths_edit.toPlainText().splitlines() if p.strip()]
 
         async def _do():
+            payload = {
+                "default_action": act,
+                "deny_network": net,
+                "isolate_home": home,
+                "writable_paths": w_paths,
+                "read_only_paths": ro_paths,
+                "hidden_paths": h_paths,
+            }
             try:
-                await self.client.call(
-                    "sandbox.policy.set",
-                    {
-                        "default_action": act,
-                        "deny_network": net,
-                        "isolate_home": home,
-                        "writable_paths": w_paths,
-                        "read_only_paths": ro_paths,
-                        "hidden_paths": h_paths,
-                    },
-                )
+                res = await self.client.call("sandbox.policy.set", payload)
+                if isinstance(res, dict) and res.get("warning"):
+                    reasons = res.get("weakening_reasons", [])
+                    reasons_str = "\n• " + "\n• ".join(reasons)
+                    if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or getattr(self, "_auto_confirm_weakening", False):
+                        btn = QMessageBox.StandardButton.Yes
+                    else:
+                        btn = QMessageBox.warning(
+                            self,
+                            "Security Warning: Policy Weakened",
+                            f"The requested changes reduce sandbox isolation:\n{reasons_str}\n\nAre you sure you want to apply these changes?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                        )
+                    if btn != QMessageBox.StandardButton.Yes:
+                        self.save_policy_btn.setText("💾 Save Sandbox Policy")
+                        return
+
+                    payload["force"] = True
+                    res = await self.client.call("sandbox.policy.set", payload)
+
                 self.save_policy_btn.setText("✔ Policy Saved!")
                 from lmms.gui.qt import QTimer
                 QTimer.singleShot(1500, lambda: self.save_policy_btn.setText("💾 Save Sandbox Policy"))
             except Exception as e:
-                QMessageBox.warning(self, "Save Failed", str(e))
+                if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                    QMessageBox.warning(self, "Invalid Policy", f"Failed to save policy: {e}\nPrevious policy was preserved.")
+                self.save_policy_btn.setText("💾 Save Sandbox Policy")
 
         run_coro_safe(_do())

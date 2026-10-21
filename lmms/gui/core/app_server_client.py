@@ -7,8 +7,13 @@ Dispatches server notifications as Qt signals.
 from __future__ import annotations
 
 import asyncio
+import atexit
+import fcntl
 import json
 import os
+import subprocess
+import sys
+import time
 from typing import Any, Callable, Dict, Optional
 
 from lmms.gui.qt import QObject, pyqtSignal
@@ -39,27 +44,78 @@ class GUIAppServerClient(QObject):
         self._reconnect_task: Optional[asyncio.Task[None]] = None
         self.auto_reconnect_enabled = True
         self.mock_dispatcher: Optional[Any] = None
+        self._spawned_process: Optional[subprocess.Popen[Any]] = None
 
     async def ensure_server_running(self) -> bool:
-        """Starts app-server background process if not already running."""
+        """
+        Starts app-server background process if not already running.
+        Uses an atomic lock file to prevent race conditions when multiple GUI instances start simultaneously.
+
+        Lifecycle Rule:
+        If this GUI instance spawns the server process, that process is owned by this instance
+        and will be terminated cleanly on GUI exit (via close() / atexit).
+        If the server was already running before this GUI instance connected, the GUI leaves
+        its lifecycle untouched.
+        """
+        # 1. Fast check if already running and connectable
         if os.path.exists(self.socket_path):
             if await self.connect():
                 return True
 
-        import subprocess
-        import sys
-
-        cmd = [sys.executable, "-m", "lmms_server.server", "--socket", self.socket_path]
+        lock_path = f"{self.socket_path}.spawn.lock"
         try:
-            subprocess.Popen(cmd, start_new_session=True)
-            for _ in range(20):
-                await asyncio.sleep(0.1)
-                if os.path.exists(self.socket_path):
-                    if await self.connect():
-                        return True
-        except Exception:
-            pass
+            lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError:
+            lock_fd = None
+
+        try:
+            if lock_fd is not None:
+                # Acquire exclusive lock, waiting if another GUI instance is currently spawning
+                await asyncio.to_thread(fcntl.flock, lock_fd, fcntl.LOCK_EX)
+
+            # Re-check under lock: another GUI window might have just spawned it
+            if os.path.exists(self.socket_path):
+                if await self.connect():
+                    return True
+
+            cmd = [sys.executable, "-m", "lmms_server.server", "--socket", self.socket_path]
+            try:
+                proc = subprocess.Popen(cmd, start_new_session=True)
+                self._spawned_process = proc
+                atexit.register(self.shutdown_spawned_server)
+
+                for _ in range(30):
+                    await asyncio.sleep(0.1)
+                    if os.path.exists(self.socket_path):
+                        if await self.connect():
+                            return True
+            except Exception:
+                pass
+        finally:
+            if lock_fd is not None:
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                    os.close(lock_fd)
+                except OSError:
+                    pass
+
         return False
+
+    def shutdown_spawned_server(self) -> None:
+        """Terminates server process if it was spawned by this GUI client instance."""
+        proc = self._spawned_process
+        if proc is not None:
+            self._spawned_process = None
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=1.0)
+                except Exception:
+                    pass
 
     async def connect(self) -> bool:
         """Establishes connection to the app-server Unix socket."""
@@ -187,7 +243,7 @@ class GUIAppServerClient(QObject):
         return await fut
 
     async def close(self) -> None:
-        """Disconnects client cleanly."""
+        """Disconnects client cleanly and shuts down spawned server if owned."""
         self._is_running = False
         if self._listener_task and not self._listener_task.done():
             self._listener_task.cancel()
@@ -197,6 +253,7 @@ class GUIAppServerClient(QObject):
                 await self.writer.wait_closed()
             except Exception:
                 pass
+        self.shutdown_spawned_server()
         self.disconnected.emit()
 
 

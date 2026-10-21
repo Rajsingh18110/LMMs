@@ -403,3 +403,7 @@ def run_app_server_cli(argv: list[str]) -> int:
         loop.close()
 
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run_app_server_cli(sys.argv[1:]))

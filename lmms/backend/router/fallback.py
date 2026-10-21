@@ -21,7 +21,7 @@ class FallbackManager:
         graph = self.llm_router.route(intent_name, context)
         
         # 2. Validation
-        if self.validator.validate(graph):
+        if graph is not None and self.validator.validate(graph):
             self.events.publish("RouteValidated", {"source": "LLMRouter"})
             return graph
             

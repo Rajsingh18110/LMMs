@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
 from lmms.backend.agents.permissions import Permission
 
 @dataclass
@@ -18,4 +18,4 @@ class ToolDefinition:
     timeout: int = 30
     
     # Optional reference to the underlying execution callback
-    callback: Callable = None
+    callback: Optional[Callable] = None

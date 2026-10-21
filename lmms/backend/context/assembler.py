@@ -6,7 +6,7 @@ class ContextAssembler:
         Builds the final prompt package, validating against TokenBudget.
         This is a mock assembly. Real assembly requires tokenizer.
         """
-        budget: TokenBudget = context.token_budget
+        budget: TokenBudget = context.token_budget or TokenBudget()
         
         # Build System Prompt
         parts = []

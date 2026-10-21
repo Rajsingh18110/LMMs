@@ -221,7 +221,6 @@ def handle_cli(args):
 
     elif parsed.command == "cli":
         console.print("[green]Starting CLI Chat Shell (Nervous System)...[/green]")
-        import sys
         sys.argv = [sys.argv[0]]
         return # return to main.py loop
 
@@ -334,13 +333,11 @@ def handle_cli(args):
         if parsed.action == "history":
             if not parsed.run_id:
                 console.print("[red]Error: Must provide a run_id for history (e.g. lmm research history R-20260817-abc)[/red]")
-                import sys
                 sys.exit(1)
             store = ResearchHistoryStore()
             run = store.get_run(parsed.run_id)
             if not run:
                 console.print(f"[red]Error: Run {parsed.run_id} not found or corrupted.[/red]")
-                import sys
                 sys.exit(1)
             
             console.print(f"\n[bold]History for {parsed.run_id}[/bold]")

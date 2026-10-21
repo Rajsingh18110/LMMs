@@ -423,6 +423,45 @@ class MCPToolsPage(QWidget):
         self.reconnect_banner.hide()
         layout.addWidget(self.reconnect_banner)
 
+        # 1.5 Studio-wide Tool Approval Banner
+        self.approval_banner = QFrame()
+        self.approval_banner.setStyleSheet("""
+            QFrame {
+                background-color: #1f6feb22;
+                border: 1px solid #58a6ff;
+                border-radius: 8px;
+                padding: 10px;
+            }
+        """)
+        ab_layout = QHBoxLayout(self.approval_banner)
+        ab_layout.setContentsMargins(12, 8, 12, 8)
+        ab_layout.setSpacing(12)
+
+        self.ab_text = QLabel("🔔 Pending Tool Approval")
+        self.ab_text.setStyleSheet("color: #ffffff; font-size: 12px; font-weight: bold;")
+        ab_layout.addWidget(self.ab_text)
+
+        ab_layout.addStretch()
+
+        self.btn_banner_approve_once = QPushButton("✔ Approve Once")
+        self.btn_banner_approve_once.setStyleSheet("background-color: #238636; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-weight: bold;")
+        self.btn_banner_approve_once.clicked.connect(lambda: self._handle_approval_decision(always=False))
+        ab_layout.addWidget(self.btn_banner_approve_once)
+
+        self.btn_banner_always_allow = QPushButton("⭐ Always Allow")
+        self.btn_banner_always_allow.setStyleSheet("background-color: #1f6feb; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-weight: bold;")
+        self.btn_banner_always_allow.clicked.connect(lambda: self._handle_approval_decision(always=True))
+        ab_layout.addWidget(self.btn_banner_always_allow)
+
+        self.btn_banner_deny = QPushButton("✖ Deny")
+        self.btn_banner_deny.setStyleSheet("background-color: #da3633; color: #ffffff; padding: 4px 12px; border-radius: 4px; font-weight: bold;")
+        self.btn_banner_deny.clicked.connect(self._handle_deny_decision)
+        ab_layout.addWidget(self.btn_banner_deny)
+
+        self.approval_banner.hide()
+        layout.addWidget(self.approval_banner)
+        self.client.tool_permission_request.connect(self._show_approval_banner)
+
         # 2. Main Page Header
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
@@ -790,3 +829,41 @@ class MCPToolsPage(QWidget):
             or any(q in t.get("name", "").lower() for t in s.get("tools", []))
         ]
         self._render_cards(filtered)
+
+    def _show_approval_banner(self, req: Dict[str, Any]) -> None:
+        self._current_permission_request = req
+        tool = req.get("tool_name", "tool")
+        server = req.get("server_name", "server")
+        self.ab_text.setText(f"🔔 Permission Request: Execute '{tool}' on '{server}'?")
+        self.approval_banner.show()
+
+    def _handle_approval_decision(self, always: bool = False) -> None:
+        if not hasattr(self, "_current_permission_request") or not self._current_permission_request:
+            return
+        req = self._current_permission_request
+        pid = req.get("prompt_id")
+        server = req.get("server_name")
+        tool = req.get("tool_name")
+        self.approval_banner.hide()
+
+        async def _do():
+            if always and server and tool:
+                await self.client.call("permissions.set", {"server": server, "tool": tool, "policy": "allow"})
+            if pid:
+                await self.client.call("tool.approve", {"prompt_id": pid})
+
+        run_coro_safe(_do())
+        self._current_permission_request = None
+
+    def _handle_deny_decision(self) -> None:
+        if not hasattr(self, "_current_permission_request") or not self._current_permission_request:
+            return
+        pid = self._current_permission_request.get("prompt_id")
+        self.approval_banner.hide()
+
+        async def _do():
+            if pid:
+                await self.client.call("tool.deny", {"prompt_id": pid})
+
+        run_coro_safe(_do())
+        self._current_permission_request = None

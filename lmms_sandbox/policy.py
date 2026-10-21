@@ -321,3 +321,99 @@ class ExecPolicy:
             exp = os.path.abspath(os.path.expanduser(p))
             resolved.append(exp)
         return resolved
+
+
+def validate_policy_dict(data: dict) -> Tuple[bool, Optional[str]]:
+    """Validates policy dictionary structure, actions, and regex patterns."""
+    if not isinstance(data, dict):
+        return False, "Policy data must be a dictionary"
+
+    if "default_action" in data:
+        val = str(data["default_action"]).lower()
+        if val not in ("allow", "ask", "deny"):
+            return False, f"Invalid default_action '{val}'. Must be 'allow', 'ask', or 'deny'"
+
+    if "sandbox_mode" in data:
+        val = str(data["sandbox_mode"]).lower()
+        if val not in ("auto", "always", "never"):
+            return False, f"Invalid sandbox_mode '{val}'. Must be 'auto', 'always', or 'never'"
+
+    if "rules" in data:
+        if not isinstance(data["rules"], list):
+            return False, "'rules' must be a list"
+        for idx, rule in enumerate(data["rules"]):
+            if not isinstance(rule, dict):
+                return False, f"Rule at index {idx} must be a dictionary"
+            action = rule.get("action", "")
+            if action not in ("allow", "ask", "deny"):
+                return False, f"Rule '{rule.get('name', idx)}' has invalid action '{action}'"
+            patterns = rule.get("patterns", [])
+            if not isinstance(patterns, list):
+                return False, f"Rule '{rule.get('name', idx)}' patterns must be a list"
+            for p in patterns:
+                try:
+                    re.compile(p)
+                except re.error as e:
+                    return False, f"Rule '{rule.get('name', idx)}' contains invalid regex pattern '{p}': {e}"
+
+    for path_key in ("writable_paths", "read_only_paths", "hidden_paths"):
+        if path_key in data:
+            if not isinstance(data[path_key], list) or not all(isinstance(x, str) for x in data[path_key]):
+                return False, f"'{path_key}' must be a list of strings"
+
+    return True, None
+
+
+def detect_weakening(old_policy: dict, new_policy: dict) -> List[str]:
+    """
+    Compares old policy against proposed new policy and returns a list of
+    security downgrade reasons (weakening).
+    """
+    warnings: List[str] = []
+
+    # 1. Deny rules removed
+    old_deny_patterns = set()
+    for rule in old_policy.get("rules", []):
+        if rule.get("action") == "deny":
+            for p in rule.get("patterns", []):
+                old_deny_patterns.add(p)
+
+    new_deny_patterns = set()
+    for rule in new_policy.get("rules", []):
+        if rule.get("action") == "deny":
+            for p in rule.get("patterns", []):
+                new_deny_patterns.add(p)
+
+    removed_deny = old_deny_patterns - new_deny_patterns
+    if removed_deny:
+        warnings.append(f"Removes {len(removed_deny)} destructive command deny rule(s): {', '.join(list(removed_deny)[:3])}")
+
+    # 2. Network denial relaxed
+    old_net = old_policy.get("deny_network", True)
+    new_net = new_policy.get("deny_network", True)
+    if old_net and not new_net:
+        warnings.append("Enables outbound network access inside sandboxed commands")
+
+    # 3. Home isolation relaxed
+    old_home = old_policy.get("isolate_home", True)
+    new_home = new_policy.get("isolate_home", True)
+    if old_home and not new_home:
+        warnings.append("Disables home directory isolation (~)")
+
+    # 4. Default action relaxed
+    action_rank = {"deny": 0, "ask": 1, "allow": 2}
+    old_act = str(old_policy.get("default_action", "ask")).lower()
+    new_act = str(new_policy.get("default_action", "ask")).lower()
+    if action_rank.get(new_act, 1) > action_rank.get(old_act, 1):
+        warnings.append(f"Relaxes default fallback action from '{old_act}' to '{new_act}'")
+
+    # 5. Writable paths widened to root or home
+    broad_roots = {"/", "/etc", "/usr", "/bin", "/sbin", "/home", "~", "/var"}
+    new_w = {os.path.normpath(os.path.expanduser(p)) for p in new_policy.get("writable_paths", [])}
+    old_w = {os.path.normpath(os.path.expanduser(p)) for p in old_policy.get("writable_paths", [])}
+    widened = (new_w - old_w)
+    for p in widened:
+        if p in broad_roots or p == os.path.expanduser("~") or p == "/":
+            warnings.append(f"Widens writable paths to include broad system directory '{p}'")
+
+    return warnings

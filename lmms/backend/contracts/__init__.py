@@ -8,7 +8,10 @@ from .cache import CacheContract
 from .profile import ProfileContract
 from .inference import InferenceContract
 
+RuntimeContract = ModelRuntime
+
 __all__ = [
+    "ModelRuntime",
     "RuntimeContract",
     "MemoryContract",
     "ProviderContract",

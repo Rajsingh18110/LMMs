@@ -10,7 +10,7 @@ from lmms.backend.tools.boundaries import require_workspace_path
 config = ConfigManager()
 
 def get_workspace_dir() -> str:
-    return config.get("workspace_dir", os.getcwd())
+    return str(config.get("workspace_dir", os.getcwd()))
 
 def enforce_boundary(path: str):
     return require_workspace_path(path, get_workspace_dir())

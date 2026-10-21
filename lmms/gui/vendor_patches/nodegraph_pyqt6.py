@@ -86,5 +86,29 @@ if not hasattr(Qt, "QtSvg"):
 
 # Now safe to import NodeGraphQt
 import NodeGraphQt
+from NodeGraphQt.widgets.scene import NodeScene
+
+# PyQt6 strictly requires integer width for QPen.setWidth
+def _safe_draw_dots(self, painter, rect, pen, grid_size):
+    zoom = self.viewer().get_zoom()
+    if zoom < 0:
+        grid_size = int(abs(zoom) / 0.3 + 1) * grid_size
+
+    left = int(rect.left())
+    right = int(rect.right())
+    top = int(rect.top())
+    bottom = int(rect.bottom())
+
+    first_left = left - (left % grid_size)
+    first_top = top - (top % grid_size)
+
+    pen.setWidth(int(max(1, grid_size // 10)))
+    painter.setPen(pen)
+
+    for x in range(first_left, right, grid_size):
+        for y in range(first_top, bottom, grid_size):
+            painter.drawPoint(int(x), int(y))
+
+NodeScene._draw_dots = _safe_draw_dots
 
 __all__ = ["NodeGraphQt"]

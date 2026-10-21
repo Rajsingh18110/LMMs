@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 from lmms.backend.agents.registry import AgentRegistry
@@ -54,9 +55,9 @@ class AgentManager:
         self.events.publish("AgentStarted", {"agent": agent_name})
         
         # 4. Mock Tool Execution & Validation Loop
+        tool_to_use = "write_to_file"
         try:
             # Let's say intent requires write_to_file
-            tool_to_use = "write_to_file"
             
             # Validation Step
             self.validator.validate(tool_to_use, agent.permissions)

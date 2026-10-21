@@ -101,6 +101,9 @@ class AuditLogger:
         status: str,
         result_summary: str,
         session_id: Optional[str] = None,
+        origin: str = "local",
+        client_peer_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Records an MCP tool invocation to the hash-chained audit log.
@@ -126,7 +129,12 @@ class AuditLogger:
             "status": status,
             "result_summary": str(redacted_summary)[:500],
             "prev_hash": prev_hash,
+            "origin": origin,
         }
+        if client_peer_id:
+            entry_data["client_peer_id"] = client_peer_id
+        if client_ip:
+            entry_data["client_ip"] = client_ip
 
         # Canonical hash computation
         canonical_str = json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
@@ -189,10 +197,15 @@ class AuditLogger:
 
     def view(
         self,
-        limit: int = 50,
+        limit: int = 200,
+        offset: int = 0,
         server: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Returns the most recent audit records, optionally filtered by server."""
+        """
+        Returns recent audit records with pagination.
+        offset=0 returns the latest `limit` records.
+        offset=200 returns the preceding `limit` records.
+        """
         if not self.log_path.exists():
             return []
 
@@ -210,7 +223,14 @@ class AuditLogger:
                 except Exception:
                     continue
 
-        return entries[-limit:]
+        if not entries:
+            return []
+
+        end_idx = len(entries) - offset
+        if end_idx <= 0:
+            return []
+        start_idx = max(0, end_idx - limit)
+        return entries[start_idx:end_idx]
 
 
 default_audit_logger = AuditLogger()

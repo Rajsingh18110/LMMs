@@ -138,7 +138,6 @@ class VScodeApiBridge(QObject):
         if method == "webview.setHtml":
             view_id = params[0] if params else ""
             html_content = params[1] if len(params) > 1 else ""
-            from PyQt6.QtWidgets import QApplication
             
             # Find MainWindow and update the view
             for w in QApplication.topLevelWidgets():

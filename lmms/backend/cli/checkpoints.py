@@ -78,6 +78,7 @@ def create_checkpoint(workspace: str, name: str = "Manual Checkpoint"):
         res_tree = subprocess.run(["git", "write-tree"], cwd=workspace, env=env, capture_output=True, text=True)
         tree_hash = res_tree.stdout.strip()
         
+        commit_hash = ""
         if tree_hash:
             res_commit = subprocess.run(["git", "commit-tree", tree_hash, "-p", "HEAD", "-m", f"Checkpoint: {name}"], cwd=workspace, env=env, capture_output=True, text=True)
             commit_hash = res_commit.stdout.strip()

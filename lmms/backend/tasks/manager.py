@@ -59,4 +59,4 @@ class TaskManager:
     def summarize_task(self, task_id: str) -> str:
         from lmms.backend.tasks.memory import TaskMemory
         tm = TaskMemory(self.db)
-        return tm.summarize_and_store(task_id)
+        return tm.summarize_and_store(task_id) or ""

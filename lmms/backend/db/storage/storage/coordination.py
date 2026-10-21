@@ -41,7 +41,7 @@ def write_status(model_name: str, status: str, last_action: str, output_summary:
     conn.commit()
     conn.close()
 
-def read_status(model_name: str, db_path=DB_PATH) -> dict:
+def read_status(model_name: str, db_path=DB_PATH) -> dict | None:
     conn = get_connection(db_path)
     c = conn.cursor()
     c.execute('SELECT * FROM coordination WHERE model_name = ?', (model_name,))

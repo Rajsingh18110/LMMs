@@ -21,8 +21,7 @@ class ContentParser:
         for element in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "iframe"]):
             element.decompose()
             
-        # Extract title and main text
-        title = soup.title.string if soup.title else ""
+        title = str(soup.title.string) if (soup.title and soup.title.string) else ""
         
         # Try to find the main content article if semantic tags exist
         main_content = soup.find('article') or soup.find('main') or soup.body

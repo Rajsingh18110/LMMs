@@ -4,14 +4,13 @@ Validates parameters against registered schemas, enforces permission boundaries,
 prevents infinite loops, and returns structured observation results.
 """
 
+import os
 import time
 import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Callable, Tuple
 from .registry import ToolRegistry, DynamicToolDefinition
-
-Tuple_Bool_Str = Tuple[bool, str]
 
 
 
@@ -245,7 +244,7 @@ class UnifiedToolExecutor:
             is_planning_mode=is_planning_mode
         )
 
-    def validate_arguments(self, tool: DynamicToolDefinition, kwargs: Dict[str, Any]) -> Tuple_Bool_Str:
+    def validate_arguments(self, tool: DynamicToolDefinition, kwargs: Dict[str, Any]) -> Tuple[bool, str]:
         """
         Validates kwargs against the tool's JSON parameter schema.
         Returns (is_valid, error_message).
@@ -281,7 +280,7 @@ class UnifiedToolExecutor:
         tool: DynamicToolDefinition,
         permission_level: str = "medium",
         is_planning_mode: bool = False
-    ) -> Tuple_Bool_Str:
+    ) -> Tuple[bool, str]:
         """
         Enforces permission levels (low, medium, high) and planning mode read-only restrictions.
         """

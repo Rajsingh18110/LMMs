@@ -11,14 +11,14 @@ class IntentContext:
 
 @dataclass
 class TokenBudget:
-    max_tokens: int
-    system_tokens: int
-    workspace_tokens: int
-    task_tokens: int
-    git_tokens: int
-    memory_tokens: int
-    file_tokens: int
-    tool_tokens: int
+    max_tokens: int = 4096
+    system_tokens: int = 500
+    workspace_tokens: int = 1000
+    task_tokens: int = 500
+    git_tokens: int = 500
+    memory_tokens: int = 500
+    file_tokens: int = 1000
+    tool_tokens: int = 500
 
 @dataclass
 class ExecutionContext:

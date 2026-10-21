@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, cast
 from lmms.backend.contracts.runtime import ModelRuntime
 from lmms.backend.contracts.memory import MemoryContract
 from lmms.backend.contracts.provider import ProviderContract
@@ -46,14 +46,14 @@ class BackendManager:
         if self._memory is None:
             from lmms.backend.memory.providers.sqlite import Memory
             self._memory = Memory()
-        return self._memory
+        return cast(MemoryContract, self._memory)
 
     @property
     def workspace(self) -> WorkspaceContract:
         if self._workspace is None:
             from lmms.backend.db.workspace.manager import WorkspaceManager
             self._workspace = WorkspaceManager()
-        return self._workspace
+        return cast(WorkspaceContract, self._workspace)
 
     @property
     def registry(self):

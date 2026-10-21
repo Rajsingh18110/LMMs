@@ -9,7 +9,7 @@ class GitContextProvider:
         pass
 
     def get_branch_state(self) -> str:
-        pass
+        return ""
 
     def get_recent_changes(self):
         pass

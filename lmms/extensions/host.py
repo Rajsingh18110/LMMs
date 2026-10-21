@@ -130,7 +130,7 @@ class ExtensionHost(QObject):
 
     def _read_loop(self):
         proc = self._proc
-        if not proc:
+        if not proc or not proc.stdout:
             return
         for raw in proc.stdout:
             line = raw.decode("utf-8", errors="replace").strip()
@@ -144,7 +144,7 @@ class ExtensionHost(QObject):
 
     def _stderr_loop(self):
         proc = self._proc
-        if not proc:
+        if not proc or not proc.stderr:
             return
         for raw in proc.stderr:
             line = raw.decode("utf-8", errors="replace").rstrip()
