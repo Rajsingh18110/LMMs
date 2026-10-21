@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Git pre-push hook to automatically sync 'main' to all child branches:
+# cli, gui, engine, clicode, guicode, enginecode, enterprise-cli
+
+remote="$1"
+url="$2"
+
+# Avoid recursion if called from within this hook
+if [ -n "$LMMS_SYNCING_BRANCHES" ]; then
+    exit 0
+fi
+
+is_main_pushed=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_ref" = "refs/heads/main" ] || [ "$remote_ref" = "refs/heads/main" ]; then
+        is_main_pushed=1
+        break
+    fi
+done
+
+if [ "$is_main_pushed" -eq 1 ]; then
+    echo "================================================================"
+    echo " [Auto-Sync] Syncing 'main' changes to child branches..."
+    echo "================================================================"
+
+    export LMMS_SYNCING_BRANCHES=1
+
+    CHILD_BRANCHES=("cli" "gui" "engine" "clicode" "guicode" "enginecode" "enterprise-cli")
+
+    # Update local branch pointers to match main
+    for br in "${CHILD_BRANCHES[@]}"; do
+        git branch -f "$br" main 2>/dev/null || true
+    done
+
+    # Push updated child branches to remote
+    PUSH_SPECS=()
+    for br in "${CHILD_BRANCHES[@]}"; do
+        PUSH_SPECS+=("main:refs/heads/$br")
+    done
+
+    echo " Pushing child branches to $remote: ${CHILD_BRANCHES[*]}..."
+    if git push "$remote" "${PUSH_SPECS[@]}" --no-verify; then
+        echo " [Auto-Sync] ✔ All child branches successfully synced and pushed!"
+    else
+        echo " [Auto-Sync] ⚠ Warning: One or more child branches failed to push."
+    fi
+    echo "================================================================"
+fi
+
+exit 0

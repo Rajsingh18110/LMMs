@@ -204,10 +204,14 @@ async def serve_dashboard():
 
 
 @router.post("/v1/auth/unlock")
-async def unlock_dashboard(req: UnlockRequest):
+async def unlock_dashboard(req: UnlockRequest, request: Request):
     global server_otp, server_temp_token
     if req.otp == server_otp:
         server_temp_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+        try:
+            request.app.state.client_connected = True
+        except Exception:
+            pass
         return {"token": server_temp_token}
     raise HTTPException(status_code=401, detail="Invalid OTP")
 

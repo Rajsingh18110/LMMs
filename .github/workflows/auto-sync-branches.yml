@@ -1,0 +1,29 @@
+name: Auto-Sync Main to Child Branches
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync and push to child branches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          TARGET_BRANCHES=("cli" "gui" "engine" "clicode" "guicode" "enginecode" "enterprise-cli")
+          
+          for branch in "${TARGET_BRANCHES[@]}"; do
+            echo "Syncing branch: $branch"
+            git push origin "main:refs/heads/$branch" --force || echo "Failed to sync $branch"
+          done

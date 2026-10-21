@@ -221,79 +221,128 @@ def cmd_stats(args: List[str]) -> None:
 
 
 def cmd_server(args: List[str]) -> None:
-    """Manage the local standalone LMMs API backend server (start, stop, status)."""
+    """Manage the local standalone LMMs API backend server (start, stop, status, interactive)."""
     from lmms.api.service import start_server_daemon, stop_server_daemon, get_server_daemon_status
     from lmms.api.server import run_server
 
-    action = args[0].lower() if args else "status"
+    # Parse command action
+    action = None
+    if args and not args[0].startswith("-"):
+        action = args[0].lower()
+        sub_args = args[1:]
+    else:
+        # Default behavior: if no subcommand, run interactive server if requested or status
+        # If user explicitly types `lmms server`, run interactive foreground mode with OTP!
+        action = "foreground" if not args or any(a in args for a in ["--foreground", "-f"]) else "status"
+        sub_args = args
+
+    port = 11435
+    host = "0.0.0.0"
+    engine_tier = 3
+    engine_mode = "auto"
+    timeout = 300
+    foreground = action in ["foreground", "serve", "run"]
+
+    idx = 0
+    while idx < len(sub_args):
+        arg = sub_args[idx]
+        if arg in ["--port", "-p"] and idx + 1 < len(sub_args):
+            try:
+                port = int(sub_args[idx + 1])
+            except ValueError:
+                pass
+            idx += 2
+        elif arg in ["--host", "-h"] and idx + 1 < len(sub_args):
+            host = sub_args[idx + 1]
+            idx += 2
+        elif arg in ["--tier", "-t"] and idx + 1 < len(sub_args):
+            try:
+                engine_tier = int(sub_args[idx + 1])
+            except ValueError:
+                pass
+            idx += 2
+        elif arg in ["--engine", "-e"] and idx + 1 < len(sub_args):
+            val = sub_args[idx + 1].lower()
+            if val in ["1", "llama", "llamacpp"]:
+                engine_tier = 1
+                engine_mode = "1"
+            elif val in ["2", "pytorch", "torch"]:
+                engine_tier = 2
+                engine_mode = "2"
+            else:
+                engine_tier = 3
+                engine_mode = "auto"
+            idx += 2
+        elif arg in ["--timeout", "-to"] and idx + 1 < len(sub_args):
+            try:
+                timeout = int(sub_args[idx + 1])
+            except ValueError:
+                pass
+            idx += 2
+        elif arg in ["--foreground", "-f"]:
+            foreground = True
+            idx += 1
+        else:
+            idx += 1
 
     if action in ["start", "up"]:
-        port = 11435
-        host = "0.0.0.0"
-        engine_mode = "auto"
-        foreground = False
-
-        idx = 1
-        while idx < len(args):
-            arg = args[idx]
-            if arg in ["--port", "-p"] and idx + 1 < len(args):
-                try:
-                    port = int(args[idx + 1])
-                except ValueError:
-                    pass
-                idx += 2
-            elif arg in ["--host", "-h"] and idx + 1 < len(args):
-                host = args[idx + 1]
-                idx += 2
-            elif arg in ["--engine", "-e"] and idx + 1 < len(args):
-                engine_mode = args[idx + 1]
-                idx += 2
-            elif arg in ["--foreground", "-f"]:
-                foreground = True
-                idx += 1
-            else:
-                idx += 1
-
         if foreground:
             sys.stdout.write(f"ℹ {COLOR_DIM}Starting LMMs server in foreground on {host}:{port}...{COLOR_RESET}\n")
-            run_server(host=host, port=port)
+            run_server(host=host, port=port, idle_timeout=None, engine_tier=engine_tier)
         else:
-            res = start_server_daemon(port=port, host=host, engine_mode=engine_mode)
+            res = start_server_daemon(port=port, host=host, engine_mode=engine_mode, engine_tier=engine_tier, forever=True, initiator="user")
             if res.get("status") == "already_running":
                 sys.stdout.write(f"{COLOR_YELLOW}⚠{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server already running{COLOR_RESET} (PID {res['pid']}) at {res['url']}\n")
+                sys.stdout.write(f"  • Lifecycle:     {COLOR_CYAN}{'Permanent Daemon' if res.get('forever') else 'Ephemeral Session'}{COLOR_RESET}\n")
             else:
-                sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server started in background{COLOR_RESET} (PID {res['pid']})\n")
+                sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Super Engine Server started in permanent background daemon mode{COLOR_RESET} (PID {res['pid']})\n")
+                sys.stdout.write(f"  • Engine Tier:   {COLOR_BOLD_GREEN}{res.get('tier_name')}{COLOR_RESET}\n")
                 sys.stdout.write(f"  • API URL:       {COLOR_CYAN}{res['api_url']}{COLOR_RESET}\n")
                 sys.stdout.write(f"  • Web Dashboard: {COLOR_CYAN}{res['dashboard_url']}{COLOR_RESET}\n")
+                sys.stdout.write(f"  • Lifecycle:     {COLOR_GREEN}Permanent Daemon (Stops only with 'lmms server stop'){COLOR_RESET}\n")
                 sys.stdout.write(f"  • Server Logs:   {COLOR_DIM}{res['log_file']}{COLOR_RESET}\n")
 
     elif action in ["stop", "down"]:
-        res = stop_server_daemon()
+        res = stop_server_daemon(force=True, caller="user")
         if res.get("status") == "stopped":
             sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server stopped{COLOR_RESET} (PID {res['pid']})\n")
         else:
             sys.stdout.write(f"{COLOR_DIM}No running LMMs Server daemon detected.{COLOR_RESET}\n")
 
     elif action in ["restart"]:
-        stop_server_daemon()
-        res = start_server_daemon()
+        stop_server_daemon(force=True, caller="user")
+        res = start_server_daemon(port=port, host=host, engine_mode=engine_mode, engine_tier=engine_tier, forever=True, initiator="user")
         sys.stdout.write(f"{COLOR_GREEN}✔{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server restarted{COLOR_RESET} (PID {res.get('pid')})\n")
+        sys.stdout.write(f"  • Engine Tier: {COLOR_BOLD_GREEN}{res.get('tier_name')}{COLOR_RESET}\n")
 
     elif action in ["status", "info"]:
         st = get_server_daemon_status()
         if st["running"]:
+            lifecycle = f"{COLOR_GREEN}Permanent Daemon (Never auto-exits){COLOR_RESET}" if st.get("forever") else f"{COLOR_YELLOW}Ephemeral Session (Linked to active CLI/GUI){COLOR_RESET}"
             sys.stdout.write(f"{COLOR_GREEN}●{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server Status:{COLOR_RESET} {COLOR_BOLD_GREEN}ACTIVE (PID {st['pid']}){COLOR_RESET}\n")
-            sys.stdout.write(f"  • Log File: {COLOR_DIM}{st['log_file']}{COLOR_RESET}\n")
+            sys.stdout.write(f"  • Engine Tier: {COLOR_CYAN}{st.get('tier_name')}{COLOR_RESET}\n")
+            sys.stdout.write(f"  • API URL:     {COLOR_CYAN}http://{st.get('host')}:{st.get('port')}{COLOR_RESET}\n")
+            sys.stdout.write(f"  • Lifecycle:   {lifecycle}\n")
+            sys.stdout.write(f"  • Log File:    {COLOR_DIM}{st['log_file']}{COLOR_RESET}\n")
             if st["recent_logs"]:
                 sys.stdout.write(f"\n{COLOR_DIM}Recent Logs:{COLOR_RESET}\n")
                 for line in st["recent_logs"][-5:]:
                     sys.stdout.write(f"  {COLOR_DIM}{line}{COLOR_RESET}\n")
         else:
             sys.stdout.write(f"{COLOR_RED}○{COLOR_RESET} {COLOR_BOLD_WHITE}LMMs Server Status:{COLOR_RESET} {COLOR_DIM}OFFLINE (Not running){COLOR_RESET}\n")
-            sys.stdout.write(f"  Start with: {COLOR_CYAN}lmms server start{COLOR_RESET}\n")
+            sys.stdout.write(f"  • Start as permanent background daemon: {COLOR_CYAN}lmms server start [--tier 1|2|3]{COLOR_RESET}\n")
+            sys.stdout.write(f"  • Start interactive session with OTP:   {COLOR_CYAN}lmms server{COLOR_RESET}\n")
+
+    elif action in ["foreground", "serve", "run"]:
+        sys.stdout.write(f"ℹ {COLOR_DIM}Starting interactive LMMs server on {host}:{port}...{COLOR_RESET}\n")
+        run_server(host=host, port=port, idle_timeout=timeout, engine_tier=engine_tier)
+
     else:
         sys.stdout.write(f"{COLOR_RED}Unknown server command:{COLOR_RESET} {action}\n")
-        sys.stdout.write(f"Usage: {COLOR_CYAN}lmms server [start|stop|restart|status] [--port 11435] [--engine 1|2|auto] [--foreground]{COLOR_RESET}\n")
+        sys.stdout.write(f"Usage: {COLOR_CYAN}lmms server [start|stop|restart|status] [--tier 1|2|3] [--port 11435] [--timeout 300]{COLOR_RESET}\n")
+        sys.stdout.write(f"  • {COLOR_BOLD_WHITE}lmms server start{COLOR_RESET} : Starts permanent background daemon (never times out)\n")
+        sys.stdout.write(f"  • {COLOR_BOLD_WHITE}lmms server stop{COLOR_RESET}  : Terminates the daemon\n")
+        sys.stdout.write(f"  • {COLOR_BOLD_WHITE}lmms server{COLOR_RESET}       : Interactive mode with OTP banner and idle auto-stop\n")
 
 
 def cmd_gui(args: List[str]) -> None:

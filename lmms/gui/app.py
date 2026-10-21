@@ -72,12 +72,14 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         try:
             urllib.request.urlopen("http://localhost:11435/webhook", timeout=1)
         except Exception:
-            from lmms.api.service import start_server_daemon, is_server_running
+            from lmms.api.service import start_server_daemon, is_server_running, wait_for_server_healthy
             if not is_server_running():
                 sys.stdout.write(f"  {COLOR_DIM}Auto-starting local LMMs workstation engine daemon...{COLOR_RESET}\n")
-                start_server_daemon()
+                start_server_daemon(engine_tier=3, forever=False, initiator="gui")
                 auto_started_server = True
                 os.environ["LMMS_GUI_AUTO_SERVER"] = "1"
+            else:
+                wait_for_server_healthy(timeout=2.0)
     except Exception:
         pass
 
@@ -92,7 +94,7 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         if auto_started_server or os.environ.get("LMMS_GUI_AUTO_SERVER") == "1":
             try:
                 from lmms.api.service import stop_server_daemon
-                stop_server_daemon()
+                stop_server_daemon(force=False, caller="gui")
             except Exception:
                 pass
 

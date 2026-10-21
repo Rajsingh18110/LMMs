@@ -40,32 +40,16 @@ def ensure_engine_running():
         pass
 
     try:
-        urllib.request.urlopen("http://localhost:11435/webhook", timeout=1)
-    except Exception:
-        print("Starting LMMs Engine in the background...")
-        import secrets
-        if not os.environ.get("LMMS_INTERNAL_TOKEN"):
-            os.environ["LMMS_INTERNAL_TOKEN"] = secrets.token_hex(16)
-        log_dir = os.path.expanduser("~/.lmms/logs")
-        os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, "server.log")
-        
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
-        
-        try:
-            from lmms.api.service import start_server_daemon
-            res = start_server_daemon(host="0.0.0.0", port=11435)
-            time.sleep(1.0)
-            return res
-        except Exception:
-            f = open(log_file, "a")
-            from lmms.api.service import get_ai_python_executable
-            py_exe = get_ai_python_executable()
-            cmd = [py_exe, "-m", "lmms.api.server", "--host", "0.0.0.0", "--port", "11435"]
-            p = subprocess.Popen(cmd, stdout=f, stderr=f, env=env, start_new_session=True)
-            time.sleep(1.5)
-            return p
+        from lmms.api.service import wait_for_server_healthy, start_server_daemon, is_server_running
+        if wait_for_server_healthy(timeout=0.6):
+            return {"status": "connected", "url": "http://localhost:11435"}
+
+        print("Starting LMMs Super Engine in the background...")
+        res = start_server_daemon(host="0.0.0.0", port=11435, engine_tier=3, forever=False, initiator="cli")
+        return res
+    except Exception as e:
+        print(f"\033[1;31m[LMMs Engine Error]\033[0m Failed to auto-start daemon: {e}")
+        return None
 
 
 def load_config():
@@ -416,16 +400,11 @@ def launch(mode, forward_args=None, ensure_engine=True):
                 if should_reboot:
                     print("\n\033[96m[INFO]\033[0m Rebooting system (Engine & CLI)...")
                 else:
-                    print("\n\033[96m[INFO]\033[0m Shutting down auto-started Engine...")
-                term_fn = getattr(engine_proc, "terminate", None)
-                if callable(term_fn):
                     try:
-                        term_fn()
-                    except Exception:
-                        pass
-                elif isinstance(engine_proc, dict) and "pid" in engine_proc:
-                    try:
-                        os.kill(int(engine_proc["pid"]), 15)
+                        from lmms.api.service import stop_server_daemon
+                        stop_res = stop_server_daemon(force=False, caller="cli")
+                        if stop_res.get("status") == "stopped":
+                            print("\n\033[96m[INFO]\033[0m Shut down auto-started Engine daemon.")
                     except Exception:
                         pass
         if not should_reboot:

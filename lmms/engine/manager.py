@@ -84,21 +84,48 @@ class EngineManager:
                 with open(config_path, "r") as f:
                     data = json.load(f)
                     saved = data.get("engine_mode")
-                    if saved in ["auto", "1", "2", "llamacpp", "pytorch", "air"]:
-                        self.active_mode = saved
+                    if saved in ["auto", "1", "2", "3", "llamacpp", "pytorch", "air", "unified", "super"]:
+                        if saved in ["3", "unified", "super"]:
+                            self.active_mode = "auto"
+                        else:
+                            self.active_mode = saved
             except Exception:
                 pass
 
+    def get_tier_info(self) -> Dict[str, Any]:
+        """Returns structured information about current engine tier."""
+        if self.active_mode == "1":
+            return {
+                "tier": 1,
+                "name": "Tier 1: llama.cpp + AirEngine",
+                "description": "GGUF High-Throughput & Hybrid Offload Engine",
+                "active_mode": "1"
+            }
+        elif self.active_mode == "2":
+            return {
+                "tier": 2,
+                "name": "Tier 2: PyTorch + AirEngine",
+                "description": "Safetensors, HuggingFace Multimodal & Fine-Tuning Node",
+                "active_mode": "2"
+            }
+        else:
+            return {
+                "tier": 3,
+                "name": "Tier 3: Unified Super Engine (llama.cpp + PyTorch + AirEngine)",
+                "description": "3-in-1 Super Engine with Auto-Dispatching & Unified RAM/VRAM Caching",
+                "active_mode": "auto"
+            }
+
     def set_engine_mode(self, mode: str) -> str:
-        norm = mode.lower().strip()
-        if norm in ["auto", "smart"]:
+        norm = str(mode).lower().strip()
+        if norm in ["auto", "smart", "3", "tier3", "unified", "super", "all", "3-in-1"]:
             self.active_mode = "auto"
-        elif norm in ["1", "llamacpp", "llama", "gguf", "air"]:
+        elif norm in ["1", "tier1", "llamacpp", "llama", "gguf", "air"]:
             self.active_mode = "1"
-        elif norm in ["2", "pytorch", "torch", "enterprise"]:
+        elif norm in ["2", "tier2", "pytorch", "torch", "enterprise"]:
             self.active_mode = "2"
         else:
-            raise ValueError(f"Unknown engine mode '{mode}'. Use 'auto', '1' (Air+LlamaCpp), or '2' (Air+PyTorch).")
+            raise ValueError(f"Unknown engine mode '{mode}'. Use '1' (Tier 1: Air+LlamaCpp), '2' (Tier 2: Air+PyTorch), or '3' / 'auto' (Tier 3: Unified 3-in-1 Super Engine).")
 
         config_path = os.path.expanduser("~/.lmms/config.json")
         try:

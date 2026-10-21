@@ -189,63 +189,49 @@ def should_force_tool_mode(prompt: str) -> bool:
     return False
 
 
-def check_engine_health():
+_cli_session_auto_started = False
+
+
+def check_engine_health() -> bool:
     try:
-        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=2)
+        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=1.5)
         return resp.status_code == 200
     except Exception as e:
-        with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
-            f.write(f"Health Check Failed: {str(e)}\n")
+        try:
+            with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
+                f.write(f"Health Check Failed: {str(e)}\n")
+        except Exception:
+            pass
         return False
 
-def auto_start_engine():
+
+def auto_start_engine() -> bool:
+    global _cli_session_auto_started
     if check_engine_health():
         return True
-        
-    import time
-    for _ in range(10):
-        if check_engine_health():
-            return True
-        time.sleep(0.5)
 
-    # The launcher already owns startup for interactive CLI/GUI sessions.
-    # Do not race it by spawning a second engine on the same port.
-    if os.environ.get("LMMS_ENGINE_MANAGED") == "1":
+    # If it's a remote engine URL, do not try to start local daemon
+    if not any(loc in str(ENGINE_URL) for loc in ["127.0.0.1", "localhost", "0.0.0.0"]):
         return False
 
-    internal_token = os.environ.get("LMMS_INTERNAL_TOKEN")
-    if not internal_token:
-        internal_token = secrets.token_hex(16)
-        os.environ["LMMS_INTERNAL_TOKEN"] = internal_token
-        
-    try:
-        env = os.environ.copy()
-        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        env["PYTHONPATH"] = PROJECT_ROOT
-        
-        # Ensure engine is started via the CLI command
-        engine_script = os.path.join(PROJECT_ROOT, "lmms", "lmmsengine", "main.py")
-        log_file = os.path.expanduser("~/.lmms/logs/server.log")
-        f = open(log_file, "a")
-        
-        import platform
-        kwargs = {}
-        if platform.system() == "Windows":
-            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-        else:
-            kwargs["start_new_session"] = True
-            
-        subprocess.Popen([sys.executable, engine_script, "server"], 
-                         env=env, stdout=f, stderr=f, **kwargs)
-        
-        import time
-        for _ in range(15):
-            if check_engine_health():
-                break
-            time.sleep(0.5)
+    from lmms.api.service import wait_for_server_healthy, start_server_daemon, is_server_running
+
+    # Check if daemon is already starting up and wait briefly
+    if wait_for_server_healthy(timeout=2.0):
         return True
-    except Exception as e:
-        return False
+
+    if not is_server_running():
+        try:
+            start_server_daemon(port=11435, host="0.0.0.0", engine_tier=3, forever=False, initiator="cli")
+            _cli_session_auto_started = True
+        except Exception:
+            pass
+
+    # Wait up to 6 seconds for engine to complete FastAPI/model init
+    if wait_for_server_healthy(timeout=6.0):
+        return True
+
+    return check_engine_health()
 
 async def ipc_handshake():
     token = os.environ.get("LMMS_INTERNAL_TOKEN")
@@ -1035,11 +1021,7 @@ def run_cli():
                     except:
                         pass
                     sys.exit(42)
-                    
-                try:
-                    requests.post("http://127.0.0.1:11435/v1/internal/shutdown", timeout=2)
-                except:
-                    pass
+
                 break
                 
             elif base_cmd == "/thinking":
@@ -2379,6 +2361,17 @@ def run_cli():
             console.print("\n[dim]Type 'exit' to quit.[/dim]")
         except EOFError:
             break
+
+    if _cli_session_auto_started:
+        try:
+            from lmms.api.service import stop_server_daemon
+            stop_res = stop_server_daemon(force=False, caller="cli")
+            if stop_res.get("status") == "stopped":
+                console.print("[dim]● Cleaned up auto-started local Super Engine daemon.[/dim]")
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "app-server":
         from lmms_server.server import run_app_server_cli
@@ -2401,11 +2394,23 @@ if __name__ == "__main__":
     try:
         run_cli()
     except SystemExit as e:
+        if _cli_session_auto_started:
+            try:
+                from lmms.api.service import stop_server_daemon
+                stop_server_daemon(force=False, caller="cli")
+            except Exception:
+                pass
         import os
         exit_code = e.code if isinstance(e.code, int) else 0
         os._exit(exit_code)
     except Exception:
         pass
     finally:
+        if _cli_session_auto_started:
+            try:
+                from lmms.api.service import stop_server_daemon
+                stop_server_daemon(force=False, caller="cli")
+            except Exception:
+                pass
         import os
         os._exit(0)
