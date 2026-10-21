@@ -63,7 +63,7 @@ class DemoVoiceApp(CyberpunkVoiceApp):
     def check_auto_cycle(self) -> None:
         now = time.perf_counter()
         scenario = DEMO_SCENARIOS[self.scenario_idx]
-        if now - self.last_cycle_time >= scenario["duration"]:
+        if now - self.last_cycle_time >= float(scenario["duration"]):
             self.scenario_idx = (self.scenario_idx + 1) % len(DEMO_SCENARIOS)
             nxt = DEMO_SCENARIOS[self.scenario_idx]
             self.user_query = nxt["user_query"]
