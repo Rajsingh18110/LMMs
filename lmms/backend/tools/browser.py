@@ -89,11 +89,30 @@ class BrowserTool:
             else:
                 self.browser = self.playwright.chromium.launch(headless=headless)
                 
-        if not self.page:
-            if hasattr(self.browser, "pages") and len(self.browser.pages) > 0:
-                self.page = self.browser.pages[0]
-            elif hasattr(self.browser, "new_page"):
-                self.page = self.browser.new_page()
+        # If page or browser has closed unexpectedly, reset them
+        if self.page:
+            try:
+                if self.page.is_closed():
+                    self.page = None
+            except Exception:
+                self.page = None
+
+        if self.browser:
+            try:
+                if hasattr(self.browser, "is_connected") and not self.browser.is_connected():
+                    self.close()
+            except Exception:
+                self.close()
+
+        if not self.page and self.browser:
+            try:
+                if hasattr(self.browser, "pages") and len(self.browser.pages) > 0 and not self.browser.pages[0].is_closed():
+                    self.page = self.browser.pages[0]
+                elif hasattr(self.browser, "new_page"):
+                    self.page = self.browser.new_page()
+            except Exception:
+                self.close()
+                return self._ensure_session(headless=headless, user_data_dir=user_data_dir, profile_name=profile_name)
             
             # Inject stealth to bypass detection
             try:
@@ -351,14 +370,20 @@ class BrowserTool:
         except Exception as e:
             return f"Failed to get interactive DOM: {str(e)}"
 
-    def open_url(self, url: str, headless: bool = False) -> str:
+    def open_url(self, url: str, headless: bool = False, _retry_count: int = 0) -> str:
         try:
             self._ensure_session(headless=headless)
             self._goto_if_needed(url)
-            self.page.wait_for_timeout(2000)
+            try:
+                self.page.wait_for_timeout(2000)
+            except Exception:
+                pass
             
             # Auto-detect CAPTCHA and fallback to human-like bypass
-            content = self.page.evaluate("document.body.innerText || ''")
+            try:
+                content = self.page.evaluate("document.body.innerText || ''")
+            except Exception:
+                content = ""
             content_lower = content.lower() if content else ""
             if "captcha" in content_lower or "verify you are human" in content_lower or "cloudflare" in content_lower or "checking your browser" in content_lower:
                 print("\n[BrowserTool] CAPTCHA detected. Initiating Human-like Bypass...")
@@ -368,7 +393,12 @@ class BrowserTool:
 
             return self.get_interactive_dom()
         except Exception as e:
-            return f"Failed to open URL: {str(e)}"
+            err_str = str(e)
+            if ("closed" in err_str.lower() or "target" in err_str.lower() or "crash" in err_str.lower()) and _retry_count < 2:
+                print(f"\n[BrowserTool] Browser closed unexpectedly ({err_str}). Reopening fresh session and retrying...")
+                self.close()
+                return self.open_url(url, headless=headless, _retry_count=_retry_count + 1)
+            return f"Failed to open URL: {err_str}"
 
     def click_element(self, selector: str = None, url: str = None, id: int = None) -> str:
         try:
