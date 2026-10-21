@@ -1673,6 +1673,18 @@ def run_cli():
                 handle_mcp_cli(parts[1:])
 
             elif base_cmd in ("/gui", "/panel"):
+                if base_cmd == "/panel":
+                    console.print("[bold cyan]Launching Automation Canvas (/panel)...[/bold cyan]")
+                    if "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                        console.print("[yellow]No display available ($DISPLAY / $WAYLAND_DISPLAY unset). /panel requires an active graphical session.[/yellow]")
+                        continue
+                    try:
+                        p = subprocess.Popen([sys.executable, "-m", "lmms.gui.panel"])
+                        console.print(f"[green]Automation Canvas running in separate process (PID: {p.pid}). CLI remains fully active.[/green]")
+                    except Exception as pe:
+                        console.print(f"[red]Failed to launch /panel:[/red] {pe}")
+                    continue
+
                 gui_args = parts[1:]
                 target_page = gui_args[0] if (gui_args and base_cmd != "/panel") else ("automation" if base_cmd == "/panel" else "automation")
                 console.print(f"[bold cyan]Launching Desktop Studio (GUI)...[/bold cyan] [dim](focusing: {target_page})[/dim]")
