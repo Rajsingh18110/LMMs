@@ -710,7 +710,69 @@ def run_cli():
         )
     )
 
-    
+    def robust_parse_tool_call(raw_tc: str) -> dict:
+        """Robust parser that handles unescaped code literals, unescaped quotes, and truncation."""
+        # 1. Try standard JSON (strict=False permits literal newlines/tabs inside strings)
+        try:
+            return json.loads(raw_tc, strict=False)
+        except Exception:
+            pass
+
+        # 2. Try ast.literal_eval with JS booleans converted
+        try:
+            import ast
+            s = re.sub(r'\btrue\b', 'True', raw_tc)
+            s = re.sub(r'\bfalse\b', 'False', s)
+            s = re.sub(r'\bnull\b', 'None', s)
+            return ast.literal_eval(s)
+        except Exception:
+            pass
+
+        # 3. Regex extraction fallback for large code blocks with internal quotes/truncation
+        tool_match = re.search(r'"tool"\s*:\s*"([^"]+)"', raw_tc)
+        if tool_match:
+            t_name = tool_match.group(1).strip()
+            kwargs = {}
+            if t_name == "files.write":
+                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+                if path_m:
+                    kwargs["path"] = path_m.group(1)
+                content_m = re.search(r'"content"\s*:\s*"(.*)', raw_tc, re.DOTALL)
+                if content_m:
+                    c_str = content_m.group(1)
+                    c_str = re.sub(r'"?\s*\}?\s*\}?\s*$', '', c_str)
+                    try:
+                        c_str = c_str.encode('utf-8').decode('unicode_escape')
+                    except Exception:
+                        pass
+                    kwargs["content"] = c_str
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name == "terminal.run":
+                cmd_m = re.search(r'"command"\s*:\s*"([^"]+)"', raw_tc)
+                if cmd_m:
+                    kwargs["command"] = cmd_m.group(1)
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name in ("web_search", "vector_db.search", "rag.search"):
+                q_m = re.search(r'"query"\s*:\s*"([^"]+)"', raw_tc)
+                if q_m:
+                    kwargs["query"] = q_m.group(1)
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name in ("browser.open_url", "browser.crawl_url"):
+                u_m = re.search(r'"url"\s*:\s*"([^"]+)"', raw_tc)
+                if u_m:
+                    kwargs["url"] = u_m.group(1)
+                return {"tool": t_name, "kwargs": kwargs}
+
+        # 4. Repair trailing syntax
+        trimmed = raw_tc.rstrip()
+        for fix in ['"}}', '"}', '}}', '}']:
+            try:
+                return json.loads(trimmed + fix, strict=False)
+            except Exception:
+                pass
+
+        raise ValueError("Could not parse tool call as valid JSON.")
+
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
         nonlocal checkpoint_created_this_session
         
@@ -748,12 +810,13 @@ def run_cli():
             approved = Prompt.ask(f"[bold yellow]Allow {tool_name} with args {kwargs}? (y/n)[/bold yellow]").lower() == "y"
             if not approved:
                 return False
-                
+
         # Workspace boundary check for files.write
         if tool_name == "files.write":
             path = kwargs.get("path", "")
             content = kwargs.get("content", "")
-            if current_workspace == "None" or not is_within_workspace(path, current_workspace):
+            eff_ws = current_workspace if current_workspace != "None" else os.getcwd()
+            if not is_within_workspace(path, eff_ws):
                 return Prompt.ask(f"[bold red]AI wants to write outside the active workspace: {path}. Allow? (y/n)[/bold red]").lower() == "y"
 
             diff = preview_file_change(path, content)
@@ -1984,6 +2047,7 @@ def run_cli():
                             # Prune context if exceeded
                             tok_count = sum(count_tokens(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in clean_messages)
                             clean_messages = context_manager.check_and_prune(tok_count, clean_messages, count_tokens, current_model, max_allowed=available_for_input)
+                            messages = list(clean_messages)
 
                             # Apply AI Mode settings
                             req_temp = 0.5
@@ -2026,7 +2090,8 @@ def run_cli():
                                 "top_p": req_top_p,
                                 "repetition_penalty": 1.15,
                                 "mode": req_mode,
-                                "think": req_think
+                                "think": req_think,
+                                "max_tokens": max(reserve, 2048) if intent_res.intent == IntentType.CODING else reserve
                             }, stream=True, timeout=(10, 3600))
                             resp.raise_for_status()
                             
@@ -2281,25 +2346,16 @@ def run_cli():
                                 raw_tc = raw_tc[:-3]
                             raw_tc = raw_tc.strip()
                             
-                            try:
-                                tc_data = json.loads(raw_tc)
-                            except:
-                                try:
-                                    import ast
-                                    s = re.sub(r'\btrue\b', 'True', raw_tc)
-                                    s = re.sub(r'\bfalse\b', 'False', s)
-                                    s = re.sub(r'\bnull\b', 'None', s)
-                                    tc_data = ast.literal_eval(s)
-                                except Exception as e:
-                                    raise ValueError(f"Invalid JSON/Dict format: {e}")
+                            tc_data = robust_parse_tool_call(raw_tc)
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
 
                             # 1. Universal Answer Delivery Guard:
-                            # If model already generated a substantive answer (>150 chars with useful content)
-                            # AND we have already performed at least 1 tool observation in this turn,
-                            # the user's question has been answered! Do not let the model wander into redundant
-                            # searches or unrequested terminal commands (like git clone or random ls).
+                            # Terminate on substantive answer ONLY for search/information intents,
+                            # NEVER for coding, workspace file operations, or multi-step execution tasks!
+                            is_informational_intent = intent_res.intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH, IntentType.GENERAL_KNOWLEDGE)
+                            is_action_prompt = any(act in cmd.lower() for act in ["write", "create", "make", "build", "run", "execute", "install", "test", "flutter", "game", "code", "script"])
+
                             clean_text_before_tool = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
                             clean_text_before_tool = re.sub(r"<think>.*?</think>", "", clean_text_before_tool, flags=re.DOTALL).strip()
                             has_substantive_answer = (
@@ -2318,7 +2374,7 @@ def run_cli():
 
                             # 4. Block unauthorized actions during pure search/informational intents:
                             is_unauthorized_terminal = (
-                                intent_res.intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH, IntentType.GENERAL_KNOWLEDGE)
+                                is_informational_intent
                                 and t_name == "terminal.run"
                                 and any(danger in t_kwargs.get("command", "").lower() for danger in ["git clone", "rm ", "curl -o", "wget ", "mkdir ", "chmod "])
                                 and not any(explicit in cmd.lower() for explicit in ["clone", "install", "download", "run ", "execute", "setup"])
@@ -2327,7 +2383,7 @@ def run_cli():
                             should_terminate = (
                                 (t_name in ("web_search", "browser.open_url") and search_tool_count > 2) or
                                 (is_duplicate and iter_count >= 2) or
-                                (has_substantive_answer and iter_count >= 2) or
+                                (has_substantive_answer and is_informational_intent and not is_action_prompt and iter_count >= 2) or
                                 is_unauthorized_terminal
                             )
 

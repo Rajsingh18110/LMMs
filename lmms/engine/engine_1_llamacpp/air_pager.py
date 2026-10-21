@@ -146,15 +146,26 @@ class AirPager:
             except Exception:
                 pass
 
-    def execute_stream(self, messages: list):
+    def execute_stream(
+        self,
+        messages: list,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None
+    ):
         if not self.active_model:
             raise RuntimeError("No model active in AirPager.")
-            
+
+        gen_max_tokens = max_tokens if max_tokens is not None and max_tokens > 0 else 2048
+        gen_temp = temperature if temperature is not None else 0.4
+        gen_top_p = top_p if top_p is not None else 0.9
+
         generator: Any = self.active_model.create_chat_completion(
             messages=messages,
             stream=True,
-            max_tokens=1024,
-            temperature=0.0,
+            max_tokens=gen_max_tokens,
+            temperature=gen_temp,
+            top_p=gen_top_p,
             seed=42
         )
         

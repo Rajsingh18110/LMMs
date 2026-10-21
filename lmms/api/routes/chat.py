@@ -19,6 +19,9 @@ class ChatRequest(BaseModel):
     stream: bool = True
     mode: Optional[str] = "deep"
     think: Optional[bool] = True
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
 
 
 def fuzzy_match_model(req_name: str, loaded_keys: List[str]) -> Optional[str]:
@@ -106,7 +109,10 @@ async def chat_completions(req: ChatRequest):
         "model": req.model_name,
         "model_name": req.model_name,
         "mode": req.mode,
-        "think": req.think
+        "think": req.think,
+        "temperature": req.temperature,
+        "top_p": req.top_p,
+        "max_tokens": req.max_tokens
     }
 
     if req.stream:

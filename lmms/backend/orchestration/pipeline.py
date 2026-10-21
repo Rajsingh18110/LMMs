@@ -131,13 +131,15 @@ class OrchestrationPipeline:
             assembly_ms = int((time.time() - t_asm_start) * 1000)
 
         # 4. Token Budget Calculation & Pre-inference Protection
+        coding_reserve = 1280 if intent_res.intent == IntentType.CODING else None
         budget = self.budget_manager.calculate_budget(
             model_name=model_name,
             base_prompt=assembled_ctx.base_system_prompt,
             task_instructions=assembled_ctx.task_instructions,
             tool_schemas=assembled_ctx.tool_schemas_str,
             history_messages=conversation_history,
-            user_query=user_query
+            user_query=user_query,
+            requested_output_reserve=coding_reserve
         )
 
         # 5. Compaction if budget pressure detected

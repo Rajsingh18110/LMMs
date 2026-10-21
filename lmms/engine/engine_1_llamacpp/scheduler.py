@@ -42,17 +42,26 @@ class AirScheduler:
 
         return False
 
-    def route_request(self, group_id: int, target_role: str, messages: list):
+    def route_request(self, group_id: int, target_role: str, messages: list, **kwargs):
         group = self.groups.get(group_id, {})
         model_name = group.get(target_role)
         if not model_name:
             model_name = list(group.values())[0] if group else "default"
 
+        max_tokens = kwargs.get("max_tokens")
+        temperature = kwargs.get("temperature")
+        top_p = kwargs.get("top_p")
+
         # Fast path: If the requested model is already active and loaded in AirPager,
         # reuse it directly without re-reading binary GGUF headers or recalculating schedules.
         if self.is_model_active(model_name):
             self.update_state(self.pager.active_profile.model_name, "Active Generating")
-            return self.pager.execute_stream(messages)
+            return self.pager.execute_stream(
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p
+            )
 
         profile = self.loader.analyze_model(model_name)
         if not profile:
@@ -70,7 +79,12 @@ class AirScheduler:
             ram_gb=round((profile.cpu_layers / max(profile.total_layers, 1)) * profile.size_gb, 2)
         )
         self.update_state(model_name, "Active Generating")
-        return self.pager.execute_stream(messages)
+        return self.pager.execute_stream(
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p
+        )
 
     def register_model(self, model_name: str, location: str, vram_gb: float, ram_gb: float):
         self.active_models[model_name] = {

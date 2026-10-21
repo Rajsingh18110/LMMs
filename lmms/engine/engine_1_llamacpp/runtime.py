@@ -85,7 +85,18 @@ class AirLlamaCppRuntime(RuntimeContract):
         # Ensure model is routed/loaded in scheduler
         self.scheduler.parse_input_and_create_group(1, f"text:{model}")
 
-        result = self.scheduler.route_request(1, target_role, messages)
+        max_tokens = context.get("max_tokens")
+        temperature = context.get("temperature")
+        top_p = context.get("top_p")
+
+        result = self.scheduler.route_request(
+            1,
+            target_role,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p
+        )
 
         def stream_wrapper(gen):
             for item in gen:
