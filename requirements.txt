@@ -71,6 +71,7 @@ SpeechRecognition
 PyAudio
 gTTS
 pygame
+edge-tts
 
 # =========================================
 # Model Context Protocol (MCP) Subsystem

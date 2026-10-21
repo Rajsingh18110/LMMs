@@ -180,9 +180,26 @@ class LMMsTUI:
                         console.clear()
                         console.print(self.render_header())
 
-                elif user_input.lower() in ["/stats"]:
-                    stats = self.client.get_stats()
-                    console.print(Panel(str(stats), title="System Telemetry", border_style="dim"))
+                elif user_input.lower() in ["/voice", "/mic"]:
+                    import subprocess
+                    console.print("\n[bold red]🎙️ Recording from Mic... (Press ENTER to stop)[/bold red]")
+                    p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
+                    try:
+                        input()
+                    except (KeyboardInterrupt, EOFError):
+                        pass
+                    p.terminate()
+                    p.wait()
+                    try:
+                        import speech_recognition as sr
+                        r = sr.Recognizer()
+                        with sr.AudioFile("/tmp/lmms_mic.wav") as source:
+                            audio_data = r.record(source)
+                        user_input = r.recognize_google(audio_data)  # type: ignore
+                        console.print(f"[bold cyan]Transcribed:[/bold cyan] {user_input}")
+                    except Exception as e:
+                        console.print(f"[red]Could not understand audio: {e}[/red]")
+                        continue
 
                 else:
                     # Direct conversation prompt

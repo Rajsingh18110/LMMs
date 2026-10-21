@@ -164,9 +164,51 @@ class InteractiveChat:
                 f"  {COLOR_CYAN}/compact [restore]{COLOR_RESET}     Compact context with local model or restore\n"
                 f"  {COLOR_CYAN}/panel{COLOR_RESET}                 Launch Automation Canvas (n8n-style workflow builder)\n"
                 f"  {COLOR_CYAN}/gui [page]{COLOR_RESET}            Launch or focus Desktop Studio (e.g. /gui automation)\n"
+                f"  {COLOR_CYAN}/voice, /mic{COLOR_RESET}           Record query from microphone\n"
                 f"  {COLOR_CYAN}/clear{COLOR_RESET}             Clear conversation history & screen\n"
                 f"  {COLOR_CYAN}/exit{COLOR_RESET}              Exit chat\n\n"
             )
+
+        elif cmd in ["/voice", "/mic"]:
+            import subprocess
+            sys.stdout.write(f"\n{COLOR_BOLD_CYAN}🎙️ Recording from Mic... (Press ENTER to stop){COLOR_RESET}\n")
+            sys.stdout.flush()
+            p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
+            try:
+                input()
+            except (KeyboardInterrupt, EOFError):
+                pass
+            p.terminate()
+            p.wait()
+            try:
+                import speech_recognition as sr
+                r = sr.Recognizer()
+                with sr.AudioFile("/tmp/lmms_mic.wav") as source:
+                    audio_data = r.record(source)
+                voice_text = r.recognize_google(audio_data)  # type: ignore
+                sys.stdout.write(f"{COLOR_GREEN}✓ Transcribed:{COLOR_RESET} {voice_text}\n\n")
+                sys.stdout.flush()
+                self.messages.append({"role": "user", "content": voice_text})
+                cur_id = self.session_cli._ensure_initial_session()
+                self.session_cli.store.add_message(cur_id, role="user", content=voice_text)
+                sys.stdout.write(f"\n{COLOR_CYAN}lmms{COLOR_RESET} {COLOR_DIM}›{COLOR_RESET} ")
+                sys.stdout.flush()
+                full_response = ""
+                for chunk in self.client.stream_chat(
+                    model_name=self.model_name,
+                    messages=self.messages,
+                    mode=self.mode,
+                    think=self.think
+                ):
+                    sys.stdout.write(chunk)
+                    sys.stdout.flush()
+                    full_response += chunk
+                sys.stdout.write("\n\n")
+                self.messages.append({"role": "assistant", "content": full_response})
+                self.session_cli.store.add_message(cur_id, role="assistant", content=full_response)
+            except Exception as e:
+                sys.stdout.write(f"{COLOR_RED}✖ Voice error:{COLOR_RESET} {e}\n\n")
+            return False
 
         elif cmd in ("/gui", "/panel"):
             sub = parts[1].lower() if len(parts) > 1 else ("automation" if cmd == "/panel" else "automation")

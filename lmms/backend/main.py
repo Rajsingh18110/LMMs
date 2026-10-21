@@ -871,6 +871,8 @@ def run_cli():
         "/mcp": "Model Context Protocol tools, servers, and live dashboard",
         "/gui": "Launch Desktop Studio (e.g. /gui automation)",
         "/panel": "Launch Automation Canvas (n8n-style workflow builder)",
+        "/voice": "Full interactive voice mode with wave animation [F4]",
+        "/mic": "Record audio directly from microphone",
         "exit": "Quit CLI",
         "clear": "Clear screen"
     }
@@ -915,6 +917,26 @@ def run_cli():
                         yield Completion(cmd, start_position=-len(word), display_meta=desc[:60])
 
     from prompt_toolkit.completion import ThreadedCompleter
+    from prompt_toolkit.key_binding import KeyBindings
+    kb = KeyBindings()
+
+    @kb.add('f4')
+    def _(event):
+        event.app.current_buffer.text = '/voice'
+        event.app.current_buffer.validate_and_handle()
+
+    @kb.add('c-a')
+    def _(event):
+        # Select all text
+        b = event.app.current_buffer
+        b.cursor_position = 0
+        b.start_selection()
+        b.cursor_position = len(b.text)
+
+    @kb.add('c-z')
+    def _(event):
+        # Undo last action
+        event.app.current_buffer.undo()
 
     _cached_engine_health = [check_engine_health()]
 
@@ -928,13 +950,15 @@ def run_cli():
             f'<ansigray>Model:</ansigray> <ansigreen>{current_model}</ansigreen> │ '
             f'<ansigray>Mode:</ansigray> <ansicyan>{current_mode}</ansicyan> │ '
             f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
-            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> '
+            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> │ '
+            f'<ansiyellow>[F4]</ansiyellow> <ansigray>🎙️ Voice</ansigray> '
         )
 
     session = PromptSession(
         completer=ThreadedCompleter(CommandCompleter()),
         complete_while_typing=True,
         bottom_toolbar=get_bottom_toolbar,
+        key_bindings=kb,
         reserve_space_for_menu=8
     )
 
@@ -958,6 +982,7 @@ def run_cli():
     cap_manager = CapabilityManager()
 
     while True:
+        voice_mode_active = False
         try:
             with patch_stdout():
                 cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
@@ -966,31 +991,59 @@ def run_cli():
             if not cmd:
                 continue
 
-            if cmd == "/mic":
+            cmd_raw = cmd.lower()
+            if cmd_raw in ["/mic", "/voice"]:
                 import platform
                 if platform.system() == "Windows":
-                    console.print("[yellow]Microphone recording natively on Windows is not yet supported. Please use text input.[/yellow]")
+                    console.print("[yellow]Microphone/Voice recording natively on Windows is not yet supported. Please use text input.[/yellow]")
                     continue
                     
-                console.print("[bold red]🎙️  Recording from Mic... Press ENTER to stop.[/bold red]")
                 import speech_recognition as sr
+                import select
+                import termios
+                import tty
+                from lmms.backend.voice import VoiceSession
+                
+                vsession = VoiceSession()
+                vsession.start_animation("Listening... (Press ENTER to stop)")
+                
                 p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
+                
+                old_settings = termios.tcgetattr(sys.stdin)
                 try:
-                    input() # Wait for user to press Enter again
-                except EOFError:
-                    pass
+                    tty.setcbreak(sys.stdin.fileno())
+                    while True:
+                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                            c = sys.stdin.read(1)
+                            if c == '\n' or c == '\r':
+                                break
+                finally:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    
                 p.terminate()
                 p.wait()
-                console.print("[dim]Transcribing audio...[/dim]")
+                
+                vsession.update_status("Thinking...")
+                
                 r = sr.Recognizer()
                 try:
                     with sr.AudioFile("/tmp/lmms_mic.wav") as source:
                         audio_data = r.record(source)
-                    cmd = r.recognize_google(audio_data)  # type: ignore
-                    console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
+                    transcribed = r.recognize_google(audio_data)  # type: ignore
                 except Exception as e:
+                    vsession.stop_animation()
                     console.print(f"[red]Could not understand audio: {e}[/red]")
                     continue
+                    
+                cmd = transcribed
+                if cmd_raw == "/mic":
+                    vsession.stop_animation()
+                    console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
+                    voice_mode_active = False
+                else:
+                    vsession.set_heard(cmd)   # Show what user said on screen
+                    vsession.update_status("Thinking...")
+                    voice_mode_active = True
             elif cmd.strip("'\"").endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a")):
                 file_path = cmd.strip("'\"")
                 import speech_recognition as sr
@@ -1065,7 +1118,7 @@ def run_cli():
 
 [bold magenta]🧠 Core AI & Interaction[/bold magenta]
   [green]/fast, /deep, /code[/green]      Switch reasoning modes
-  [green]/vision, /mic[/green]            Use vision OCR and microphone input
+  [green]/vision, /mic, /voice[/green]     Use vision OCR, microphone, and interactive voice [F4]
   [green]/ml <model>[/green]              Swap AI models on the fly
   [green]/chat, /newchat[/green]          Manage conversation threads
 
@@ -1972,7 +2025,23 @@ def run_cli():
                                                     console.print(Panel(Markdown(full_reply), title=f"❌ {current_model} Error", border_style="red", padding=(1, 2), expand=False))
                                                 break
                                                 
-                                            full_reply += chunk.get("content", "")
+                                            chunk_text = chunk.get("content", "")
+                                            full_reply += chunk_text
+                                            
+                                            if voice_mode_active:
+                                                if not hasattr(vsession, "sentence_buffer"):
+                                                    vsession.sentence_buffer = ""
+                                                    vsession.update_status("Speaking...")
+                                                vsession.sentence_buffer += chunk_text
+                                                if any(p in chunk_text for p in [".", "?", "!", "\n"]):
+                                                    import re
+                                                    parts = re.split(r'([.?!]\s+|\n)', vsession.sentence_buffer)
+                                                    if len(parts) > 1:
+                                                        completed = "".join(parts[:-1]).strip()
+                                                        if completed:
+                                                            from lmms.backend.voice import stream_audio
+                                                            stream_audio(completed, voice="female")
+                                                        vsession.sentence_buffer = parts[-1]
                                             
                                             if not leak_check_done:
                                                 if len(full_reply) < 80:
@@ -1988,12 +2057,13 @@ def run_cli():
                                             
                                             if display_reply and not first_token:
                                                 first_token = True
-                                                spin_status.stop()
-                                                console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
-                                                live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
-                                                live_view.start()
+                                                if not voice_mode_active:
+                                                    spin_status.stop()
+                                                    console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                                                    live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
+                                                    live_view.start()
                                                 
-                                            if live_view and display_reply:
+                                            if live_view and display_reply and not voice_mode_active:
                                                 now = time.time()
                                                 if now - last_refresh > 0.05:
                                                     live_view.update(Markdown(display_reply), refresh=True)
@@ -2363,8 +2433,32 @@ def run_cli():
                                 json.dump(chat_data, f)
                     except:
                         pass
+                
+                if voice_mode_active:
+                    try:
+                        if hasattr(vsession, "sentence_buffer") and vsession.sentence_buffer.strip():
+                            from lmms.backend.voice import stream_audio
+                            stream_audio(vsession.sentence_buffer.strip(), voice="female")
+                            
+                        # Wait for TTS queue to drain before stopping animation
+                        from lmms.backend.voice import wait_for_tts
+                        wait_for_tts()
+                            
+                        vsession.stop_animation()
+                        
+                        # Print the final reply natively so the user can read it
+                        console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                        console.print(Markdown(answer_content))
+                    except Exception:
+                        pass
+                    voice_mode_active = False
 
         except KeyboardInterrupt:
+            if 'voice_mode_active' in locals() and voice_mode_active:
+                try:
+                    vsession.stop_animation()
+                except Exception:
+                    pass
             console.print("\n[dim]Type 'exit' to quit.[/dim]")
         except EOFError:
             break

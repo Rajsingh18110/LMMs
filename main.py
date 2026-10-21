@@ -853,8 +853,27 @@ def main():
                             if os.path.exists(potential_path) and potential_path.lower().endswith(('.wav', '.mp3', '.ogg', '.flac')):
                                 is_audio_input = True
                                 audio_path = potential_path
-                                text_prompt = " ".join(parsed[1:]) if len(parsed) > 1 else "Transcribe this audio."
-                                
+                        if user_input.lower().strip() in ["/voice", "/mic"]:
+                            import subprocess
+                            console.print("\n[bold red]🎙️ Recording from Mic... (Press ENTER to stop)[/bold red]")
+                            p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
+                            try:
+                                input()
+                            except (KeyboardInterrupt, EOFError):
+                                pass
+                            p.terminate()
+                            p.wait()
+                            try:
+                                import speech_recognition as sr
+                                r = sr.Recognizer()
+                                with sr.AudioFile("/tmp/lmms_mic.wav") as source:
+                                    audio_data = r.record(source)
+                                user_input = r.recognize_google(audio_data)
+                                console.print(f"[bold cyan]Transcribed:[/bold cyan] {user_input}")
+                            except Exception as e:
+                                console.print(f"[red]Could not understand audio: {e}[/red]")
+                                continue
+
                         if is_audio_input and audio_path:
                             if os.path.exists(audio_path):
                                 import base64
