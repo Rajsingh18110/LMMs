@@ -117,7 +117,7 @@ class EngineManager:
             }
 
     def set_engine_mode(self, mode: str) -> str:
-        norm = str(mode).lower().strip()
+        norm = mode.lower().strip()
         if norm in ["auto", "smart", "3", "tier3", "unified", "super", "all", "3-in-1"]:
             self.active_mode = "auto"
         elif norm in ["1", "tier1", "llamacpp", "llama", "gguf", "air"]:

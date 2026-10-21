@@ -7,18 +7,21 @@ import subprocess
 import os
 import queue
 import re
+import random
+import textwrap
+import asyncio
 
 _stop_event = threading.Event()
 _anim_thread = None
 _status_text = "Listening..."
-_heard_text = ""     # What the user said (shown on screen during speaking)
+_heard_text = ""      # What the user said (shown on top in User box)
+_ai_text = ""         # Live streaming response from AI (shown in AI box)
 _tts_queue = queue.Queue()
-
-import random
+_playback_queue = queue.Queue()
 
 ROWS = 6
 GH = ROWS * 4
-MAX_W = 110
+MAX_W = 100
 TH = 0.30
 
 BIT = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (0, 3): 0x40,
@@ -98,58 +101,125 @@ def render_wave(val, W):
         lines.append("".join(out))
     return "\n".join(lines)
 
+def _vis_len(s):
+    clean = re.sub(r'\033\[[0-9;]*[a-zA-Z]', '', s)
+    length = 0
+    for ch in clean:
+        length += 2 if ord(ch) > 0x2000 else 1
+    return length
+
+def _pad_line(line, width):
+    v = _vis_len(line)
+    if v < width:
+        return line + " " * (width - v)
+    return line
+
+def _make_box(title, text, width, height=None, border_color="\033[1;36m", title_color="\033[1;37m", text_color="\033[0m"):
+    inner_w = max(10, width - 4)
+    raw_lines = []
+    if text and text.strip():
+        for p in text.strip().split("\n"):
+            p_strip = p.strip()
+            if not p_strip:
+                continue
+            w = textwrap.wrap(p_strip, width=inner_w)
+            raw_lines.extend(w if w else [""])
+    else:
+        raw_lines = [""]
+
+    if height is not None:
+        if len(raw_lines) > height:
+            raw_lines = raw_lines[-height:]  # Auto-scroll to show latest streaming text
+        elif len(raw_lines) < height:
+            raw_lines += [""] * (height - len(raw_lines))
+
+    v_title = _vis_len(title)
+    dashes_len = max(0, width - 5 - v_title)
+    header = f"{border_color}╭─ {title_color}{title}{border_color} " + "─" * dashes_len + f"╮\033[0m"
+    footer = f"{border_color}╰" + "─" * (width - 2) + f"╯\033[0m"
+    
+    body = []
+    for line in raw_lines:
+        padded = _pad_line(f"{text_color}{line}\033[0m", inner_w)
+        body.append(f"{border_color}│\033[0m {padded} {border_color}│\033[0m")
+    return [header] + body + [footer]
+
 def animate_siri_wave_slim():
-    global _status_text
+    global _status_text, _heard_text, _ai_text
     
     # Enable Alternate Screen Buffer and hide cursor
     sys.stdout.write("\033[?1049h\033[?25l")
     sys.stdout.flush()
     
-    FPS = 60
+    FPS = 30
     voice = VoiceLevel()
     phases = [0.0] * len(LAYERS)
     t0 = last_t = time.perf_counter()
     
-    # Pre-build the blank frame template
-    prev_lines_count = 0
-    
     try:
         while not _stop_event.is_set():
             columns, lines = shutil.get_terminal_size()
-            W = max(40, min(MAX_W, columns - 1))
+            W = max(40, min(MAX_W, columns - 4))
             pad = " " * max(0, (columns - W) // 2)
             
             now = time.perf_counter()
             dt, last_t = now - last_t, now
-            level = voice.update(now - t0, dt)
+            
+            is_active = bool("Speaking" in _status_text or "Listening" in _status_text)
+            level = voice.update(now - t0, dt) if is_active else 0.15
             for i, layer in enumerate(LAYERS):
                 phases[i] += layer[1] * (0.7 + level) * dt * 3.0
                 
             frame = render_wave(build_grid(W * 2, phases, level), W)
             frame_lines = [pad + ln for ln in frame.split("\n")]
             
-            # --- 2-line status: line1 = heard, line2 = speaking ---
-            heard_line = f"\033[2;37m❓ You: {_heard_text}\033[0m" if _heard_text else ""
-            status_line = f"\033[1;36m🔊 {_status_text}\033[0m"
+            # --- Gemini Live Layout ---
+            # 1. Header
+            header_title = "🎙️  LMMs Voice Live"
+            header_dashes = max(0, (W - _vis_len(header_title) - 4) // 2)
+            header_str = pad + f"\033[1;36m╭{'─' * header_dashes} \033[1;37m{header_title}\033[1;36m {'─' * max(0, W - _vis_len(header_title) - 4 - header_dashes)}╮\033[0m"
             
-            # Text in center, wave at bottom
-            top_padding = max(0, (lines // 2) - 5)
-            top_part_lines = (
-                ["" ] * top_padding +
-                [heard_line.center(columns + 20) if _heard_text else ""] +  # +20 for ANSI codes
-                [status_line.center(columns + 20)]                          # +20 for ANSI codes
-            )
-            rem_lines = lines - len(top_part_lines) - ROWS - 1
-            if rem_lines > 0:
-                top_part_lines += [""] * rem_lines
+            # 2. User Box (Top)
+            user_display = _heard_text if _heard_text else "Listening to your voice... Speak now and press ENTER"
+            user_title = "👤 You"
+            user_box_lines = _make_box(user_title, user_display, W, height=2, border_color="\033[1;36m", title_color="\033[1;37m", text_color="\033[0;37m")
+            
+            # 3. AI Box (Middle)
+            if "Speaking" in _status_text:
+                ai_title = "🤖 LMMs Assistant  \033[1;32m● Speaking\033[0m"
+                border_c = "\033[1;35m"
+            elif "Thinking" in _status_text or "Transcribing" in _status_text:
+                ai_title = f"🤖 LMMs Assistant  \033[1;33m● {_status_text}\033[0m"
+                border_c = "\033[1;33m"
+            else:
+                ai_title = "🤖 LMMs Assistant  \033[2m● Waiting\033[0m"
+                border_c = "\033[2;35m"
                 
-            all_lines = top_part_lines + frame_lines
+            # Dynamic height for AI Box based on available terminal height
+            fixed_rows = 1 + len(user_box_lines) + ROWS + 3 + 2
+            ai_height = max(3, min(14, lines - fixed_rows))
+            ai_display = _ai_text if _ai_text else "(Waiting for model response...)"
+            ai_box_lines = _make_box(ai_title, ai_display, W, height=ai_height, border_color=border_c, title_color="\033[1;35m", text_color="\033[1;37m")
             
-            # NO \033[2J ! Move cursor to home, overwrite each line → zero flicker
+            # 4. Status / Wave section
+            status_line = pad + f"\033[1;34m🔊 {_status_text}\033[0m".center(columns)
+            footer_line = pad + "\033[2;37m[ Press ENTER to submit speech | Press Ctrl+C to cancel ]\033[0m".center(columns)
+            
+            # Assemble all lines
+            all_lines = (
+                [header_str] +
+                [pad + ln for ln in user_box_lines] +
+                [""] +
+                [pad + ln for ln in ai_box_lines] +
+                [""] +
+                frame_lines +
+                [status_line, footer_line]
+            )
+            
             out_parts = ["\033[H"]
-            for ln in all_lines:
-                # Pad line to full width to erase leftover chars, then move to next line
+            for ln in all_lines[:lines]:
                 out_parts.append(ln + "\033[K\n")
+            out_parts.append("\033[J")
             sys.stdout.write("".join(out_parts))
             sys.stdout.flush()
             
@@ -165,7 +235,7 @@ def animate_siri_wave_slim():
 _HINGLISH_WORDS = {
     r'\bhai\b', r'\bbhai\b', r'\bnahin\b', r'\bnahi\b', r'\bhaan\b',
     r'\bkya\b', r'\bkaro\b', r'\bkarna\b', r'\bthik\b', r'\btheek\b',
-    r'\bacha\b', r'\bacha\b', r'\bsahi\b', r'\bsamajh\b', r'\bwala\b',
+    r'\bacha\b', r'\bachha\b', r'\bsahi\b', r'\bsamajh\b', r'\bwala\b',
     r'\bwali\b', r'\bkuch\b', r'\bkuchh\b', r'\byaar\b', r'\bdost\b',
     r'\babhi\b', r'\bwaise\b', r'\bphir\b', r'\bbaad\b', r'\bpehle\b',
     r'\bmatlab\b', r'\blagta\b', r'\blagti\b', r'\bbal\b', r'\bbol\b',
@@ -185,19 +255,15 @@ def detect_language(text):
     if len(words) == 0:
         return 'english'
     matches = len(_HINGLISH_PAT.findall(text))
-    # If more than 25% of words are Hinglish, use Hindi voice
-    if matches / max(len(words), 1) >= 0.25:
+    if matches / max(len(words), 1) >= 0.20:
         return 'hindi'
     return 'english'
 
 def clean_text_for_tts(text):
     text = text.replace("*", "").replace("#", "").replace("`", "")
     text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
-    # Remove emojis and special unicode that confuse TTS
     text = re.sub(r'[\U0001F300-\U0001FAFF\U00002700-\U000027BF]', '', text)
     return text.strip()
-
-_playback_queue = queue.Queue()
 
 def tts_download_worker():
     import uuid
@@ -221,79 +287,120 @@ def tts_download_worker():
                 voice_name = "en-IN-PrabhatNeural" if voice == "male" else "en-IN-NeerjaExpressiveNeural"
             
             tmp_file = f"/tmp/tts_{uuid.uuid4().hex}.mp3"
+            downloaded = False
             
-            edge_bin = shutil.which("edge-tts")
-            edge_cmd = [edge_bin] if edge_bin else [sys.executable, "-m", "edge_tts"]
-            subprocess.run(
-                edge_cmd + ["--voice", voice_name,
-                 "--text", clean_t, "--write-media", tmp_file],
-                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            # 1. Primary: Direct in-process edge_tts (fastest, high quality neural)
+            try:
+                import edge_tts
+                async def _save_edge():
+                    comm = edge_tts.Communicate(clean_t, voice_name)
+                    await comm.save(tmp_file)
+                asyncio.run(_save_edge())
+                if os.path.exists(tmp_file) and os.path.getsize(tmp_file) > 100:
+                    downloaded = True
+            except Exception:
+                downloaded = False
+                
+            # 2. Secondary fallback: gTTS
+            if not downloaded:
+                try:
+                    from gtts import gTTS
+                    gtts_lang = 'hi' if lang == 'hindi' else 'en'
+                    tts = gTTS(clean_t, lang=gtts_lang)
+                    tts.save(tmp_file)
+                    if os.path.exists(tmp_file) and os.path.getsize(tmp_file) > 100:
+                        downloaded = True
+                except Exception:
+                    downloaded = False
             
-            _playback_queue.put((tmp_file, text, _tts_queue))
-            
+            if downloaded:
+                _playback_queue.put((tmp_file, clean_t, _tts_queue))
+            else:
+                _tts_queue.task_done()
+                
         except queue.Empty:
             continue
         except Exception:
             try:
                 _tts_queue.task_done()
-            except:
+            except Exception:
                 pass
 
 def audio_play_worker():
     global _status_text
     while not _stop_event.is_set():
+        original_queue = None
         try:
             item = _playback_queue.get(timeout=0.1)
             if item is None:
                 continue
             tmp_file, text, original_queue = item
             
-            # Sync the text on screen with exactly what is being spoken!
-            # Truncate long sentences for display
-            display_text = text if len(text) <= 60 else text[:57] + "..."
+            display_text = text if len(text) <= 50 else text[:47] + "..."
             _status_text = f"Speaking: {display_text}"
             
-            try:
-                p = subprocess.Popen(["ffplay", "-nodisp", "-autoexit", tmp_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                while p.poll() is None:
-                    time.sleep(0.05)
-                    if _stop_event.is_set():
-                        p.terminate()
-                        break
-            except FileNotFoundError:
-                os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1"
-                old_err = sys.stderr
+            played = False
+            # 1. Prefer mpg123 if installed (ultra fast, native audio)
+            mpg_bin = shutil.which("mpg123")
+            if mpg_bin:
                 try:
-                    with open(os.devnull, 'w') as f:
-                        sys.stderr = f
-                        import pygame
-                        pygame.mixer.init()
-                finally:
-                    sys.stderr = old_err
-                
-                pygame.mixer.music.load(tmp_file)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.05)
-                    if _stop_event.is_set():
-                        pygame.mixer.music.stop()
-                        break
-                pygame.mixer.quit()
+                    p = subprocess.Popen([mpg_bin, "-q", tmp_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    while p.poll() is None:
+                        time.sleep(0.05)
+                        if _stop_event.is_set():
+                            p.terminate()
+                            break
+                    played = True
+                except Exception:
+                    played = False
+                    
+            # 2. Fallback to ffplay
+            if not played:
+                ffplay_bin = shutil.which("ffplay")
+                if ffplay_bin:
+                    try:
+                        p = subprocess.Popen([ffplay_bin, "-nodisp", "-autoexit", tmp_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        while p.poll() is None:
+                            time.sleep(0.05)
+                            if _stop_event.is_set():
+                                p.terminate()
+                                break
+                        played = True
+                    except Exception:
+                        played = False
+                        
+            # 3. Fallback to pygame.mixer
+            if not played:
+                try:
+                    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1"
+                    import pygame
+                    pygame.mixer.init()
+                    pygame.mixer.music.load(tmp_file)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        time.sleep(0.05)
+                        if _stop_event.is_set():
+                            pygame.mixer.music.stop()
+                            break
+                    pygame.mixer.quit()
+                    played = True
+                except Exception:
+                    pass
                 
             try:
                 os.remove(tmp_file)
-            except:
+            except Exception:
                 pass
                 
-            original_queue.task_done()
+            if original_queue is not None:
+                original_queue.task_done()
         except queue.Empty:
             continue
         except Exception:
             try:
-                if 'original_queue' in locals():
+                if original_queue is not None:
                     original_queue.task_done()
-            except:
+            except Exception:
                 pass
 
 def wait_for_tts():
@@ -301,32 +408,40 @@ def wait_for_tts():
     _tts_queue.join()
 
 def set_heard_text(text):
-    """Set what the user said - shown on screen during AI speaking"""
+    """Set what the user said - shown on top in User box"""
     global _heard_text
     _heard_text = text
+
+def set_ai_text(text):
+    """Set live AI response text"""
+    global _ai_text
+    _ai_text = text
 
 class VoiceSession:
     def __init__(self):
         self.thread = None
         self.tts_dl_thread = None
         self.tts_play_thread = None
+        self.sentence_buffer = ""
 
     def start_animation(self, text):
-        global _stop_event, _anim_thread, _status_text, _heard_text
+        global _stop_event, _anim_thread, _status_text, _heard_text, _ai_text
         _status_text = text
-        _heard_text = ""  # Clear heard text on new session
+        _heard_text = ""
+        _ai_text = ""
+        self.sentence_buffer = ""
         _stop_event.clear()
         
         while not _tts_queue.empty():
             try:
                 _tts_queue.get_nowait()
-            except:
+            except Exception:
                 pass
                 
         while not _playback_queue.empty():
             try:
                 _playback_queue.get_nowait()
-            except:
+            except Exception:
                 pass
                 
         self.thread = threading.Thread(target=animate_siri_wave_slim, daemon=True)
@@ -347,15 +462,22 @@ class VoiceSession:
         global _heard_text
         _heard_text = text
 
+    def update_ai_response(self, text):
+        global _ai_text
+        _ai_text = text
+
     def stop_animation(self):
         global _stop_event
         _stop_event.set()
-        if self.thread:
-            self.thread.join()
-        if self.tts_dl_thread:
-            self.tts_dl_thread.join()
-        if self.tts_play_thread:
-            self.tts_play_thread.join()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1.0)
+        if self.tts_dl_thread and self.tts_dl_thread.is_alive():
+            self.tts_dl_thread.join(timeout=1.0)
+        if self.tts_play_thread and self.tts_play_thread.is_alive():
+            self.tts_play_thread.join(timeout=1.0)
+        # Restore normal terminal screen and cursor
+        sys.stdout.write("\033[?1049l\033[?25h")
+        sys.stdout.flush()
 
 def play_audio(text, voice="female"):
     _tts_queue.put((text, voice))

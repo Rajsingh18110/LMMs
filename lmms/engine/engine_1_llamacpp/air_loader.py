@@ -280,7 +280,9 @@ class AirLoader:
         # 5. Tri-Regime Selection Architecture
         total_sys_capacity_gb = v_usable_gb + ram_total_gb - r_reserve_gb
 
-        if vram_available_gb > 0 and m_working_gpu <= v_usable_gb:
+        # If model size fits in available VRAM (allowing ~0.5GB for KV cache + overhead),
+        # run 100% Pure GPU mode (Regime 1) for maximum speed.
+        if vram_available_gb > 0 and (size_gb + 0.5 <= vram_available_gb or size_gb <= v_usable_gb or size_gb <= vram_available_gb * 0.88):
             # REGIME 1: PURE GPU OFFLOAD
             regime = 1
             optimal_gpu_layers = -1
@@ -298,9 +300,7 @@ class AirLoader:
             s_layer_gpu = w_layer_gb + kv_layer_gb
             
             allocated_gpu_layers = int(v_layer_budget_gb / s_layer_gpu) if (s_layer_gpu > 0 and vram_available_gb > 0) else 0
-            # Cap at safe limit for 6GB VRAM (max 18 layers to prevent OOM)
-            if vram_total_gb <= 6.5:
-                allocated_gpu_layers = min(18, allocated_gpu_layers)
+            # Allocate all layers that can fit into VRAM safely without artificial caps
             allocated_gpu_layers = max(0, min(total_layers, allocated_gpu_layers))
             
             optimal_gpu_layers = allocated_gpu_layers

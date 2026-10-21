@@ -1005,25 +1005,48 @@ def run_cli():
                 from lmms.backend.voice import VoiceSession
                 
                 vsession = VoiceSession()
-                vsession.start_animation("Listening... (Press ENTER to stop)")
+                voice_mode_active = True
+                vsession.start_animation("Listening... (Press ENTER to stop, Ctrl+C to cancel)")
                 
                 p = subprocess.Popen(["arecord", "-f", "cd", "-t", "wav", "-q", "/tmp/lmms_mic.wav"])
                 
-                old_settings = termios.tcgetattr(sys.stdin)
+                interrupted = False
+                old_settings = None
                 try:
+                    old_settings = termios.tcgetattr(sys.stdin)
                     tty.setcbreak(sys.stdin.fileno())
                     while True:
-                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                        if select.select([sys.stdin], [], [], 0.05)[0]:
                             c = sys.stdin.read(1)
-                            if c == '\n' or c == '\r':
+                            if c in ('\n', '\r'):
                                 break
+                            elif c == '\x03':  # Ctrl+C pressed
+                                interrupted = True
+                                break
+                except (KeyboardInterrupt, Exception):
+                    interrupted = True
                 finally:
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    if old_settings is not None:
+                        try:
+                            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                        except Exception:
+                            pass
+                    try:
+                        p.terminate()
+                        p.wait(timeout=1)
+                    except Exception:
+                        try:
+                            p.kill()
+                        except Exception:
+                            pass
                     
-                p.terminate()
-                p.wait()
+                if interrupted:
+                    vsession.stop_animation()
+                    voice_mode_active = False
+                    console.print("\n[yellow]Voice mode cancelled.[/yellow]")
+                    continue
                 
-                vsession.update_status("Thinking...")
+                vsession.update_status("Transcribing voice...")
                 
                 r = sr.Recognizer()
                 try:
@@ -1032,6 +1055,7 @@ def run_cli():
                     transcribed = r.recognize_google(audio_data)  # type: ignore
                 except Exception as e:
                     vsession.stop_animation()
+                    voice_mode_active = False
                     console.print(f"[red]Could not understand audio: {e}[/red]")
                     continue
                     
@@ -1041,7 +1065,7 @@ def run_cli():
                     console.print(f"[bold cyan]Transcribed:[/bold cyan] {cmd}")
                     voice_mode_active = False
                 else:
-                    vsession.set_heard(cmd)   # Show what user said on screen
+                    vsession.set_heard(cmd)   # Show what user said inside the User Box
                     vsession.update_status("Thinking...")
                     voice_mode_active = True
             elif cmd.strip("'\"").endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a")):
@@ -2029,6 +2053,7 @@ def run_cli():
                                             full_reply += chunk_text
                                             
                                             if voice_mode_active:
+                                                vsession.update_ai_response(full_reply)
                                                 if not hasattr(vsession, "sentence_buffer"):
                                                     vsession.sentence_buffer = ""
                                                     vsession.update_status("Speaking...")
@@ -2417,22 +2442,28 @@ def run_cli():
                     pass
 
                 # Auto-naming for first message
+                # Auto-naming for first message in background thread so it never blocks the prompt loop or engine health poller
                 if current_chat_name == "Untitled" and len(chat_history) == 2:
-                    try:
-                        name_resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
-                            "model_name": current_model,
-                            "messages": [{"role": "user", "content": f"Generate a short 3-word title for this chat based on the first message: '{cmd}'. Reply ONLY with the title."}],
-                            "stream": False,
-                            "temperature": 0.3
-                        }, timeout=5)
-                        new_name = name_resp.json().get("message", {}).get("content", "Untitled").strip().strip('"').replace('\\n', ' ')
-                        if new_name and len(new_name) < 50:
-                            current_chat_name = new_name
-                            chat_data["name"] = current_chat_name
-                            with open(os.path.join(CHATS_DIR, f"{current_chat_id}.json"), "w") as f:
-                                json.dump(chat_data, f)
-                    except:
-                        pass
+                    def _async_gen_title(chat_id, user_msg):
+                        try:
+                            name_resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
+                                "model_name": current_model,
+                                "messages": [{"role": "user", "content": f"Generate a short 3-word title for this chat based on the first message: '{user_msg}'. Reply ONLY with the title."}],
+                                "stream": False,
+                                "temperature": 0.3
+                            }, timeout=8)
+                            new_name = name_resp.json().get("message", {}).get("content", "Untitled").strip().strip('"').replace('\n', ' ')
+                            if new_name and len(new_name) < 50:
+                                chat_file = os.path.join(CHATS_DIR, f"{chat_id}.json")
+                                if os.path.exists(chat_file):
+                                    with open(chat_file, "r") as f:
+                                        c_data = json.load(f)
+                                    c_data["name"] = new_name
+                                    with open(chat_file, "w") as f:
+                                        json.dump(c_data, f)
+                        except Exception:
+                            pass
+                    threading.Thread(target=_async_gen_title, args=(current_chat_id, cmd), daemon=True, name="Async-Chat-Title").start()
                 
                 if voice_mode_active:
                     try:
@@ -2459,6 +2490,7 @@ def run_cli():
                     vsession.stop_animation()
                 except Exception:
                     pass
+                voice_mode_active = False
             console.print("\n[dim]Type 'exit' to quit.[/dim]")
         except EOFError:
             break
