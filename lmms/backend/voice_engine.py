@@ -114,9 +114,9 @@ def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 def rgb_to_hex(r: int, g: int, b: int) -> str:
-    r = max(0, min(255, int(r)))
-    g = max(0, min(255, int(g)))
-    b = max(0, min(255, int(b)))
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
     return f"#{r:02x}{g:02x}{b:02x}"
 
 def interpolate_color(c1_hex: str, c2_hex: str, t: float) -> str:
@@ -124,7 +124,11 @@ def interpolate_color(c1_hex: str, c2_hex: str, t: float) -> str:
     t = max(0.0, min(1.0, t))
     r1, g1, b1 = hex_to_rgb(c1_hex)
     r2, g2, b2 = hex_to_rgb(c2_hex)
-    return rgb_to_hex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
+    return rgb_to_hex(
+        int(r1 + (r2 - r1) * t),
+        int(g1 + (g2 - g1) * t),
+        int(b1 + (b2 - b1) * t)
+    )
 
 # ==============================================================================
 # 2. EASING FUNCTIONS
