@@ -7,227 +7,227 @@ import subprocess
 import os
 import queue
 import re
-import random
-import textwrap
 import asyncio
+from datetime import datetime
+import psutil
+
+from rich.console import Console, Group
+from rich.live import Live
+from rich.panel import Panel
+from rich.text import Text
+from rich.table import Table
+from rich import box
 
 _stop_event = threading.Event()
 _anim_thread = None
 _status_text = "Listening..."
-_heard_text = ""      # What the user said (shown on top in User box)
-_ai_text = ""         # Live streaming response from AI (shown in AI box)
+_heard_text = ""         # What user said (shown in User box)
+_ai_text = ""            # Clean spoken AI reply (shown in AI box, zero think tags)
+_thoughts_text = ""      # Internal reasoning (shown in muted Thought box if present)
 _tts_queue = queue.Queue()
 _playback_queue = queue.Queue()
 
-ROWS = 6
-GH = ROWS * 4
-MAX_W = 100
-TH = 0.30
+# Network telemetry tracking
+_last_net_time = time.time()
+_last_net_io = psutil.net_io_counters()
+_cached_net_str = "NET: ↑0.0 ↓0.0 KB/s"
 
-BIT = {(0, 0): 0x01, (0, 1): 0x02, (0, 2): 0x04, (0, 3): 0x40,
-       (1, 0): 0x08, (1, 1): 0x10, (1, 2): 0x20, (1, 3): 0x80}
+def _get_network_speed():
+    global _last_net_time, _last_net_io, _cached_net_str
+    now = time.time()
+    dt = now - _last_net_time
+    if dt >= 1.0:
+        try:
+            curr = psutil.net_io_counters()
+            up_kb = (curr.bytes_sent - _last_net_io.bytes_sent) / (dt * 1024.0)
+            down_kb = (curr.bytes_recv - _last_net_io.bytes_recv) / (dt * 1024.0)
+            _cached_net_str = f"NET: ↑{up_kb:.1f} ↓{down_kb:.1f} KB/s"
+            _last_net_io = curr
+            _last_net_time = now
+        except Exception:
+            pass
+    return _cached_net_str
 
-LAYERS = [
-    (1.2,  1.00, 1.00, 1.00, 0.70),
-    (1.9, -0.70, 0.65, 0.65, 0.60),
-    (0.8,  0.50, 0.85, 0.55, 0.60),
-    (2.6,  0.40, 0.40, 0.45, 0.55),
-]
+def extract_thoughts_and_response(text: str):
+    """
+    Separates <think>...</think> internal reasoning from the actual spoken dialogue.
+    Guarantees that TTS and the spoken response box never contain thinking tags.
+    """
+    thoughts = ""
+    spoken_text = text
+    if "<think>" in text:
+        if "</think>" in text:
+            match = re.search(r"<think>(.*?)</think>", text, flags=re.DOTALL)
+            if match:
+                thoughts = match.group(1).strip()
+            spoken_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        else:
+            # Model is still thinking (closing tag not yet generated)
+            parts = text.split("<think>", 1)
+            thoughts = parts[1].strip()
+            spoken_text = parts[0].strip()
+    return thoughts, spoken_text
 
-class VoiceLevel:
-    def __init__(self):
-        self.level, self.target, self.next_change = 0.7, 0.7, 0.0
+def render_multiline_equalizer(t: float, width: int = 50, rows: int = 3, level: float = 0.8) -> str:
+    """Renders a dynamic cyberpunk ASCII sound wave equalizer using block characters."""
+    heights = []
+    for x in range(width):
+        norm_x = (x - width / 2.0) / (width * 0.42)
+        env = math.exp(-norm_x * norm_x)
+        h = (
+            math.sin(x * 0.35 + t * 5.2) * 0.45 +
+            math.sin(x * 0.72 - t * 3.6) * 0.30 +
+            math.cos(x * 0.22 + t * 2.1) * 0.25
+        )
+        val = max(0.08, abs(h) * env * level * rows)
+        heights.append(val)
 
-    def update(self, t, dt):
-        if t >= self.next_change:
-            self.target = random.choice([0.55, 0.7, 0.85, 1.0, 0.9, 0.75])
-            self.next_change = t + random.uniform(0.3, 0.9)
-        rate = 9.0 if self.target > self.level else 2.5
-        self.level += (self.target - self.level) * min(1.0, rate * dt)
-        return self.level
-
-def smoothstep(x):
-    x = max(0.0, min(1.0, x))
-    return x * x * (3 - 2 * x)
-
-def build_grid(gw, phases, level):
-    val = [[0.0] * gw for _ in range(GH)]
-    cy = GH / 2
-    A = GH / 2 - 1.0
-    fade = [smoothstep(min(x / (gw * 0.10), (gw - 1 - x) / (gw * 0.10))) for x in range(gw)]
-    env = [math.sin(math.pi * x / (gw - 1)) ** 1.2 for x in range(gw)]
-
-    for (cycles, _, amp, bright, sigma), ph in zip(LAYERS, phases):
-        w = 2 * math.pi * cycles / gw
-        ys = [cy + A * amp * level * env[x] *
-              (math.sin(x * w + ph) + 0.2 * math.sin(2 * x * w - ph * 1.4)) / 1.2
-              for x in range(gw)]
-        for x in range(gw):
-            b = bright * fade[x]
-            if b < 0.05:
-                continue
-            slope = (ys[min(x + 1, gw - 1)] - ys[max(x - 1, 0)]) / 2
-            k = math.sqrt(1 + slope * slope)
-            reach = int(2.2 * sigma * k) + 2
-            yc = ys[x]
-            for py in range(max(0, int(yc) - reach), min(GH, int(yc) + reach + 1)):
-                d = (py + 0.5 - yc) / k
-                val[py][x] += b * (math.exp(-(d / sigma) ** 2) + 0.15 * math.exp(-(d / (sigma * 3)) ** 2))
-    return val
-
-def render_wave(val, W):
+    row_colors = ["#00E5FF", "#00FFA3", "#BD00FF"]
     lines = []
-    for row in range(ROWS):
-        out, last = [], None
-        for col in range(W):
-            bits, m = 0, 0.0
-            for dx in (0, 1):
-                x = col * 2 + dx
-                for dy in range(4):
-                    v = val[row * 4 + dy][x]
-                    if v > TH:
-                        bits |= BIT[(dx, dy)]
-                        if v > m:
-                            m = v
-            if bits:
-                g = int(70 + 185 * min(1.0, m)) // 8 * 8
-                if g != last:
-                    out.append(f"\033[38;2;{g};{g};{g}m")
-                    last = g
-                out.append(chr(0x2800 + bits))
+    for r in range(rows - 1, -1, -1):
+        color = row_colors[r % len(row_colors)]
+        row_chars = []
+        for h in heights:
+            diff = h - r
+            if diff >= 1.0:
+                row_chars.append("█")
+            elif diff >= 0.75:
+                row_chars.append("▇")
+            elif diff >= 0.50:
+                row_chars.append("▆")
+            elif diff >= 0.25:
+                row_chars.append("▃")
             else:
-                out.append(" ")
-        out.append("\033[0m")
-        lines.append("".join(out))
+                row_chars.append(" ")
+        lines.append(f"[{color}]" + "".join(row_chars) + "[/]")
     return "\n".join(lines)
 
-def _vis_len(s):
-    clean = re.sub(r'\033\[[0-9;]*[a-zA-Z]', '', s)
-    length = 0
-    for ch in clean:
-        length += 2 if ord(ch) > 0x2000 else 1
-    return length
+def build_cyberpunk_frame(t: float, status: str, heard: str, thoughts: str, ai_text: str, level: float = 0.8):
+    """Assembles the high-aesthetic Cyberpunk Live terminal UI."""
+    # Telemetry
+    time_str = datetime.now().strftime("%H:%M:%S")
+    cpu = psutil.cpu_percent()
+    ram = psutil.virtual_memory()
+    net_str = _get_network_speed()
 
-def _pad_line(line, width):
-    v = _vis_len(line)
-    if v < width:
-        return line + " " * (width - v)
-    return line
-
-def _make_box(title, text, width, height=None, border_color="\033[1;36m", title_color="\033[1;37m", text_color="\033[0m"):
-    inner_w = max(10, width - 4)
-    raw_lines = []
-    if text and text.strip():
-        for p in text.strip().split("\n"):
-            p_strip = p.strip()
-            if not p_strip:
-                continue
-            w = textwrap.wrap(p_strip, width=inner_w)
-            raw_lines.extend(w if w else [""])
+    # Dynamic status glow
+    if "Speaking" in status:
+        glow = "#00FFA3"
+        status_tag = "[bold #00FFA3]● SPEAKING[/]"
+    elif "Thinking" in status or "Transcribing" in status or "Synthesizing" in status:
+        glow = "#FFB800"
+        status_tag = "[bold #FFB800]⚡ SYNTHESIZING[/]"
     else:
-        raw_lines = [""]
+        glow = "#00E5FF"
+        status_tag = "[bold #00E5FF]● LISTENING[/]"
 
-    if height is not None:
-        if len(raw_lines) > height:
-            raw_lines = raw_lines[-height:]  # Auto-scroll to show latest streaming text
-        elif len(raw_lines) < height:
-            raw_lines += [""] * (height - len(raw_lines))
+    # 1. Telemetry Header (Minimalist Cyberpunk Bar)
+    hdr_tbl = Table.grid(expand=True)
+    hdr_tbl.add_column("title", justify="left")
+    hdr_tbl.add_column("stats", justify="right")
+    hdr_tbl.add_row(
+        "[bold #00E5FF]⚡ LMMs[/] [bold #BD00FF]CYBERVOICE LIVE[/] [dim]v2.4[/]",
+        f"[bold #00FFA3]CPU:[/] {cpu:.0f}%  [bold #00E5FF]RAM:[/] {ram.used/(1024**3):.1f}/{ram.total/(1024**3):.1f}GB  [bold #BD00FF]{net_str}[/]  [bold #FFFFFF]TIME:[/] {time_str}"
+    )
+    hdr_panel = Panel(hdr_tbl, style="on #0A0A12", border_style="#BD00FF", box=box.ROUNDED)
 
-    v_title = _vis_len(title)
-    dashes_len = max(0, width - 5 - v_title)
-    header = f"{border_color}╭─ {title_color}{title}{border_color} " + "─" * dashes_len + f"╮\033[0m"
-    footer = f"{border_color}╰" + "─" * (width - 2) + f"╯\033[0m"
-    
-    body = []
-    for line in raw_lines:
-        padded = _pad_line(f"{text_color}{line}\033[0m", inner_w)
-        body.append(f"{border_color}│\033[0m {padded} {border_color}│\033[0m")
-    return [header] + body + [footer]
+    # 2. User Query Panel
+    if heard:
+        user_content = Text(heard, style="bold #FFFFFF")
+    else:
+        spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        sp = spinner_chars[int(t * 10) % len(spinner_chars)]
+        user_content = Text(f"{sp} Listening to microphone... Speak now and press ENTER to submit", style="dim #00E5FF")
+        
+    user_panel = Panel(user_content, title="[bold #00E5FF] 👤 USER AUDIO QUERY [/]", border_style="#00E5FF", box=box.ROUNDED, style="on #0A0A12")
 
-def animate_siri_wave_slim():
-    global _status_text, _heard_text, _ai_text
+    # 3. Collapsible / Muted Thought Panel (only when reasoning tokens exist)
+    thought_panel = None
+    if thoughts:
+        # Show truncated snippet so it doesn't crowd out the response
+        disp_thoughts = thoughts if len(thoughts) <= 400 else thoughts[:397] + "..."
+        thought_panel = Panel(
+            Text(disp_thoughts, style="dim #A89BBF"),
+            title="[bold #7A5299] 💭 NEURAL REASONING (INTERNAL) [/]",
+            border_style="#4A3563",
+            box=box.ROUNDED,
+            style="on #0A0A12"
+        )
+
+    # 4. Spoken AI Response Panel (Zero think tags, perfect multilingual alignment)
+    if ai_text:
+        ai_content = Text(ai_text, style=f"bold {glow}")
+    else:
+        ai_content = Text("(Waiting for model response...)", style="dim #777777")
+        
+    ai_panel = Panel(
+        ai_content,
+        title=f"[bold {glow}] 🤖 LMMs NEURAL VOICE [{status_tag}] [/]",
+        border_style=glow,
+        box=box.ROUNDED,
+        style="on #0A0A12"
+    )
+
+    # 5. Live Animated Equalizer
+    cols, _ = shutil.get_terminal_size()
+    eq_width = max(30, min(65, cols - 16))
+    eq_markup = render_multiline_equalizer(t, width=eq_width, rows=3, level=level)
+    eq_text = Text.from_markup(eq_markup, justify="center")
+    eq_panel = Panel(
+        eq_text,
+        title=f"[bold {glow}] 🔊 CYBER ACOUSTIC EQUALIZER [/]",
+        border_style=glow,
+        box=box.ROUNDED,
+        style="on #0A0A12"
+    )
+
+    # 6. Minimalist Footer Controls
+    ftr_tbl = Table.grid(expand=True)
+    ftr_tbl.add_column("help", justify="left")
+    ftr_tbl.add_column("status", justify="right")
+    ftr_tbl.add_row(
+        "[bold #00E5FF]⏎ ENTER[/]: Send Audio  •  [bold #FF0055]^C Ctrl+C[/]: Cancel Voice Mode",
+        f"[bold {glow}]● {status}[/]"
+    )
+    ftr_panel = Panel(ftr_tbl, style="on #0A0A12", border_style=glow, box=box.ROUNDED)
+
+    # Group all elements
+    items = [hdr_panel, user_panel]
+    if thought_panel:
+        items.append(thought_panel)
+    items.extend([ai_panel, eq_panel, ftr_panel])
+    return Group(*items)
+
+def animate_cyberpunk_voice():
+    global _status_text, _heard_text, _ai_text, _thoughts_text
+    console = Console(force_terminal=True, color_system="truecolor")
     
-    # Enable Alternate Screen Buffer and hide cursor
-    sys.stdout.write("\033[?1049h\033[?25l")
-    sys.stdout.flush()
-    
+    t0 = time.perf_counter()
     FPS = 30
-    voice = VoiceLevel()
-    phases = [0.0] * len(LAYERS)
-    t0 = last_t = time.perf_counter()
     
     try:
-        while not _stop_event.is_set():
-            columns, lines = shutil.get_terminal_size()
-            W = max(40, min(MAX_W, columns - 4))
-            pad = " " * max(0, (columns - W) // 2)
-            
-            now = time.perf_counter()
-            dt, last_t = now - last_t, now
-            
-            is_active = ("Speaking" in _status_text) or ("Listening" in _status_text)
-            level = voice.update(now - t0, dt) if is_active else 0.15
-            for i, layer in enumerate(LAYERS):
-                phases[i] += layer[1] * (0.7 + level) * dt * 3.0
+        with Live(console=console, screen=True, refresh_per_second=FPS) as live:
+            while not _stop_event.is_set():
+                now = time.perf_counter()
+                t = now - t0
                 
-            frame = render_wave(build_grid(W * 2, phases, level), W)
-            frame_lines = [pad + ln for ln in frame.split("\n")]
-            
-            # --- Gemini Live Layout ---
-            # 1. Header
-            header_title = "🎙️  LMMs Voice Live"
-            header_dashes = max(0, (W - _vis_len(header_title) - 4) // 2)
-            header_str = pad + f"\033[1;36m╭{'─' * header_dashes} \033[1;37m{header_title}\033[1;36m {'─' * max(0, W - _vis_len(header_title) - 4 - header_dashes)}╮\033[0m"
-            
-            # 2. User Box (Top)
-            user_display = _heard_text or "Listening to your voice... Speak now and press ENTER"
-            user_title = "👤 You"
-            user_box_lines = _make_box(user_title, user_display, W, height=2, border_color="\033[1;36m", title_color="\033[1;37m", text_color="\033[0;37m")
-            
-            # 3. AI Box (Middle)
-            if "Speaking" in _status_text:
-                ai_title = "🤖 LMMs Assistant  \033[1;32m● Speaking\033[0m"
-                border_c = "\033[1;35m"
-            elif "Thinking" in _status_text or "Transcribing" in _status_text:
-                ai_title = f"🤖 LMMs Assistant  \033[1;33m● {_status_text}\033[0m"
-                border_c = "\033[1;33m"
-            else:
-                ai_title = "🤖 LMMs Assistant  \033[2m● Waiting\033[0m"
-                border_c = "\033[2;35m"
+                is_active = ("Speaking" in _status_text) or ("Listening" in _status_text)
+                level = (0.75 + 0.25 * math.sin(t * 8.0)) if is_active else 0.15
                 
-            # Dynamic height for AI Box based on available terminal height
-            fixed_rows = 1 + len(user_box_lines) + ROWS + 3 + 2
-            ai_height = max(3, min(14, lines - fixed_rows))
-            ai_display = _ai_text or "(Waiting for model response...)"
-            ai_box_lines = _make_box(ai_title, ai_display, W, height=ai_height, border_color=border_c, title_color="\033[1;35m", text_color="\033[1;37m")
-            
-            # 4. Status / Wave section
-            status_line = pad + f"\033[1;34m🔊 {_status_text}\033[0m".center(columns)
-            footer_line = pad + "\033[2;37m[ Press ENTER to submit speech | Press Ctrl+C to cancel ]\033[0m".center(columns)
-            
-            # Assemble all lines
-            all_lines = (
-                [header_str] +
-                [pad + ln for ln in user_box_lines] +
-                [""] +
-                [pad + ln for ln in ai_box_lines] +
-                [""] +
-                frame_lines +
-                [status_line, footer_line]
-            )
-            
-            out_parts = ["\033[H"]
-            for ln in all_lines[:lines]:
-                out_parts.append(ln + "\033[K\n")
-            out_parts.append("\033[J")
-            sys.stdout.write("".join(out_parts))
-            sys.stdout.flush()
-            
-            sleep_time = (1.0 / FPS) - (time.perf_counter() - now)
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+                frame = build_cyberpunk_frame(
+                    t=t,
+                    status=_status_text,
+                    heard=_heard_text,
+                    thoughts=_thoughts_text,
+                    ai_text=_ai_text,
+                    level=level
+                )
+                live.update(frame)
+                
+                sleep_time = (1.0 / FPS) - (time.perf_counter() - now)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
     finally:
-        # Disable Alternate Screen Buffer and restore cursor
         sys.stdout.write("\033[?1049l\033[?25h")
         sys.stdout.flush()
 
@@ -247,7 +247,7 @@ _HINGLISH_WORDS = {
 _DEVANAGARI_RANGE = re.compile(r'[\u0900-\u097F]')
 _HINGLISH_PAT = re.compile('|'.join(_HINGLISH_WORDS), re.IGNORECASE)
 
-def detect_language(text):
+def detect_language(text: str) -> str:
     """Returns 'hindi' if text is Hindi/Hinglish, else 'english'."""
     if _DEVANAGARI_RANGE.search(text):
         return 'hindi'
@@ -259,7 +259,10 @@ def detect_language(text):
         return 'hindi'
     return 'english'
 
-def clean_text_for_tts(text):
+def clean_text_for_tts(text: str) -> str:
+    # Remove any stray think tags that might have slipped through
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    text = text.replace("<think>", "").replace("</think>", "")
     text = text.replace("*", "").replace("#", "").replace("`", "")
     text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     text = re.sub(r'[\U0001F300-\U0001FAFF\U00002700-\U000027BF]', '', text)
@@ -279,7 +282,6 @@ def tts_download_worker():
                 _tts_queue.task_done()
                 continue
                 
-            # Auto-detect Hindi/Hinglish and pick the right natural voice
             lang = detect_language(clean_t)
             if lang == 'hindi':
                 voice_name = "hi-IN-MadhurNeural" if voice == "male" else "hi-IN-SwaraNeural"
@@ -289,7 +291,7 @@ def tts_download_worker():
             tmp_file = f"/tmp/tts_{uuid.uuid4().hex}.mp3"
             downloaded = False
             
-            # 1. Primary: Direct in-process edge_tts (fastest, high quality neural)
+            # 1. Primary: In-process edge_tts
             try:
                 import edge_tts
                 async def _save_edge():
@@ -340,7 +342,7 @@ def audio_play_worker():
             _status_text = f"Speaking: {display_text}"
             
             played = False
-            # 1. Prefer mpg123 if installed (ultra fast, native audio)
+            # 1. Prefer mpg123
             mpg_bin = shutil.which("mpg123")
             if mpg_bin:
                 try:
@@ -404,18 +406,7 @@ def audio_play_worker():
                 pass
 
 def wait_for_tts():
-    # Wait until all tasks in the queue are processed
     _tts_queue.join()
-
-def set_heard_text(text):
-    """Set what the user said - shown on top in User box"""
-    global _heard_text
-    _heard_text = text
-
-def set_ai_text(text):
-    """Set live AI response text"""
-    global _ai_text
-    _ai_text = text
 
 class VoiceSession:
     def __init__(self):
@@ -423,13 +414,16 @@ class VoiceSession:
         self.tts_dl_thread = None
         self.tts_play_thread = None
         self.sentence_buffer = ""
+        self.last_spoken_len = 0
 
-    def start_animation(self, text):
-        global _stop_event, _anim_thread, _status_text, _heard_text, _ai_text
+    def start_animation(self, text: str = "Listening..."):
+        global _stop_event, _anim_thread, _status_text, _heard_text, _ai_text, _thoughts_text
         _status_text = text
         _heard_text = ""
         _ai_text = ""
+        _thoughts_text = ""
         self.sentence_buffer = ""
+        self.last_spoken_len = 0
         _stop_event.clear()
         
         while not _tts_queue.empty():
@@ -444,7 +438,7 @@ class VoiceSession:
             except Exception:
                 pass
                 
-        self.thread = threading.Thread(target=animate_siri_wave_slim, daemon=True)
+        self.thread = threading.Thread(target=animate_cyberpunk_voice, daemon=True)
         self.thread.start()
         _anim_thread = self.thread
         
@@ -454,15 +448,19 @@ class VoiceSession:
         self.tts_play_thread = threading.Thread(target=audio_play_worker, daemon=True)
         self.tts_play_thread.start()
 
-    def update_status(self, text):
+    def update_status(self, text: str):
         global _status_text
         _status_text = text
     
-    def set_heard(self, text):
+    def set_heard(self, text: str):
         global _heard_text
         _heard_text = text
 
-    def update_ai_response(self, text):
+    def update_thoughts(self, text: str):
+        global _thoughts_text
+        _thoughts_text = text
+
+    def update_ai_response(self, text: str):
         global _ai_text
         _ai_text = text
 
@@ -475,12 +473,11 @@ class VoiceSession:
             self.tts_dl_thread.join(timeout=1.0)
         if self.tts_play_thread and self.tts_play_thread.is_alive():
             self.tts_play_thread.join(timeout=1.0)
-        # Restore normal terminal screen and cursor
         sys.stdout.write("\033[?1049l\033[?25h")
         sys.stdout.flush()
 
-def play_audio(text, voice="female"):
+def play_audio(text: str, voice: str = "female"):
     _tts_queue.put((text, voice))
 
-def stream_audio(text_chunk, voice="female"):
+def stream_audio(text_chunk: str, voice: str = "female"):
     _tts_queue.put((text_chunk, voice))

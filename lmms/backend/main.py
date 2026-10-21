@@ -1983,15 +1983,28 @@ def run_cli():
                             if iter_count == MAX_ITERATIONS - 1:
                                 messages.append({"role": "user", "content": "System Note: You are about to reach the maximum number of tool iterations (8/8). If you have not solved the problem, please output a final summary of what you tried and the current errors without calling more tools."})
 
+                            # In voice mode: zero thinking, direct conversational answers
+                            req_messages = clean_messages
+                            req_think = show_thoughts
+                            if voice_mode_active:
+                                req_think = False
+                                voice_instruction = "You are LMMs Voice Assistant. Speak directly and conversationally in the user's language. STRICT: DO NOT use <think> tags. DO NOT output internal reasoning or monologue. Begin immediately with your spoken answer."
+                                voice_msg_copy = [dict(m) for m in clean_messages]
+                                if voice_msg_copy and voice_msg_copy[0].get("role") == "system":
+                                    voice_msg_copy[0]["content"] += f"\n\n{voice_instruction}"
+                                else:
+                                    voice_msg_copy.insert(0, {"role": "system", "content": voice_instruction})
+                                req_messages = voice_msg_copy
+
                             resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
                                 "model_name": current_model,
-                                "messages": clean_messages,
+                                "messages": req_messages,
                                 "stream": True,
                                 "temperature": req_temp,
                                 "top_p": req_top_p,
                                 "repetition_penalty": 1.15,
                                 "mode": current_mode.strip("/"),
-                                "think": show_thoughts
+                                "think": req_think
                             }, stream=True, timeout=(10, 3600))
                             resp.raise_for_status()
                             
@@ -2055,20 +2068,33 @@ def run_cli():
                                             full_reply += chunk_text
                                             
                                             if voice_mode_active and vsession is not None:
-                                                vsession.update_ai_response(full_reply)
-                                                if not hasattr(vsession, "sentence_buffer"):
-                                                    vsession.sentence_buffer = ""
-                                                    vsession.update_status("Speaking...")
-                                                vsession.sentence_buffer += chunk_text
-                                                if any(p in chunk_text for p in [".", "?", "!", "\n"]):
-                                                    import re
-                                                    parts = re.split(r'([.?!]\s+|\n)', vsession.sentence_buffer)
-                                                    if len(parts) > 1:
-                                                        completed = "".join(parts[:-1]).strip()
-                                                        if completed:
-                                                            from lmms.backend.voice import stream_audio
-                                                            stream_audio(completed, voice="female")
-                                                        vsession.sentence_buffer = parts[-1]
+                                                from lmms.backend.voice import extract_thoughts_and_response, stream_audio
+                                                cur_thoughts, cur_spoken = extract_thoughts_and_response(full_reply)
+                                                
+                                                vsession.update_thoughts(cur_thoughts)
+                                                vsession.update_ai_response(cur_spoken)
+                                                
+                                                if cur_spoken:
+                                                    if not hasattr(vsession, "sentence_buffer"):
+                                                        vsession.sentence_buffer = ""
+                                                        vsession.update_status("Speaking...")
+                                                    if not hasattr(vsession, "last_spoken_len"):
+                                                        vsession.last_spoken_len = 0
+                                                        
+                                                    new_spoken = cur_spoken[vsession.last_spoken_len:]
+                                                    vsession.last_spoken_len = len(cur_spoken)
+                                                    
+                                                    vsession.sentence_buffer += new_spoken
+                                                    if any(p in new_spoken for p in [".", "?", "!", "\n", "।"]):
+                                                        import re
+                                                        parts = re.split(r'([.?!।]\s+|\n)', vsession.sentence_buffer)
+                                                        if len(parts) > 1:
+                                                            completed = "".join(parts[:-1]).strip()
+                                                            if completed:
+                                                                stream_audio(completed, voice="female")
+                                                            vsession.sentence_buffer = parts[-1]
+                                                elif cur_thoughts:
+                                                    vsession.update_status("Thinking...")
                                             
                                             if not leak_check_done:
                                                 if len(full_reply) < 80:
@@ -2469,19 +2495,20 @@ def run_cli():
                 
                 if voice_mode_active and vsession is not None:
                     try:
+                        from lmms.backend.voice import extract_thoughts_and_response, stream_audio, wait_for_tts
+                        _, final_spoken = extract_thoughts_and_response(full_reply)
+                        final_text_to_print = final_spoken.strip() if final_spoken.strip() else answer_content
+                        
                         if hasattr(vsession, "sentence_buffer") and vsession.sentence_buffer.strip():
-                            from lmms.backend.voice import stream_audio
                             stream_audio(vsession.sentence_buffer.strip(), voice="female")
                             
                         # Wait for TTS queue to drain before stopping animation
-                        from lmms.backend.voice import wait_for_tts
                         wait_for_tts()
-                            
                         vsession.stop_animation()
                         
-                        # Print the final reply natively so the user can read it
+                        # Print the final reply natively so the user can read it (clean, no think tags)
                         console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
-                        console.print(Markdown(answer_content))
+                        console.print(Markdown(final_text_to_print))
                     except Exception:
                         pass
                     voice_mode_active = False
