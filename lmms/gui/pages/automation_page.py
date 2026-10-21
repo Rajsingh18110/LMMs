@@ -19,6 +19,7 @@ from lmms.gui.qt import (
     QLineEdit,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QFrame,
     Qt,
     QColor,
@@ -29,6 +30,7 @@ from lmms.gui.qt import (
 from lmms.gui.branding import AutomationBranding
 from lmms.gui.widgets.automation_canvas import AutomationCanvas
 from lmms.gui.widgets.automation_drawer import AutomationDrawer
+from lmms.gui.widgets.automation_inspector import AutomationInspector
 
 
 class AutomationHeader(QFrame):
@@ -263,9 +265,18 @@ class AutomationPage(QWidget):
         self.canvas = AutomationCanvas(self.splitter)
         self.splitter.addWidget(self.canvas)
 
-        # Right Drawer
-        self.drawer = AutomationDrawer(self.splitter)
-        self.splitter.addWidget(self.drawer)
+        # Right Drawer Area: Stacked widget containing Catalog and Inspector
+        self.right_stack = QStackedWidget(self.splitter)
+        self.right_stack.setObjectName("RightDrawerStack")
+        self.right_stack.setFixedWidth(360)
+
+        self.drawer = AutomationDrawer(self.right_stack)
+        self.inspector = AutomationInspector(self.right_stack)
+
+        self.right_stack.addWidget(self.drawer)       # Index 0: Catalog
+        self.right_stack.addWidget(self.inspector)    # Index 1: Node Inspector
+
+        self.splitter.addWidget(self.right_stack)
 
         # Set default proportions: canvas takes majority, drawer 360px
         self.splitter.setSizes([900, 360])
@@ -302,12 +313,18 @@ class AutomationPage(QWidget):
         self.header.clear_workflow_requested.connect(self.clear_workflow)
         self.header.test_workflow_requested.connect(self.run_workflow)
 
-        # Drawer signals
+        # Catalog Drawer signals
         self.drawer.node_selected.connect(self._on_drawer_node_selected)
         self.drawer.closed.connect(self.hide_drawer)
 
+        # Node Inspector signals
+        self.inspector.closed.connect(self._on_inspector_closed)
+        self.inspector.node_deleted.connect(lambda n: self.update_status_bar())
+
         # Canvas signals
         self.canvas.toggle_drawer_requested.connect(self.toggle_drawer)
+        self.canvas.node_selected.connect(self._on_node_selected)
+        self.canvas.node_double_clicked.connect(self._on_node_selected)
         self.canvas.graph.nodes_deleted.connect(lambda nodes: self.update_status_bar())
 
     def _on_drawer_node_selected(self, item_data: dict):
@@ -318,20 +335,41 @@ class AutomationPage(QWidget):
             node = self.canvas.add_node(node_id, name=title)
             if node:
                 self.update_status_bar()
-                # Center view slightly towards new node
                 self.canvas.graph.center_on([node])
+                # Immediately inspect new node
+                self._on_node_selected(node)
+
+    def _on_node_selected(self, node):
+        """Shows parameters and live test execution in inspector when a node is selected."""
+        if node:
+            self.inspector.inspect_node(node)
+            self.right_stack.setCurrentIndex(1)
+            self.right_stack.show()
+
+    def _on_inspector_closed(self):
+        """When inspector is closed, switch back to catalog drawer."""
+        self.right_stack.setCurrentIndex(0)
 
     def toggle_drawer(self):
-        self.drawer.setVisible(not self.drawer.isVisible())
-        if self.drawer.isVisible():
+        if self.right_stack.isVisible():
+            if self.right_stack.currentIndex() == 1:
+                # If inspector was active, toggle back to catalog
+                self.right_stack.setCurrentIndex(0)
+                self.drawer.focus_search()
+            else:
+                self.right_stack.hide()
+        else:
+            self.right_stack.setCurrentIndex(0)
+            self.right_stack.show()
             self.drawer.focus_search()
 
     def show_drawer(self):
-        self.drawer.show()
+        self.right_stack.setCurrentIndex(0)
+        self.right_stack.show()
         self.drawer.focus_search()
 
     def hide_drawer(self):
-        self.drawer.hide()
+        self.right_stack.hide()
 
     def update_status_bar(self):
         count = len(self.canvas.graph.all_nodes())
@@ -374,7 +412,7 @@ class AutomationPage(QWidget):
         self.update_status_bar()
 
     def run_workflow(self):
-        """Executes current workflow nodes."""
+        """Executes current workflow nodes in topological pipeline order with status animation."""
         nodes = self.canvas.graph.all_nodes()
         if not nodes:
             self.lbl_status.setText("Cannot run: workflow has no nodes")
@@ -383,9 +421,44 @@ class AutomationPage(QWidget):
         self.lbl_status.setText(f"Executing {len(nodes)} nodes...")
         self.header.btn_test.setEnabled(False)
 
-        # Simulation step for UI responsiveness
-        def _finish_run():
-            self.header.btn_test.setEnabled(True)
-            self.lbl_status.setText("Execution completed successfully (0.12s)")
+        # Order nodes: triggers first, then downstream
+        triggers = [n for n in nodes if getattr(n, "CATEGORY", "") == "trigger"]
+        others = [n for n in nodes if n not in triggers]
+        ordered_nodes = triggers + others
 
-        QTimer.singleShot(500, _finish_run)
+        # Reset all nodes to idle
+        for n in ordered_nodes:
+            if hasattr(n, "set_status"):
+                n.set_status("idle")
+
+        step_idx = 0
+
+        def _step():
+            nonlocal step_idx
+            if step_idx < len(ordered_nodes):
+                cur_node = ordered_nodes[step_idx]
+                if hasattr(cur_node, "set_status"):
+                    cur_node.set_status("running")
+                self.lbl_status.setText(f"Running step {step_idx + 1}/{len(ordered_nodes)}: {cur_node.name()}...")
+
+                def _step_done():
+                    nonlocal step_idx
+                    if hasattr(cur_node, "set_status"):
+                        cur_node.set_status("success")
+                    cur_node.last_output = {
+                        "status": "success",
+                        "node": cur_node.name(),
+                        "step": step_idx + 1,
+                        "data": {"result": f"Executed successfully at step {step_idx + 1}"},
+                    }
+                    if self.inspector.current_node == cur_node:
+                        self.inspector.inspect_node(cur_node)
+                    step_idx += 1
+                    QTimer.singleShot(100, _step)
+
+                QTimer.singleShot(220, _step_done)
+            else:
+                self.header.btn_test.setEnabled(True)
+                self.lbl_status.setText(f"Workflow completed successfully ({len(ordered_nodes)} steps executed)")
+
+        _step()

@@ -1,22 +1,49 @@
 """
 lmms.gui.widgets.automation_nodes - Node definitions for LMMs Automation Studio.
-Implements n8n-style nodes for Triggers, AI Agents, Models, MCP Tools,
-Code sandboxes, HTTP requests, and Flow Control.
+Equipped with n8n-style N8nNodeItem rendering, category stripes, status rings,
+and top floating toolbars.
 """
 
 from __future__ import annotations
 
 import lmms.gui.vendor_patches.nodegraph_pyqt6  # noqa: F401
 from NodeGraphQt import BaseNode
-from lmms.gui.branding import AutomationBranding
+from lmms.gui.widgets.automation_card_item import N8nNodeItem
+
+
+class N8nBaseNode(BaseNode):
+    """Base class for all n8n-styled automation nodes."""
+    CATEGORY = "action"
+    NODE_ICON = "⚡"
+
+    def __init__(self):
+        super().__init__(qgraphics_item=N8nNodeItem)
+        if hasattr(self, "view") and self.view:
+            self.view.node = self
+        # Store last execution data for inspector
+        self.last_input: dict = {}
+        self.last_output: dict = {}
+
+    def set_status(self, status: str):
+        if hasattr(self.view, "status"):
+            self.view.status = status
+
+    def get_status(self) -> str:
+        return getattr(self.view, "status", "idle")
+
+    def test_step(self):
+        if hasattr(self.view, "test_step"):
+            self.view.test_step()
 
 
 # ---------------------------------------------------------
 # Triggers (Vibrant Orange #f97316)
 # ---------------------------------------------------------
-class ManualTriggerNode(BaseNode):
+class ManualTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "Trigger manually"
+    CATEGORY = "trigger"
+    NODE_ICON = "🔘"
 
     def __init__(self):
         super().__init__()
@@ -25,9 +52,11 @@ class ManualTriggerNode(BaseNode):
         self.create_property("description", "Click 'Test workflow' to execute.")
 
 
-class ChatMessageTriggerNode(BaseNode):
+class ChatMessageTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "When chat message received"
+    CATEGORY = "trigger"
+    NODE_ICON = "💬"
 
     def __init__(self):
         super().__init__()
@@ -36,9 +65,11 @@ class ChatMessageTriggerNode(BaseNode):
         self.create_property("listen_channel", "default")
 
 
-class ScheduleTriggerNode(BaseNode):
+class ScheduleTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "On a schedule"
+    CATEGORY = "trigger"
+    NODE_ICON = "⏱"
 
     def __init__(self):
         super().__init__()
@@ -48,9 +79,11 @@ class ScheduleTriggerNode(BaseNode):
         self.create_property("cron_expression", "0 * * * *")
 
 
-class WebhookTriggerNode(BaseNode):
+class WebhookTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "On webhook call"
+    CATEGORY = "trigger"
+    NODE_ICON = "🪝"
 
     def __init__(self):
         super().__init__()
@@ -60,9 +93,11 @@ class WebhookTriggerNode(BaseNode):
         self.create_property("webhook_path", "/webhook/lmms-flow")
 
 
-class FileWatchTriggerNode(BaseNode):
+class FileWatchTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "On file changes"
+    CATEGORY = "trigger"
+    NODE_ICON = "📁"
 
     def __init__(self):
         super().__init__()
@@ -72,9 +107,11 @@ class FileWatchTriggerNode(BaseNode):
         self.create_property("event_type", "modified")
 
 
-class AppEventTriggerNode(BaseNode):
+class AppEventTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "On app event"
+    CATEGORY = "trigger"
+    NODE_ICON = "📡"
 
     def __init__(self):
         super().__init__()
@@ -83,9 +120,11 @@ class AppEventTriggerNode(BaseNode):
         self.create_property("event_source", "engine")
 
 
-class FormTriggerNode(BaseNode):
+class FormTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "On form submission"
+    CATEGORY = "trigger"
+    NODE_ICON = "📋"
 
     def __init__(self):
         super().__init__()
@@ -93,9 +132,11 @@ class FormTriggerNode(BaseNode):
         self.add_output("output", display_name=False)
 
 
-class SubflowTriggerNode(BaseNode):
+class SubflowTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "When executed by another workflow"
+    CATEGORY = "trigger"
+    NODE_ICON = "↳"
 
     def __init__(self):
         super().__init__()
@@ -103,9 +144,11 @@ class SubflowTriggerNode(BaseNode):
         self.add_output("output", display_name=False)
 
 
-class EvaluationTriggerNode(BaseNode):
+class EvaluationTriggerNode(N8nBaseNode):
     __identifier__ = "lmms.triggers"
     NODE_NAME = "When running evaluation"
+    CATEGORY = "trigger"
+    NODE_ICON = "✓"
 
     def __init__(self):
         super().__init__()
@@ -116,9 +159,11 @@ class EvaluationTriggerNode(BaseNode):
 # ---------------------------------------------------------
 # AI & Models (Purple #8b5cf6)
 # ---------------------------------------------------------
-class AIAgentNode(BaseNode):
+class AIAgentNode(N8nBaseNode):
     __identifier__ = "lmms.models"
     NODE_NAME = "AI Agent"
+    CATEGORY = "model"
+    NODE_ICON = "🤖"
 
     def __init__(self):
         super().__init__()
@@ -132,9 +177,11 @@ class AIAgentNode(BaseNode):
         self.create_property("max_iterations", 10)
 
 
-class ChatModelNode(BaseNode):
+class ChatModelNode(N8nBaseNode):
     __identifier__ = "lmms.models"
     NODE_NAME = "Chat Model"
+    CATEGORY = "model"
+    NODE_ICON = "🧠"
 
     def __init__(self):
         super().__init__()
@@ -149,9 +196,11 @@ class ChatModelNode(BaseNode):
 # ---------------------------------------------------------
 # Actions (Blue #3b82f6)
 # ---------------------------------------------------------
-class MCPToolNode(BaseNode):
+class MCPToolNode(N8nBaseNode):
     __identifier__ = "lmms.actions"
     NODE_NAME = "MCP Tool Call"
+    CATEGORY = "action"
+    NODE_ICON = "🛠"
 
     def __init__(self):
         super().__init__()
@@ -163,9 +212,11 @@ class MCPToolNode(BaseNode):
         self.create_property("arguments_json", "{}")
 
 
-class PythonCodeNode(BaseNode):
+class PythonCodeNode(N8nBaseNode):
     __identifier__ = "lmms.actions"
     NODE_NAME = "Python Code"
+    CATEGORY = "action"
+    NODE_ICON = "🐍"
 
     def __init__(self):
         super().__init__()
@@ -175,9 +226,11 @@ class PythonCodeNode(BaseNode):
         self.create_property("script", "# Python transformation\nreturn items")
 
 
-class HTTPRequestNode(BaseNode):
+class HTTPRequestNode(N8nBaseNode):
     __identifier__ = "lmms.actions"
     NODE_NAME = "HTTP Request"
+    CATEGORY = "action"
+    NODE_ICON = "🌐"
 
     def __init__(self):
         super().__init__()
@@ -192,9 +245,11 @@ class HTTPRequestNode(BaseNode):
 # ---------------------------------------------------------
 # Logic (Cyan #06b6d4)
 # ---------------------------------------------------------
-class IfElseNode(BaseNode):
+class IfElseNode(N8nBaseNode):
     __identifier__ = "lmms.logic"
     NODE_NAME = "If / Else"
+    CATEGORY = "logic"
+    NODE_ICON = "⑂"
 
     def __init__(self):
         super().__init__()
