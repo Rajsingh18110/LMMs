@@ -56,8 +56,14 @@ class ContextBuilder:
         # 1. Mode-specific guidelines
         if active_mode == "/deep":
             sections.append("Think deeply and reason step-by-step before answering.")
-        elif active_mode == "/code":
-            sections.append("Focus on production-grade, secure, and idiomatic code implementations.")
+        elif active_mode == "/code" or intent_result.intent == IntentType.CODING:
+            sections.append(
+                "## Coding & Surgical Edit Rules\n"
+                "1. Focus on production-grade, secure, and idiomatic code implementations.\n"
+                "2. When inspecting files, use `view_file_outline` to locate class and function line numbers, or `read_file_lines` for specific line ranges instead of reading entire files.\n"
+                "3. Use `replace_in_file` for surgical code modifications. Always provide exact matching old_code snippets.\n"
+                "4. All Python file edits are automatically verified with AST syntax checks before saving to disk."
+            )
 
         # 2. Browser navigation instructions (only if browser tools are active)
         if "browser" in instruction_modules or intent_result.intent == IntentType.BROWSER_AUTOMATION:
@@ -113,11 +119,14 @@ class ContextBuilder:
         ]
         for tool in all_tools:
             if tool.id != "discover_additional_tool" and tool.enabled:
-                lines.append(f"- {tool.id}: {tool.metadata.summary}")
+                # Keep discovery useful without letting the catalog consume the
+                # context budget on ordinary turns. Full detail is loaded lazily.
+                summary = " ".join(tool.metadata.summary.split())[:64].rstrip()
+                lines.append(f"- {tool.id}: {summary}")
 
         lines.append(
-            "\nTo request full schema or invoke any tool from the catalog above:\n"
-            "- <tool_call>{\"tool\": \"discover_additional_tool\", \"kwargs\": {\"capability\": \"<tool_name>\"}}</tool_call>"
+            "\nLoad a tool's full schema when needed:\n"
+            "<tool_call>{\"tool\":\"discover_additional_tool\",\"kwargs\":{\"capability\":\"<tool_name>\"}}</tool_call>"
         )
         return "\n".join(lines)
 
@@ -160,10 +169,20 @@ class ContextBuilder:
         # 1. Base prompt
         base_prompt = self.build_base_prompt(model_name)
 
-        # 2. Workspace boundary context
+        # 2. Workspace boundary context & AST RepoMap
         workspace_context = ""
+        repo_map_context = ""
         if current_workspace and current_workspace != "None":
-            workspace_context = f"\nActive Workspace Directory: {current_workspace}"
+            workspace_context = f"Active Workspace Directory: {current_workspace}"
+            if intent_result.intent == IntentType.CODING or active_mode == "/code":
+                try:
+                    from lmms.backend.core.intelligence.file_indexer import FileIndexer
+                    indexer = FileIndexer(current_workspace)
+                    repo_map = indexer.generate_repo_map(max_tokens=1200)
+                    if repo_map and repo_map.strip():
+                        repo_map_context = f"## Workspace Repository Map (AST Symbols)\n```\n{repo_map.strip()}\n```"
+                except Exception:
+                    pass
 
         # 3. Task instructions
         task_instructions = self.build_task_instructions(
@@ -189,6 +208,8 @@ class ContextBuilder:
         system_blocks = [base_prompt]
         if workspace_context:
             system_blocks.append(workspace_context)
+        if repo_map_context:
+            system_blocks.append(repo_map_context)
         if task_instructions:
             system_blocks.append(task_instructions)
         if tool_schemas_str:

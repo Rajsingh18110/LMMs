@@ -47,10 +47,28 @@ class Router:
             graph.add_node(c_node)
             
         else:
-            # Fallback: Single node execution graph
+            from lmms.backend.orchestration.router import IntentRouter, IntentType
+            ir = IntentRouter()
+            try:
+                res = ir.route(intent)
+                detected = res.intent
+            except Exception:
+                detected = IntentType.NORMAL_CHAT
+
+            desc = "Standard Execution"
+            if detected == IntentType.CODING:
+                desc = "Coding & Implementation"
+                if context.task:
+                    context.task.description = f"[Coding Task] {context.task.description or intent}"
+            elif detected == IntentType.WORKSPACE_FILE_OPS:
+                desc = "Workspace File Operations"
+            elif detected in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH):
+                desc = "Research & Search"
+
+            # Node execution graph
             node = GraphNode(
                 id="main_node",
-                description="Standard Execution",
+                description=desc,
                 context=context
             )
             graph.add_node(node)

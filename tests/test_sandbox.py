@@ -172,10 +172,13 @@ def test_bwrap_unprivileged_live_execution(tmp_path):
     assert created_file.read_text().strip() == "sandbox_ok"
 
 
-def test_terminal_tool_sandboxed(tmp_path):
+def test_terminal_tool_sandboxed(tmp_path, monkeypatch):
     """Verify TerminalTool respects sandboxed mode and workspace boundaries."""
+    import lmms.backend.tools.terminal as terminal_module
+
     tool = TerminalTool()
     workspace = str(tmp_path)
+    monkeypatch.setattr(terminal_module, "get_workspace_dir", lambda: workspace)
 
     # 1. Dangerous command is blocked
     out = tool.run("rm -rf /", cwd=workspace, sandboxed=True)
@@ -186,6 +189,25 @@ def test_terminal_tool_sandboxed(tmp_path):
         ret_code, out = tool.run("echo 'tool_test'", cwd=workspace, return_exit_code=True, sandboxed=True)
         assert ret_code == 0
         assert "tool_test" in out
+
+
+def test_terminal_tool_cannot_redefine_workspace_with_cwd(tmp_path, monkeypatch):
+    """A supplied cwd may select a folder, but cannot expand the workspace boundary."""
+    import lmms.backend.tools.terminal as terminal_module
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(terminal_module, "get_workspace_dir", lambda: str(workspace))
+
+    tool = TerminalTool()
+    for sandboxed in (False, True):
+        code, output = tool.run(
+            "pwd", cwd=str(outside), sandboxed=sandboxed, return_exit_code=True
+        )
+        assert code == -1
+        assert "outside the allowed workspace boundary" in output
 
 
 def test_execpolicy_compound_commands(tmp_path):

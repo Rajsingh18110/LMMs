@@ -299,23 +299,30 @@ class ObservationProcessor:
         """Returns (compact_output, obs_id)"""
         obs_id = f"obs_{str(uuid.uuid4())[:8]}"
         
-        MAX_RAW = 200
-        if len(raw_output) <= MAX_RAW and exit_code == 0:
+        # Generous retention limit: code files, diffs, and AST maps must not be truncated
+        MAX_RAW = 12000
+        if len(raw_output) <= MAX_RAW:
             compact = f"[Level 0: Raw] [ID: {obs_id}]\n{raw_output}"
-            return compact, obs_id
+            final_obs = {
+                "command": command_hint,
+                "exit_code": exit_code,
+                "stdout": compact
+            }
+            import json
+            return json.dumps(final_obs, indent=2), obs_id
 
+        # Only if output exceeds 12,000 chars, do intelligent compression
         lines = raw_output.splitlines()
-        
-        error_keywords = ['error', 'exception', 'traceback', 'failed', 'fatal', 'warning', 'permission denied']
+        error_keywords = ['error', 'exception', 'traceback', 'failed', 'fatal', 'syntaxerror', 'indentationerror', 'permission denied']
         important_lines = []
-        repetitive_counts = {}
-        
         compressed_lines = []
+        repetitive_counts = {}
         last_pattern = None
         
         for line in lines:
             stripped = line.strip()
-            if not stripped: continue
+            if not stripped:
+                continue
             
             is_important = any(kw in stripped.lower() for kw in error_keywords)
             if is_important:
@@ -347,11 +354,9 @@ class ObservationProcessor:
                 
         output_str = "\n".join(final_lines)
         
-        if len(output_str) > 2000:
-            head = "\n".join(final_lines[:20])
-            tail = "\n".join(final_lines[-20:])
-            # Deduplicate important lines to prevent infinite tracebacks from eating context
-            # but keep order
+        if len(output_str) > 20000:
+            head = "\n".join(final_lines[:150])
+            tail = "\n".join(final_lines[-150:])
             seen_errs = set()
             dedup_errs = []
             for e in important_lines:
@@ -359,15 +364,10 @@ class ObservationProcessor:
                     seen_errs.add(e)
                     dedup_errs.append(e)
             
-            # Bound the tracebacks to ~30 lines
-            if len(dedup_errs) > 30:
-                errs = "\n".join(dedup_errs[:15] + ["...[Internal traceback omitted]..."] + dedup_errs[-15:])
-            else:
-                errs = "\n".join(dedup_errs)
-                
-            output_str = f"[Level 3: Emergency] [ID: {obs_id}]\n{head}\n\n...[Truncated]...\n\n[Preserved Errors/Warnings]\n{errs}\n\n[End]\n{tail}"
+            errs = "\n".join(dedup_errs[:50])
+            output_str = f"[Level 3: Preserved Key Sections] [ID: {obs_id}]\n{head}\n\n...[Large Output Compacted: {len(lines)} lines total]...\n\n[Preserved Errors/Tracebacks]\n{errs}\n\n[Tail Content]\n{tail}"
         else:
-            output_str = f"[Level 1/2: Compressed] [ID: {obs_id}]\n{output_str}"
+            output_str = f"[Level 1: Output] [ID: {obs_id}]\n{output_str}"
 
         final_obs = {
             "command": command_hint,
@@ -711,10 +711,53 @@ def run_cli():
     )
 
     def robust_parse_tool_call(raw_tc: str) -> dict:
-        """Robust parser that handles unescaped code literals, unescaped quotes, and truncation."""
+        """Robust dual parser that handles native tool_calls, OpenAI schemas, unescaped code literals, and truncation."""
+        def normalize_payload(data: dict) -> dict:
+            if not isinstance(data, dict):
+                return {}
+            # Format A: {"tool": "name", "kwargs": {...}}
+            if "tool" in data:
+                return {
+                    "tool": data["tool"],
+                    "kwargs": data.get("kwargs", {}) if isinstance(data.get("kwargs"), dict) else {}
+                }
+            # Format B: {"name": "...", "arguments": {...}} (OpenAI Function Calling)
+            if "name" in data and ("arguments" in data or "parameters" in data):
+                args = data.get("arguments", data.get("parameters", {}))
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args, strict=False)
+                    except Exception:
+                        args = {"raw_arguments": args}
+                return {
+                    "tool": data["name"],
+                    "kwargs": args if isinstance(args, dict) else {}
+                }
+            # Format C: {"function": {"name": "...", "arguments": {...}}}
+            if "function" in data and isinstance(data["function"], dict):
+                fn = data["function"]
+                args = fn.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args, strict=False)
+                    except Exception:
+                        pass
+                return {
+                    "tool": fn.get("name", ""),
+                    "kwargs": args if isinstance(args, dict) else {}
+                }
+            # Format D: Direct function name as top-level key: {"files.read": {"path": "..."}}
+            for k, v in data.items():
+                if isinstance(v, dict) and any(sep in k for sep in [".", "_"]):
+                    return {"tool": k, "kwargs": v}
+            return data
+
         # 1. Try standard JSON (strict=False permits literal newlines/tabs inside strings)
         try:
-            return json.loads(raw_tc, strict=False)
+            parsed = json.loads(raw_tc, strict=False)
+            norm = normalize_payload(parsed)
+            if norm.get("tool"):
+                return norm
         except Exception:
             pass
 
@@ -724,16 +767,19 @@ def run_cli():
             s = re.sub(r'\btrue\b', 'True', raw_tc)
             s = re.sub(r'\bfalse\b', 'False', s)
             s = re.sub(r'\bnull\b', 'None', s)
-            return ast.literal_eval(s)
+            parsed = ast.literal_eval(s)
+            norm = normalize_payload(parsed)
+            if norm.get("tool"):
+                return norm
         except Exception:
             pass
 
         # 3. Regex extraction fallback for large code blocks with internal quotes/truncation
-        tool_match = re.search(r'"tool"\s*:\s*"([^"]+)"', raw_tc)
+        tool_match = re.search(r'"(?:tool|name)"\s*:\s*"([^"]+)"', raw_tc)
         if tool_match:
             t_name = tool_match.group(1).strip()
             kwargs = {}
-            if t_name == "files.write":
+            if t_name in ("files.write", "file.write", "write_file", "write_to_file"):
                 path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
                 if path_m:
                     kwargs["path"] = path_m.group(1)
@@ -747,7 +793,27 @@ def run_cli():
                         pass
                     kwargs["content"] = c_str
                 return {"tool": t_name, "kwargs": kwargs}
-            elif t_name == "terminal.run":
+            elif t_name in ("replace_in_file", "files.replace_in_file"):
+                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+                if path_m: kwargs["path"] = path_m.group(1)
+                old_m = re.search(r'"(?:old_code|search)"\s*:\s*"(.*?)"(?:\s*,\s*"(?:new_code|replace)")', raw_tc, re.DOTALL)
+                if old_m: kwargs["old_code"] = old_m.group(1)
+                new_m = re.search(r'"(?:new_code|replace)"\s*:\s*"(.*?)"(?:\s*\}|$)', raw_tc, re.DOTALL)
+                if new_m: kwargs["new_code"] = new_m.group(1)
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name in ("read_file_lines", "files.read_file_lines"):
+                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+                if path_m: kwargs["path"] = path_m.group(1)
+                s_m = re.search(r'"start_line"\s*:\s*(\d+)', raw_tc)
+                if s_m: kwargs["start_line"] = int(s_m.group(1))
+                e_m = re.search(r'"end_line"\s*:\s*(\d+)', raw_tc)
+                if e_m: kwargs["end_line"] = int(e_m.group(1))
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name in ("view_file_outline", "files.view_file_outline", "files.read", "file.read", "view_file"):
+                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+                if path_m: kwargs["path"] = path_m.group(1)
+                return {"tool": t_name, "kwargs": kwargs}
+            elif t_name in ("terminal.run", "run_command"):
                 cmd_m = re.search(r'"command"\s*:\s*"([^"]+)"', raw_tc)
                 if cmd_m:
                     kwargs["command"] = cmd_m.group(1)
@@ -767,7 +833,10 @@ def run_cli():
         trimmed = raw_tc.rstrip()
         for fix in ['"}}', '"}', '}}', '}']:
             try:
-                return json.loads(trimmed + fix, strict=False)
+                parsed = json.loads(trimmed + fix, strict=False)
+                norm = normalize_payload(parsed)
+                if norm.get("tool"):
+                    return norm
             except Exception:
                 pass
 
@@ -2380,17 +2449,21 @@ def run_cli():
                                 and not any(explicit in cmd.lower() for explicit in ["clone", "install", "download", "run ", "execute", "setup"])
                             )
 
-                            should_terminate = (
-                                (t_name in ("web_search", "browser.open_url") and search_tool_count > 2) or
-                                (is_duplicate and iter_count >= 2) or
-                                (has_substantive_answer and is_informational_intent and not is_action_prompt and iter_count >= 2) or
-                                is_unauthorized_terminal
-                            )
+                            # ReAct Loop: If a tool was emitted, NEVER terminate prematurely!
+                            # Only prevent runaway search loops if search_tool_count exceeds 5
+                            if is_duplicate and iter_count >= 3:
+                                console.print(f"\n[dim yellow]⚠️ Model repeated tool call: {t_name}. Providing feedback to advance reasoning...[/dim yellow]")
+                                messages.append({"role": "assistant", "content": full_reply})
+                                messages.append({
+                                    "role": "user",
+                                    "content": f"<observation>\n[Notice: {t_name} was already executed with identical arguments. Please evaluate previous observation and proceed to the next step, file modification, or provide final response.]\n</observation>"
+                                })
+                                continue
 
-                            if should_terminate:
+                            if t_name in ("web_search", "browser.open_url") and search_tool_count > 5:
+                                console.print(f"\n[dim green]✓ Sufficient web information gathered. Proceeding to answer...[/dim green]")
                                 final_ans = clean_text_before_tool if len(clean_text_before_tool) > 50 else full_reply
                                 final_ans = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", final_ans, flags=re.DOTALL).strip()
-                                console.print(f"\n[dim green]✓ Sufficient results obtained. Finalizing response...[/dim green]")
                                 reply = final_ans
                                 break
 

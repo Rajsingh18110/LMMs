@@ -43,14 +43,34 @@ class UnifiedToolExecutor:
 
     def _register_default_handlers(self):
         """Attaches default canonical handlers for all core built-in tools."""
-        # 1. File operations
+        # 1. File operations (with surgical tools and unified alias resolution)
         try:
-            from lmms.backend.tools.files import canonical_file_read, canonical_file_write, FileTool
+            from lmms.backend.tools.files import FileTool
             ft = FileTool()
-            self.register_handler("files.read", canonical_file_read)
-            self.register_handler("files.write", canonical_file_write)
-            self.register_handler("files.list", lambda path=".": ft.list_folder(path))
-            self.register_handler("files.delete", lambda path, confirm=False: ft.delete(path, confirm))
+            
+            # Basic reads / writes
+            for k in ("files.read", "file.read", "read_file", "view_file"):
+                self.register_handler(k, lambda path: ft.read(path))
+            for k in ("files.write", "file.write", "write_file", "write_to_file"):
+                self.register_handler(k, lambda path, content: ft.write(path, content))
+                
+            # Surgical Tools
+            for k in ("files.view_file_outline", "view_file_outline", "view_outline"):
+                self.register_handler(k, lambda path: ft.view_file_outline(path))
+            for k in ("files.read_file_lines", "read_file_lines", "read_lines"):
+                self.register_handler(k, lambda path, start_line, end_line: ft.read_file_lines(path, start_line, end_line))
+            for k in ("files.replace_in_file", "replace_in_file", "replace_code"):
+                self.register_handler(k, lambda path, old_code, new_code: ft.replace_in_file(path, old_code, new_code))
+                
+            # Search & Listing
+            for k in ("files.search_in_files", "search_in_files", "grep_search"):
+                self.register_handler(k, lambda query="", folder=".": ft.search_in_files(folder, query))
+            for k in ("files.list", "files.list_folder", "list_folder", "list_dir"):
+                self.register_handler(k, lambda path=".": ft.list_folder(path))
+            for k in ("files.create_folder", "create_folder"):
+                self.register_handler(k, lambda path: ft.create_folder(path))
+            for k in ("files.delete", "delete"):
+                self.register_handler(k, lambda path, confirm=False: ft.delete(path, confirm))
         except Exception:
             pass
 

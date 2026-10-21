@@ -26,8 +26,8 @@ class ContextCompactor:
 
     def __init__(
         self,
-        recent_turns_to_preserve: int = 3,
-        max_observation_chars: int = 2500,
+        recent_turns_to_preserve: int = 8,
+        max_observation_chars: int = 15000,
         token_count_fn: Optional[Any] = None
     ):
         self.recent_turns_to_preserve = recent_turns_to_preserve
@@ -44,7 +44,7 @@ class ContextCompactor:
         """
         Executes multi-stage compaction if current_prompt_tokens exceeds usable_budget.
         Stage 1: Truncate oversized <observation> blocks from older turns.
-        Stage 2: Remove redundant intermediate tool calls from older turns, preserving summary state.
+        Stage 2: Condense older tool observations while keeping conversational flow intact.
         Stage 3: Summarize oldest turns into an executive summary bullet list.
         """
         original_turns = len(messages)
@@ -86,24 +86,14 @@ class ContextCompactor:
                 summary_applied=False
             )
 
-        # Stage 2: Prune complete completed tool interaction pairs older than preserve window
-        # (Assistant tool call + Observation turn)
-        i = 1  # Skip index 0 (system prompt)
-        while i < len(compacted) - self.recent_turns_to_preserve:
-            msg = compacted[i]
-            next_msg = compacted[i + 1] if i + 1 < len(compacted) else None
-
-            # If message is an assistant calling a tool and next is observation
-            if msg.get("role") == "assistant" and "<tool_call>" in str(msg.get("content", "")):
-                if next_msg and "<observation>" in str(next_msg.get("content", "")):
-                    # Extract high-level summary note before discarding raw execution output
-                    summary_note = self._extract_summary_line(str(next_msg.get("content", "")))
-                    compacted.pop(i + 1)
-                    compacted.pop(i)
-                    obs_pruned += 1
-                    tokens_saved += 150
-                    continue
-            i += 1
+        # Stage 2: Condense older observation turns instead of deleting conversation turns
+        for idx in range(1, cutoff_index):
+            msg = compacted[idx]
+            if msg.get("role") in ("user", "tool") and "<observation>" in str(msg.get("content", "")):
+                summary_note = self._extract_summary_line(str(msg.get("content", "")))
+                compacted[idx]["content"] = f"<observation>\n[Past Step Output: {summary_note}]\n</observation>"
+                obs_pruned += 1
+                tokens_saved += 120
 
         current_tokens = self._estimate_tokens(compacted, model_name)
         if current_tokens <= usable_budget:

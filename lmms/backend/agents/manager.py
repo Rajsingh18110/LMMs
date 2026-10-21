@@ -5,8 +5,18 @@ from lmms.backend.agents.registry import AgentRegistry
 from lmms.backend.agents.router_hooks.rule_based import RuleBasedRouter
 from lmms.backend.agents.permissions import PermissionValidator, PermissionError
 from lmms.backend.agents.states import AgentState
-from lmms.backend.agents.specialized.coding import CodingAgent
-from lmms.backend.agents.specialized.research import ResearchAgent
+from lmms.backend.agents.specialized import (
+    CodingAgent,
+    ResearchAgent,
+    ChatAgent,
+    GitAgent,
+    OrchestratorAgent,
+    ReviewerAgent,
+    TaskAgent,
+    TesterAgent,
+    UniversalAgent,
+    VisionAgent,
+)
 
 class AgentManager:
     def __init__(self, backend_manager, db):
@@ -30,7 +40,15 @@ class AgentManager:
         # Map class types
         self.agent_classes = {
             "CodingAgent": CodingAgent,
-            "ResearchAgent": ResearchAgent
+            "ResearchAgent": ResearchAgent,
+            "ChatAgent": ChatAgent,
+            "GitAgent": GitAgent,
+            "OrchestratorAgent": OrchestratorAgent,
+            "ReviewerAgent": ReviewerAgent,
+            "TaskAgent": TaskAgent,
+            "TesterAgent": TesterAgent,
+            "UniversalAgent": UniversalAgent,
+            "VisionAgent": VisionAgent,
         }
 
     def execute_agent(self, intent_name: str, workspace_id: str, task_id: str):

@@ -509,6 +509,77 @@ class ToolRegistry:
             aliases=["file.write", "write_file"]
         )
 
+        # 8b. Surgical File Tools
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="files.view_file_outline",
+                    name="View File Outline",
+                    category="files",
+                    summary="View structural outline of a file showing all classes, methods, and functions with exact line ranges (uses AST for Python).",
+                    tags=["files", "outline", "ast", "code"],
+                    risk_level="low",
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to file to inspect"}
+                    },
+                    "required": ["path"]
+                }
+            ),
+            aliases=["view_file_outline", "file.view_outline", "view_outline"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="files.read_file_lines",
+                    name="Read File Lines",
+                    category="files",
+                    summary="Read a specific range of lines from a file with line numbers prefixed.",
+                    tags=["files", "read", "lines", "slice"],
+                    risk_level="low",
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to file to read"},
+                        "start_line": {"type": "integer", "description": "Starting line number (1-indexed)"},
+                        "end_line": {"type": "integer", "description": "Ending line number (inclusive)"}
+                    },
+                    "required": ["path", "start_line", "end_line"]
+                }
+            ),
+            aliases=["read_file_lines", "file.read_lines", "read_lines"]
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="files.replace_in_file",
+                    name="Replace in File",
+                    category="files",
+                    summary="Surgically replace a code block in a file with built-in AST compile validation.",
+                    tags=["files", "edit", "replace", "patch", "diff"],
+                    risk_level="medium",
+                    estimated_tokens=50
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to file to modify"},
+                        "old_code": {"type": "string", "description": "Exact block of code to search and replace"},
+                        "new_code": {"type": "string", "description": "New replacement code block"}
+                    },
+                    "required": ["path", "old_code", "new_code"]
+                }
+            ),
+            aliases=["replace_in_file", "file.replace", "replace_code"]
+        )
+
         self.register(
             DynamicToolDefinition(
                 metadata=ToolMetadata(

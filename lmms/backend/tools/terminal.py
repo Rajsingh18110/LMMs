@@ -119,8 +119,14 @@ class TerminalTool:
                 "command": command
             })
 
-        workspace_dir = cwd if cwd else get_workspace_dir()
+        # The configured workspace is the authority boundary. A caller-supplied
+        # cwd selects a directory within that boundary; it must never redefine it.
+        workspace_dir = get_workspace_dir()
         target_cwd = cwd if cwd else workspace_dir
+
+        if not is_within_workspace(target_cwd, workspace_dir):
+            msg = "CWD is outside the allowed workspace boundary."
+            return (-1, msg) if return_exit_code else msg
 
         if sandboxed or config.get("permission_level") == "sandboxed":
             from lmms_sandbox.runner import default_runner
@@ -130,10 +136,6 @@ class TerminalTool:
             return res.output
 
         try:
-            if not is_within_workspace(target_cwd, workspace_dir):
-                msg = "CWD is outside the allowed workspace boundary."
-                return (-1, msg) if return_exit_code else msg
-
             if isinstance(command, str):
                 command_args = shlex.split(command)
             else:

@@ -30,8 +30,16 @@ class ToolRegistry:
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> ToolDefinition | None:
+        if not name:
+            return None
         if name in self._tools:
             return self._tools[name]
+        alt1 = name.replace("_", ".")
+        if alt1 in self._tools:
+            return self._tools[alt1]
+        alt2 = name.replace(".", "_")
+        if alt2 in self._tools:
+            return self._tools[alt2]
             
         # Try SQLite
         db_path = os.path.expanduser("~/.lmms/tools/tool_registry.db")

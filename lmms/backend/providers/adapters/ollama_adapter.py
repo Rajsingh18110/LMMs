@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional
 import json
 import httpx
 from lmms.backend.contracts.provider import ProviderContract
@@ -6,32 +6,82 @@ from lmms.backend.contracts.runtime import ModelRuntime
 from lmms.backend.contracts.generation import GenerationRequest, GenerationEvent
 
 class OllamaRuntime(ModelRuntime):
-    def __init__(self, base_url: str):
+    """
+    Production-grade Ollama runtime adapter.
+    Communicates directly with Ollama daemon via async HTTP streaming.
+    """
+    def __init__(self, base_url: str, default_model: str = "llama3"):
         self.base_url = base_url.rstrip('/')
+        self.default_model = default_model
         self._cancel = False
 
     async def generate(self, request: GenerationRequest) -> GenerationEvent:
-        return GenerationEvent(
-            type="generation_completed",
-            content="[Skeleton Ollama Response]",
-            usage=None
-        )
+        self._cancel = False
+        messages = request.messages or [{"role": "user", "content": request.prompt}]
+        model = getattr(request, "model_name", None) or self.default_model
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": getattr(request, "temperature", 0.7),
+                }
+            }
+            try:
+                resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data.get("message", {}).get("content", "")
+                    return GenerationEvent(type="generation_completed", content=content, usage=None)
+                else:
+                    return GenerationEvent(type="generation_error", content=f"Ollama error {resp.status_code}: {resp.text}")
+            except Exception as e:
+                return GenerationEvent(type="generation_error", content=f"Ollama execution error: {str(e)}")
 
     async def stream(self, request: GenerationRequest) -> AsyncGenerator[GenerationEvent, None]:
         self._cancel = False
         yield GenerationEvent(type="generation_started")
         
-        # Real implementation would make httpx stream request here
-        
-        if self._cancel:
-            yield GenerationEvent(type="generation_cancelled")
-            return
-            
-        yield GenerationEvent(type="content_delta", content="[Skeleton Ollama Stream Content]")
-        yield GenerationEvent(type="generation_completed")
+        messages = request.messages or [{"role": "user", "content": request.prompt}]
+        model = getattr(request, "model_name", None) or self.default_model
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": True,
+                    "options": {
+                        "temperature": getattr(request, "temperature", 0.7),
+                    }
+                }
+                async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
+                    async for line in response.aiter_lines():
+                        if self._cancel:
+                            yield GenerationEvent(type="generation_cancelled")
+                            return
+                        if not line:
+                            continue
+                        try:
+                            chunk_data = json.loads(line)
+                            delta = chunk_data.get("message", {}).get("content", "")
+                            if delta:
+                                yield GenerationEvent(type="content_delta", content=delta)
+                            if chunk_data.get("done", False):
+                                break
+                        except Exception:
+                            continue
+            yield GenerationEvent(type="generation_completed")
+        except Exception as e:
+            yield GenerationEvent(type="generation_error", content=f"Ollama stream error: {str(e)}")
 
     async def estimate_tokens(self, request: GenerationRequest) -> int:
-        return 0
+        text = request.prompt or ""
+        if request.messages:
+            text += "".join(str(m.get("content", "")) for m in request.messages)
+        return max(1, len(text) // 3)
 
     def cancel(self) -> None:
         self._cancel = True
@@ -63,31 +113,21 @@ class OllamaProvider(ProviderContract):
             return {"success": False, "message": f"Connection failed: {str(e)}"}
 
     def scan_models(self) -> List[Dict[str, Any]]:
-        """Fetch models from the Ollama tags endpoint."""
         url = f"{self.base_url}/api/tags"
         try:
             response = httpx.get(url, timeout=5.0)
             if response.status_code == 200:
-                data = response.json().get("models", [])
-                return [
-                    {
-                        "model_id": m.get("name"),
-                        "display_name": m.get("name"),
-                        "provider_id": self.provider_id,
-                        "modality": "text", 
-                        "capabilities": {
-                            "text": True,
-                            "vision": "llava" in m.get("name", "").lower(),
-                            "streaming": True,
-                            "tools": True, 
-                            "thinking": "deepseek-r1" in m.get("name", "").lower()
-                        }
-                    }
-                    for m in data
-                ]
+                models = response.json().get("models", [])
+                return [{
+                    "id": m.get("name"),
+                    "name": m.get("name"),
+                    "size_bytes": m.get("size", 0),
+                    "modified_at": m.get("modified_at")
+                } for m in models]
         except Exception:
             pass
         return []
 
     def get_runtime(self) -> ModelRuntime:
-        return OllamaRuntime(self.base_url)
+        default_model = self.config.get("model", "llama3")
+        return OllamaRuntime(self.base_url, default_model=default_model)

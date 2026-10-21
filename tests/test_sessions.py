@@ -10,11 +10,35 @@ Unit tests for lmms_sessions:
 
 import os
 import sqlite3
+import subprocess
+import sys
 import pytest
 
 from lmms_sessions.compactor import SessionCompactor, default_estimate_tokens
 from lmms_sessions.models import Session, SessionMessage
 from lmms_sessions.store import SessionStore
+
+
+def test_import_does_not_create_user_session_store(tmp_path):
+    """Importing session helpers must not create files in the user's home."""
+    home = tmp_path / "home"
+    home.mkdir()
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, [os.getcwd(), env.get("PYTHONPATH", "")])
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", "import lmms_sessions.compactor"],
+        cwd=os.getcwd(),
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert not (home / ".lmms").exists()
 
 
 @pytest.fixture

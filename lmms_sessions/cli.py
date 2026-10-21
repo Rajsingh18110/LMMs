@@ -231,4 +231,25 @@ class SessionCLI:
         ))
 
 
-default_session_cli = SessionCLI()
+class _LazySessionCLI:
+    """Create the persistent session store only when a CLI command uses it."""
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "_instance", None)
+
+    def _get_instance(self) -> SessionCLI:
+        if self._instance is None:
+            self._instance = SessionCLI()
+        return self._instance
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._get_instance(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_instance":
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._get_instance(), name, value)
+
+
+default_session_cli = _LazySessionCLI()
