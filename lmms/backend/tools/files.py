@@ -224,20 +224,22 @@ class FileTool:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            target_match = None
             if old_code in content:
-                target_match = old_code
+                new_content = content.replace(old_code, new_code, 1)
             else:
-                # Normalization fallback: strip trailing whitespace per line
-                norm_old = "\n".join(line.rstrip() for line in old_code.strip().splitlines())
-                norm_content = "\n".join(line.rstrip() for line in content.splitlines())
-                if norm_old in norm_content:
-                    # Found normalized match
-                    pass
+                # Codex-grade fuzzy line matching fallback
+                from lmms.backend.tools.patch import seek_sequence
+                content_lines = content.splitlines()
+                pattern_lines = old_code.splitlines()
+                match_idx = seek_sequence(content_lines, pattern_lines, start=0)
+                if match_idx is not None:
+                    new_lines = list(content_lines)
+                    new_lines[match_idx : match_idx + len(pattern_lines)] = new_code.splitlines()
+                    new_content = "\n".join(new_lines)
+                    if content.endswith("\n") and not new_content.endswith("\n"):
+                        new_content += "\n"
                 else:
                     return f"Error: Target code block not found in {path}. Make sure the code to replace matches exactly."
-
-            new_content = content.replace(old_code, new_code, 1)
 
             # Built-in AST Syntax Guard for Python
             if path.endswith(".py"):

@@ -2817,6 +2817,27 @@ def run_cli():
                 }
                 with open(os.path.join(CHATS_DIR, f"{current_chat_id}.json"), "w") as f:
                     json.dump(chat_data, f)
+
+                # Persist to unified SQLite SessionStore for App-Server and /sessions commands
+                try:
+                    from lmms_sessions.store import SessionStore
+                    _s_store = SessionStore()
+                    _db_sess = _s_store.get_session(current_chat_id)
+                    if not _db_sess:
+                        _s_store.create_session(
+                            session_id=current_chat_id,
+                            title=current_chat_name or "Untitled",
+                            metadata={"workspace": current_workspace}
+                        )
+                    if len(chat_history) >= 2:
+                        u_msg = chat_history[-2]
+                        a_msg = chat_history[-1]
+                        if u_msg.get("role") == "user":
+                            _s_store.add_message(current_chat_id, role="user", content=u_msg.get("content", ""))
+                        if a_msg.get("role") == "assistant":
+                            _s_store.add_message(current_chat_id, role="assistant", content=a_msg.get("content", ""))
+                except Exception:
+                    pass
                     
                 # Telemetry trace recording
                 try:

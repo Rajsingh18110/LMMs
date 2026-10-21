@@ -105,7 +105,90 @@ class ToolRegistry:
         if tool_id in self._aliases:
             canonical_id = self._aliases[tool_id]
             return self._tools.get(canonical_id)
+
+        # On-demand resolution for MCP tools (e.g. mcp__server__tool or server__tool)
+        if tool_id.startswith("mcp__") or ("__" in tool_id and not tool_id.startswith("_")):
+            parts = tool_id.split("__")
+            server = parts[1] if parts[0] == "mcp" and len(parts) >= 3 else parts[0]
+            name = parts[2] if parts[0] == "mcp" and len(parts) >= 3 else parts[1]
+            dyn_def = DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id=tool_id,
+                    name=f"MCP: {server}/{name}",
+                    category=f"mcp_{server}",
+                    summary=f"Dynamic MCP Tool {name} on {server}",
+                    tags=["mcp", server, name],
+                    risk_level="medium"
+                ),
+                parameters={"type": "object", "properties": {}}
+            )
+            setattr(dyn_def, "_is_mcp", True)
+            setattr(dyn_def, "_mcp_server", server)
+            setattr(dyn_def, "_mcp_orig_name", name)
+            self.register(dyn_def)
+            return dyn_def
+
         return None
+
+    def sync_mcp_tools(self, mcp_manager: Any = None) -> int:
+        """
+        Dynamically imports and registers tools discovered from configured MCP servers.
+        Exposes them as mcp__{server}__{tool} with clean aliases.
+        """
+        try:
+            if mcp_manager is None:
+                from lmms_mcp.manager import default_mcp_manager
+                mcp_manager = default_mcp_manager
+
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    tools = pool.submit(lambda: asyncio.run(mcp_manager.list_all_tools())).result()
+            else:
+                tools = loop.run_until_complete(mcp_manager.list_all_tools())
+
+            count = 0
+            for t in tools:
+                server = t.get("server", "mcp")
+                orig_name = t.get("name", "")
+                if not orig_name:
+                    continue
+
+                tool_id = f"mcp__{server}__{orig_name}"
+                alias1 = f"{server}.{orig_name}"
+                alias2 = f"{server}__{orig_name}"
+                aliases = [alias1, alias2]
+                if orig_name not in self._tools and orig_name not in self._aliases:
+                    aliases.append(orig_name)
+
+                tool_def = DynamicToolDefinition(
+                    metadata=ToolMetadata(
+                        id=tool_id,
+                        name=f"MCP: {server}/{orig_name}",
+                        category=f"mcp_{server}",
+                        summary=t.get("description", f"MCP Tool from {server} server: {orig_name}"),
+                        tags=["mcp", server, orig_name],
+                        risk_level="medium",
+                        estimated_tokens=50
+                    ),
+                    parameters=t.get("inputSchema", {"type": "object", "properties": {}}),
+                    callback=None
+                )
+                setattr(tool_def, "_is_mcp", True)
+                setattr(tool_def, "_mcp_server", server)
+                setattr(tool_def, "_mcp_orig_name", orig_name)
+                self.register(tool_def, aliases=aliases)
+                count += 1
+            return count
+        except Exception:
+            return 0
 
     def get_metadata(self, tool_id: str) -> Optional[ToolMetadata]:
         tool = self.get(tool_id)
@@ -578,6 +661,30 @@ class ToolRegistry:
                 }
             ),
             aliases=["replace_in_file", "file.replace", "replace_code"]
+        )
+
+        # 4. Codex-Grade Apply Patch Engine
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="patch.apply",
+                    name="Apply Patch",
+                    category="files",
+                    summary="Apply multi-file patches using OpenAI Codex format ('*** Begin Patch') or Unified Diff with AST validation and atomic rollback.",
+                    tags=["patch", "diff", "edit", "codex", "surgical", "files"],
+                    risk_level="medium",
+                    estimated_tokens=55
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "patch": {"type": "string", "description": "Patch content in OpenAI Codex format (*** Begin Patch ... *** End Patch) or Unified Diff format"},
+                        "dry_run": {"type": "boolean", "description": "Pre-flight validation without modifying files on disk", "default": False}
+                    },
+                    "required": ["patch"]
+                }
+            ),
+            aliases=["apply_patch", "patch", "apply_diff"]
         )
 
         self.register(

@@ -25,6 +25,9 @@ class ToolRegistry:
             "run_command": "terminal.run",
             "bash": "terminal.run",
             "sh": "terminal.run",
+            "patch": "patch.apply",
+            "apply_patch": "patch.apply",
+            "apply_diff": "patch.apply",
         }
         
     def register(self, definition: ToolDefinition) -> None:

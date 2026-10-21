@@ -192,44 +192,49 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             yield f"Thoughts: {response_json.get('thoughts', 'No thoughts provided')}\n"
             
             edits = response_json.get("edits", [])
+            patch_str = response_json.get("patch")
             edits_successful = True
             backups = {}
+
+            # 1. Apply Codex-grade Patch if provided
+            if patch_str:
+                yield f"Applying Codex-grade patch...\n"
+                from lmms.backend.tools.patch import default_patch_engine
+                patch_res = default_patch_engine.apply_patch(patch_str)
+                if patch_res.get("success"):
+                    yield f"Patch applied successfully to: {', '.join(patch_res.get('files_modified', []))}\n"
+                    if patch_res.get("diff"):
+                        yield f"\n[Patch Diff]:\n{patch_res['diff']}\n"
+                else:
+                    yield f"Patch application failed: {patch_res.get('error')}\n"
+                    edits_successful = False
             
+            # 2. Apply surgical edits with AST Compile Guard and fuzzy line seeking
             for edit in edits:
                 path = edit.get("path")
                 search = edit.get("search")
                 replace = edit.get("replace")
                 
                 if path and search is not None and replace is not None:
-                    old_content = file_contents.get(path, "")
-                    if not old_content and os.path.exists(path):
+                    # Backup original content for safe rollback
+                    if os.path.exists(path) and path not in backups:
                         try:
-                            r = default_executor.execute("file.read", {"path": path})
-                            old_content = r.data.get("content", "") if r.success else ""
+                            with open(path, "r", encoding="utf-8") as bf:
+                                backups[path] = bf.read()
                         except Exception:
-                            old_content = ""
-                            
-                    if search in old_content:
-                        new_content = old_content.replace(search, replace, 1)
-                        
-                        diff = list(difflib.unified_diff(
-                            old_content.splitlines(keepends=True),
-                            new_content.splitlines(keepends=True),
-                            fromfile=f"a/{path}",
-                            tofile=f"b/{path}"
-                        ))
-                        diff_str = "".join(diff)
-                        if diff_str:
-                            yield f"\n[Diff for {path}]:\n{diff_str}\n"
-                        else:
-                            yield f"\n[Diff for {path}]: No changes detected.\n"
-                            
-                        yield f"Writing to file: {path}...\n"
-                        backups[path] = old_content
-                        r = default_executor.execute("file.write", {"path": path, "content": new_content})
-                        yield f"  Result: {'OK' if r.success else r.error}\n"
+                            pass
+
+                    from lmms.backend.tools.files import FileTool
+                    ft = FileTool()
+                    res_msg = ft.replace_in_file(path, search, replace)
+                    if "Successfully modified" in res_msg:
+                        yield f"Applied surgical edit to: {path} (AST validated)\n"
+                        # Extract diff lines if returned
+                        diff_part = res_msg.partition("Diff:")[2]
+                        if diff_part:
+                            yield f"[Diff for {path}]:{diff_part}\n"
                     else:
-                        yield f"Search block not found in {path}. Edit skipped.\n"
+                        yield f"Edit in {path} failed: {res_msg}\n"
                         edits_successful = False
                 else:
                     edits_successful = False
@@ -237,16 +242,17 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             cmd = response_json.get("command")
             validation_successful = True
             if cmd:
-                yield f"Running validation command: `{cmd}`...\n"
+                yield f"Running validation command in sandbox: `{cmd}`...\n"
                 try:
-                    r = default_executor.execute("terminal.run", {"command": cmd, "cwd": os.getcwd()})
-                    out = r.data.get("output", "") if r.success else r.error
-                    exit_code = r.data.get("exit_code", 1) if r.success else 1
-                    yield f"  Terminal Output:\n{out}\n"
+                    from lmms.backend.tools.terminal import canonical_terminal_callback
+                    t_res = canonical_terminal_callback(command=cmd, cwd=os.getcwd(), sandboxed=True)
+                    out = t_res.get("output", "")
+                    exit_code = t_res.get("exit_code", 0)
+                    yield f"  Sandbox Terminal Output (exit code {exit_code}):\n{out}\n"
                     if exit_code != 0:
                         validation_successful = False
                 except Exception as e:
-                    yield f"  Terminal Error: {e}\n"
+                    yield f"  Sandbox Terminal Error: {e}\n"
                     validation_successful = False
                     
             if edits_successful and validation_successful:
@@ -254,8 +260,12 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             else:
                 yield "Execution completed with validation errors. Rolling back changes...\n"
                 for p, old_val in backups.items():
-                    default_executor.execute("file.write", {"path": p, "content": old_val})
-                    yield f"  Rolled back: {p}\n"
+                    try:
+                        with open(p, "w", encoding="utf-8") as f:
+                            f.write(old_val)
+                        yield f"  Rolled back: {p}\n"
+                    except Exception as rb_err:
+                        yield f"  Rollback failed for {p}: {rb_err}\n"
             
         except json.JSONDecodeError as e:
             yield f"Error: Failed to parse LLM response as JSON. {e}\nResponse was:\n{llm_text}\n"

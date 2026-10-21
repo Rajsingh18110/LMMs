@@ -71,6 +71,11 @@ class UnifiedToolExecutor:
                 self.register_handler(k, lambda path: ft.create_folder(path))
             for k in ("files.delete", "delete"):
                 self.register_handler(k, lambda path, confirm=False: ft.delete(path, confirm))
+
+            # 1b. Codex-Grade Apply Patch Engine
+            from lmms.backend.tools.patch import canonical_apply_patch
+            for k in ("patch.apply", "apply_patch", "apply_diff", "patch"):
+                self.register_handler(k, lambda patch, dry_run=False: canonical_apply_patch(patch))
         except Exception:
             pass
 
@@ -169,6 +174,10 @@ class UnifiedToolExecutor:
 
         # Normalize argument aliases
         clean_kwargs = dict(kwargs)
+        if normalized_name in ("patch.apply", "apply_patch", "apply_diff", "patch"):
+            for k in ["diff", "patch_text", "code", "content", "patch_str"]:
+                if k in clean_kwargs and "patch" not in clean_kwargs:
+                    clean_kwargs["patch"] = clean_kwargs.pop(k)
         if normalized_name in ("files.read", "files.write", "files.delete"):
             for k in ["file_path", "filepath", "filename", "file", "target_file"]:
                 if k in clean_kwargs and "path" not in clean_kwargs:
@@ -423,6 +432,38 @@ class UnifiedToolExecutor:
 
         # 5. Execute handler
         handler = self._custom_handlers.get(tool.id) or tool.callback
+        if not handler:
+            # Check for dynamic MCP execution
+            if tool.id.startswith("mcp__") or getattr(tool, "_is_mcp", False) or ("__" in tool.id and not tool.id.startswith("_")):
+                server = getattr(tool, "_mcp_server", None)
+                orig_name = getattr(tool, "_mcp_orig_name", None)
+                if not server or not orig_name:
+                    parts = tool.id.split("__")
+                    server = parts[1] if parts[0] == "mcp" and len(parts) >= 3 else parts[0]
+                    orig_name = parts[2] if parts[0] == "mcp" and len(parts) >= 3 else parts[1]
+
+                def _mcp_runner(**kw):
+                    from lmms_mcp.manager import default_mcp_manager
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    coro = default_mcp_manager.call_tool(server, orig_name, kw)
+                    if loop.is_running():
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            res = pool.submit(lambda: asyncio.run(coro)).result()
+                    else:
+                        res = loop.run_until_complete(coro)
+                    if hasattr(res, "content"):
+                        texts = [c.text for c in res.content if hasattr(c, "text")]
+                        return "\n".join(texts) if texts else str(res.content)
+                    return res
+
+                handler = _mcp_runner
+
         if not handler:
             if tool.id == "discover_additional_tool":
                 cap = kwargs.get("capability") or kwargs.get("tool_name") or ""

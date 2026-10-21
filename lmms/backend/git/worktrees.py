@@ -86,3 +86,25 @@ class GitWorktrees:
             "status": "success" if proc.returncode == 0 else "error",
             "message": proc.stdout.strip() or proc.stderr.strip()
         }
+
+    def create_ephemeral_worktree(self, base_workspace: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Creates an ephemeral git worktree using lmms_worktree manager with PID tracking,
+        safe lease locks, and automatic branch derivation.
+        """
+        try:
+            from lmms_worktree.manager import default_worktree_manager
+            target_ws = base_workspace or self.repo_path
+            wt = default_worktree_manager.create_worktree(target_ws)
+            return {
+                "status": "success",
+                "worktree_dir": wt.worktree_dir,
+                "ephemeral_branch": wt.ephemeral_branch,
+                "base_branch": wt.base_branch,
+                "is_ephemeral": True
+            }
+        except Exception as e:
+            import uuid
+            ephemeral_id = uuid.uuid4().hex[:8]
+            wt_path = os.path.join(self.repo_path, ".git", "worktrees", f"ephemeral-{ephemeral_id}")
+            return self.create_worktree(wt_path, branch=f"lmms-ephemeral-{ephemeral_id}")
