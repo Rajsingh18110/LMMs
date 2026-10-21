@@ -51,6 +51,10 @@ class MainWindow(QMainWindow):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         
+        # Sidebar layout reference and pending buffer
+        self._sidebar_layout = None
+        self._pending_extension_nav_items = []
+
         # State & Backend
         self.backend = BackendManager()
         self.state_manager = GUIStateManager(self.backend)
@@ -464,13 +468,20 @@ class MainWindow(QMainWindow):
         self.extensions_dock.open_detail_requested.connect(self._open_extension_detail)
 
         # 7. MCP & Tools Dock
-        from lmms.gui.pages.mcp_page import MCPToolsPage
-        self.mcp_dock = QDockWidget("MCP & Tools", self.inner_window)
-        self.mcp_dock.setObjectName("MCPToolsDock")
-        self.mcp_page = MCPToolsPage()
-        self.mcp_dock.setWidget(self.mcp_page)
-        self.docks["MCP & Tools"] = self.mcp_dock
-        self.mcp_dock.hide()
+        try:
+            from lmms.gui.pages.mcp_page import MCPToolsPage
+            self.mcp_dock = QDockWidget("MCP & Tools", self.inner_window)
+            self.mcp_dock.setObjectName("MCPToolsDock")
+            self.mcp_page = MCPToolsPage()
+            self.mcp_dock.setWidget(self.mcp_page)
+            self.docks["MCP & Tools"] = self.mcp_dock
+            self.mcp_dock.hide()
+        except Exception as e:
+            logger.warning(f"Failed to load MCP & Tools dock: {e}")
+            self.mcp_dock = QDockWidget("MCP & Tools", self.inner_window)
+            self.mcp_dock.setObjectName("MCPToolsDock")
+            self.docks["MCP & Tools"] = self.mcp_dock
+            self.mcp_dock.hide()
 
         # Init Source Control Workspace
         if not self.is_empty_workspace and hasattr(self.source_control_dock, 'set_workspace'):
@@ -561,6 +572,12 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch()
         for text_icon, name, custom_icon_path in nav_items:
             self._add_nav_item(text_icon, name, custom_icon_path)
+
+        # Flush any extension nav items that were registered before sidebar layout was initialized
+        if hasattr(self, "_pending_extension_nav_items"):
+            for p_icon, p_name, p_path, p_is_ext in self._pending_extension_nav_items:
+                self._add_nav_item(p_icon, p_name, p_path, is_extension=p_is_ext)
+            self._pending_extension_nav_items.clear()
 
         # Add to main layout
         main_layout.addWidget(self.sidebar)
@@ -731,6 +748,11 @@ class MainWindow(QMainWindow):
             return QIcon(path)
 
     def _add_nav_item(self, text_icon, name, custom_icon_path, is_extension=False):
+        if not getattr(self, "_sidebar_layout", None):
+            if hasattr(self, "_pending_extension_nav_items"):
+                self._pending_extension_nav_items.append((text_icon, name, custom_icon_path, is_extension))
+            return
+
         btn = QPushButton(text_icon if not custom_icon_path else "")
         if custom_icon_path and os.path.exists(custom_icon_path):
             svg_icon = self._load_svg_icon(custom_icon_path, 24)
