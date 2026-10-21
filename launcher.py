@@ -46,6 +46,7 @@ def ensure_engine_running():
 
         print("Starting LMMs Super Engine in the background...")
         res = start_server_daemon(host="0.0.0.0", port=11435, engine_tier=3, forever=False, initiator="cli")
+        wait_for_server_healthy(timeout=8.0)
         return res
     except Exception as e:
         print(f"\033[1;31m[LMMs Engine Error]\033[0m Failed to auto-start daemon: {e}")

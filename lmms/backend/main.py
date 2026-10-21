@@ -193,26 +193,25 @@ _cli_session_auto_started = False
 
 
 def check_engine_health() -> bool:
-    try:
-        resp = requests.get(f"{ENGINE_URL}/webhook", timeout=1.5)
-        return resp.status_code == 200
-    except Exception as e:
+    clean_url = str(ENGINE_URL).rstrip("/")
+    candidates = [f"{clean_url}/ping", f"{clean_url}/v1/health", f"{clean_url}/webhook"]
+    if "127.0.0.1" not in clean_url and "localhost" not in clean_url:
+        candidates.extend(["http://127.0.0.1:11435/ping", "http://127.0.0.1:11435/webhook"])
+
+    for ep in candidates:
         try:
-            with open(os.path.expanduser("~/.lmms/logs/health_error.log"), "w") as f:
-                f.write(f"Health Check Failed: {str(e)}\n")
+            resp = requests.get(ep, timeout=2.5)
+            if resp.status_code == 200:
+                return True
         except Exception:
-            pass
-        return False
+            continue
+    return False
 
 
 def auto_start_engine() -> bool:
     global _cli_session_auto_started
     if check_engine_health():
         return True
-
-    # If it's a remote engine URL, do not try to start local daemon
-    if not any(loc in str(ENGINE_URL) for loc in ["127.0.0.1", "localhost", "0.0.0.0"]):
-        return False
 
     from lmms.api.service import wait_for_server_healthy, start_server_daemon, is_server_running
 
@@ -227,8 +226,8 @@ def auto_start_engine() -> bool:
         except Exception:
             pass
 
-    # Wait up to 6 seconds for engine to complete FastAPI/model init
-    if wait_for_server_healthy(timeout=6.0):
+    # Wait up to 8 seconds for engine to complete init
+    if wait_for_server_healthy(timeout=8.0):
         return True
 
     return check_engine_health()
@@ -546,11 +545,12 @@ def run_cli():
                 if saved_model:
                     current_model = saved_model
                     if detected_model != saved_model:
-                        try:
-                            # Auto-load quietly
-                            requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": saved_model}, timeout=60)
-                        except:
-                            pass
+                        def _autoload_saved():
+                            try:
+                                requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": saved_model}, timeout=60)
+                            except Exception:
+                                pass
+                        threading.Thread(target=_autoload_saved, daemon=True, name="CLI-ModelAutoLoader").start()
                 elif detected_model:
                     current_model = detected_model
         except Exception:
@@ -917,14 +917,6 @@ def run_cli():
     from prompt_toolkit.completion import ThreadedCompleter
 
     _cached_engine_health = [check_engine_health()]
-    
-    def _health_poller():
-        import time
-        while True:
-            time.sleep(5)
-            _cached_engine_health[0] = check_engine_health()
-            
-    threading.Thread(target=_health_poller, daemon=True).start()
 
     def get_bottom_toolbar():
         is_online = _cached_engine_health[0]
@@ -945,6 +937,21 @@ def run_cli():
         bottom_toolbar=get_bottom_toolbar,
         reserve_space_for_menu=8
     )
+
+    def _health_poller():
+        import time
+        while True:
+            time.sleep(2)
+            new_health = check_engine_health()
+            if new_health != _cached_engine_health[0]:
+                _cached_engine_health[0] = new_health
+                try:
+                    if hasattr(session, "app") and session.app:
+                        session.app.invalidate()
+                except Exception:
+                    pass
+
+    threading.Thread(target=_health_poller, daemon=True, name="CLI-Health-Poller").start()
     # ----------------------------------------
     
     context_manager = ContextManager()
