@@ -396,7 +396,7 @@ class ContextManager:
             res += f"- {k}: {v}\n"
         return res
         
-    def check_and_prune(self, current_tokens: int, messages: list, count_tokens_fn, current_model: str, max_allowed: int = None) -> list:
+    def check_and_prune(self, current_tokens: int, messages: list, count_tokens_fn, current_model: str, max_allowed: Optional[int] = None) -> list:
         limit = max_allowed if max_allowed is not None and max_allowed > 0 else self.usable_context
         # Dynamic check
         if current_tokens <= limit:
@@ -1956,6 +1956,7 @@ def run_cli():
                     continue
                     
                 reply = ""
+                full_reply = ""
                 executed_tool_calls = []
                 search_tool_count = 0
                 while iter_count < MAX_ITERATIONS:
