@@ -32,10 +32,10 @@ if [ "$is_main_pushed" -eq 1 ]; then
         git branch -f "$br" main 2>/dev/null || true
     done
 
-    # Push updated child branches to remote
+    # Push updated child branches to remote with forced mirror refspec
     PUSH_SPECS=()
     for br in "${CHILD_BRANCHES[@]}"; do
-        PUSH_SPECS+=("main:refs/heads/$br")
+        PUSH_SPECS+=("+main:refs/heads/$br")
     done
 
     echo " Pushing child branches to $remote: ${CHILD_BRANCHES[*]}..."
