@@ -71,7 +71,7 @@ class ContextBuilder:
             )
 
         # 2b. Web search & information retrieval guidelines
-        if "web_search" in instruction_modules or intent_result.intent in (IntentType.WEB_SEARCH, IntentType.RESEARCH):
+        if "web_search" in instruction_modules or intent_result.intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH):
             sections.append(
                 "## Search Rules\n"
                 "1. Keep search queries specific and focused.\n"
