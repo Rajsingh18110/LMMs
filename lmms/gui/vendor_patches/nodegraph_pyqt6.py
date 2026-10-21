@@ -102,12 +102,12 @@ def _safe_draw_dots(self, painter, rect, pen, grid_size):
     first_left = left - (left % grid_size)
     first_top = top - (top % grid_size)
 
-    pen.setWidth(int(max(1, grid_size // 10)))
+    pen.setWidth(max(1, grid_size // 10))
     painter.setPen(pen)
 
     for x in range(first_left, right, grid_size):
         for y in range(first_top, bottom, grid_size):
-            painter.drawPoint(int(x), int(y))
+            painter.drawPoint(x, y)
 
 NodeScene._draw_dots = _safe_draw_dots
 

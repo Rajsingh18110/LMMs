@@ -345,7 +345,10 @@ class AutomationPage(QWidget):
         self.canvas.toggle_drawer_requested.connect(self.toggle_drawer)
         self.canvas.node_selected.connect(self._on_node_selected)
         self.canvas.node_double_clicked.connect(self._on_node_selected)
-        self.canvas.graph.nodes_deleted.connect(lambda nodes: self.update_status_bar())
+        getattr(self.canvas.graph, "nodes_deleted").connect(self._on_nodes_deleted)
+
+    def _on_nodes_deleted(self, *args):
+        self.update_status_bar()
 
     def _on_drawer_node_selected(self, item_data: dict):
         """Instantiates selected node from drawer and drops onto canvas."""
