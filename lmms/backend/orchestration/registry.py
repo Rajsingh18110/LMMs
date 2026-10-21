@@ -298,7 +298,7 @@ class ToolRegistry:
                     id="browser.crawl_url",
                     name="Browser Deep Web Crawler",
                     category="browser",
-                    summary="Autonomous deep web crawler using Crawl4AI. Extracts clean, full markdown text and links from any website, article, or documentation page.",
+                    summary="Autonomous deep web crawler using Crawl4AI. Extracts clean, full markdown text, author/metadata, and links from any website, article, or documentation page.",
                     tags=["browser", "crawl", "crawl4ai", "scrape", "research", "web"],
                     risk_level="low",
                     estimated_tokens=50
@@ -307,7 +307,11 @@ class ToolRegistry:
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "Webpage URL to crawl"},
-                        "css_selector": {"type": "string", "description": "Optional CSS selector to narrow crawling focus"}
+                        "css_selector": {"type": "string", "description": "Optional CSS selector to narrow crawling focus"},
+                        "depth": {"type": "integer", "description": "Crawl depth for following links", "default": 1},
+                        "max_pages": {"type": "integer", "description": "Maximum pages to crawl", "default": 1},
+                        "include_images": {"type": "boolean", "description": "Include image links", "default": False},
+                        "include_css": {"type": "boolean", "description": "Include CSS", "default": False}
                     },
                     "required": ["url"]
                 },
@@ -355,7 +359,11 @@ class ToolRegistry:
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "Target webpage or documentation URL to crawl and index"},
-                        "css_selector": {"type": "string", "description": "Optional CSS selector"}
+                        "css_selector": {"type": "string", "description": "Optional CSS selector"},
+                        "depth": {"type": "integer", "description": "Crawl depth for following links", "default": 1},
+                        "max_pages": {"type": "integer", "description": "Maximum pages to crawl", "default": 1},
+                        "include_images": {"type": "boolean", "description": "Include images in extraction", "default": False},
+                        "include_css": {"type": "boolean", "description": "Include CSS stylesheets", "default": False}
                     },
                     "required": ["url"]
                 },

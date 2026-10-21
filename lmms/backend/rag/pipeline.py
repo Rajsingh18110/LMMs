@@ -28,9 +28,9 @@ class RAGPipeline:
         """Directly crawl any URL using Crawl4AI and return clean markdown text."""
         return self.crawler.crawl_and_extract_text(url=url, max_chars=max_chars)
 
-    def crawl_and_index_url(self, url: str, css_selector: Optional[str] = None) -> str:
+    def crawl_and_index_url(self, url: str, css_selector: Optional[str] = None, **kwargs) -> str:
         """Crawl a URL using Crawl4AI and automatically ingest it into vector memory."""
-        res = self.crawler.crawl_url(url=url, css_selector=css_selector)
+        res = self.crawler.crawl_url(url=url, css_selector=css_selector, **kwargs)
         if not res.get("success"):
             return f"Error crawling {url}: {res.get('error')}"
 

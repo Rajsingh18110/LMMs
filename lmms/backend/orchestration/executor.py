@@ -107,7 +107,7 @@ class UnifiedToolExecutor:
         try:
             from lmms.backend.rag.crawler import AdvancedCrawler
             crawler = AdvancedCrawler()
-            self.register_handler("browser.crawl_url", lambda url, css_selector=None: crawler.crawl_and_extract_text(url, max_chars=12000))
+            self.register_handler("browser.crawl_url", lambda url, css_selector=None, **kw: crawler.crawl_and_extract_text(url, max_chars=12000, **kw))
         except Exception:
             pass
 
@@ -117,11 +117,11 @@ class UnifiedToolExecutor:
         # 8. Vector DB & RAG
         try:
             from lmms.backend.rag.pipeline import get_rag_pipeline
-            self.register_handler("rag.search", lambda query, k=5: get_rag_pipeline().search(query=query, k=k))
-            self.register_handler("vector_db.search", lambda query, k=5: get_rag_pipeline().search(query=query, k=k))
-            self.register_handler("rag.crawl_url", lambda url, css_selector=None: get_rag_pipeline().crawl_and_index_url(url=url, css_selector=css_selector))
+            self.register_handler("rag.search", lambda query, k=5, **kw: get_rag_pipeline().search(query=query, k=k))
+            self.register_handler("vector_db.search", lambda query, k=5, **kw: get_rag_pipeline().search(query=query, k=k))
+            self.register_handler("rag.crawl_url", lambda url, css_selector=None, **kw: get_rag_pipeline().crawl_and_index_url(url=url, css_selector=css_selector, **kw))
         except Exception:
-            self.register_handler("vector_db.search", lambda query: f"[Vector Search] Results for query '{query}': Indexed codebase files matching semantic embedding.")
+            self.register_handler("vector_db.search", lambda query, **kw: f"[Vector Search] Results for query '{query}': Indexed codebase files matching semantic embedding.")
 
     def normalize_call(self, tool_name: str, kwargs: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         """

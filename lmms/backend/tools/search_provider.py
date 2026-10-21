@@ -15,16 +15,17 @@ class DDGSSearchProvider(SearchProvider):
     def search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         results = []
         try:
-            try:
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning)
+                warnings.filterwarnings("ignore")
+                try:
                     from ddgs import DDGS
-            except ImportError:
-                from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                for r in ddgs.text(query, max_results=max_results):
-                    results.append({
+                except ImportError:
+                    from duckduckgo_search import DDGS
+                with DDGS() as ddgs:
+                    for r in ddgs.text(query, max_results=max_results):
+                        results.append({
                         "title": r.get("title", ""),
                         "url": r.get("href", ""),
                         "snippet": r.get("body", ""),
