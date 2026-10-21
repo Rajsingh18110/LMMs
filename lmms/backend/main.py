@@ -883,7 +883,8 @@ def run_cli():
         "/perm": "Set or view permission tiers: sandboxed, low, medium, or full",
         "/worktree": "Git worktree isolation (/worktree on|off|status|diff|apply|discard)",
         "/mcp": "Model Context Protocol tools, servers, and live dashboard",
-        "/gui": "Launch Desktop Studio (e.g. /gui tools)",
+        "/gui": "Launch Desktop Studio (e.g. /gui automation)",
+        "/panel": "Launch Automation Canvas (n8n-style workflow builder)",
         "exit": "Quit CLI",
         "clear": "Clear screen"
     }
@@ -1302,11 +1303,11 @@ def run_cli():
                 from lmms_mcp.cli import handle_mcp_cli
                 handle_mcp_cli(parts[1:])
 
-            elif base_cmd == "/gui":
+            elif base_cmd in ("/gui", "/panel"):
                 gui_args = parts[1:]
-                target_page = gui_args[0] if gui_args else "workspace"
+                target_page = gui_args[0] if (gui_args and base_cmd != "/panel") else ("automation" if base_cmd == "/panel" else "automation")
                 console.print(f"[bold cyan]Launching Desktop Studio (GUI)...[/bold cyan] [dim](focusing: {target_page})[/dim]")
-                cmd = [sys.executable, "-m", "lmms.gui.app"] + gui_args
+                cmd = [sys.executable, "-m", "lmms.gui.app", f"--page={target_page}"]
                 try:
                     subprocess.Popen(cmd)
                 except Exception as ge:

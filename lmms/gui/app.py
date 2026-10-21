@@ -119,6 +119,7 @@ def run_gui(args: Optional[List[str]] = None) -> None:
         pass
 
     app_args = sys.argv[:1] + (args or [])
+    sys.argv = app_args
     app = QApplication(app_args)
     app.setApplicationName("LMMs-GUI")
     app.setApplicationDisplayName("LMMs Desktop Studio")

@@ -5,6 +5,7 @@ Minimalist, high-throughput streaming interface for local and remote models.
 
 from __future__ import annotations
 
+import os
 import readline  # enables arrow key navigation & command history
 import sys
 import time
@@ -161,13 +162,14 @@ class InteractiveChat:
                 f"  {COLOR_CYAN}/resume [id]{COLOR_RESET}           Switch or interactively pick session\n"
                 f"  {COLOR_CYAN}/rename <name>{COLOR_RESET}         Rename active session\n"
                 f"  {COLOR_CYAN}/compact [restore]{COLOR_RESET}     Compact context with local model or restore\n"
-                f"  {COLOR_CYAN}/gui [tools]{COLOR_RESET}          Launch or focus Desktop Studio on MCP & Tools\n"
+                f"  {COLOR_CYAN}/panel{COLOR_RESET}                 Launch Automation Canvas (n8n-style workflow builder)\n"
+                f"  {COLOR_CYAN}/gui [page]{COLOR_RESET}            Launch or focus Desktop Studio (e.g. /gui automation)\n"
                 f"  {COLOR_CYAN}/clear{COLOR_RESET}             Clear conversation history & screen\n"
                 f"  {COLOR_CYAN}/exit{COLOR_RESET}              Exit chat\n\n"
             )
 
-        elif cmd == "/gui":
-            sub = parts[1].lower() if len(parts) > 1 else "tools"
+        elif cmd in ("/gui", "/panel"):
+            sub = parts[1].lower() if len(parts) > 1 else ("automation" if cmd == "/panel" else "automation")
             sys.stdout.write(f"\n{COLOR_CYAN}lmms{COLOR_RESET} {COLOR_DIM}›{COLOR_RESET} Launching Desktop Studio on page: {sub}...\n")
             import subprocess
             try:

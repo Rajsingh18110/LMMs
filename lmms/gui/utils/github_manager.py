@@ -1,5 +1,8 @@
 import keyring
-from github import Github
+try:
+    from github import Github
+except ImportError:
+    Github = None
 from PyQt6.QtCore import QObject, pyqtSignal
 
 SERVICE_NAME = "LMMsEditor_GitHub"
