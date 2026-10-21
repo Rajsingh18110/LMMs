@@ -30,6 +30,7 @@ test_*.py
 !tests/test_mcp_gui.py
 !tests/test_codex_parity.py
 !tests/test_undo_checkpoint.py
+!tests/test_event_bus.py
 
 patch_*.py
 build_*.py
