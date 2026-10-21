@@ -70,3 +70,9 @@ class PlainChatAgent(BaseAgent):
         except Exception as e:
             yield f"\n[Error during generation]: {e}\n"
 
+
+# Alias for compatibility with AgentManager and registries
+ChatAgent = PlainChatAgent
+
+__all__ = ["PlainChatAgent", "ChatAgent"]
+

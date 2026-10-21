@@ -13,7 +13,7 @@ class LlamaCppRuntime(ModelRuntime):
     Executes inference via llama-cpp-python native bindings when local GGUF path is provided,
     or bridges seamlessly to the local LMMs high-speed engine endpoint (http://localhost:11435).
     """
-    def __init__(self, model_path: str, engine_url: str = "http://localhost:11435"):
+    def __init__(self, model_path: str = "", engine_url: str = "http://localhost:11435"):
         self.model_path = model_path
         self.engine_url = engine_url.rstrip("/")
         self._cancel = False
@@ -201,3 +201,10 @@ class LocalNativeProvider(ProviderContract):
         path = self.config.get("path", "")
         engine_url = self.config.get("engine_url", "http://localhost:11435")
         return LlamaCppRuntime(path, engine_url=engine_url)
+
+
+# Backward compatibility aliases
+LlamaCppAdapter = LlamaCppRuntime
+
+__all__ = ["LlamaCppRuntime", "LlamaCppProvider", "LlamaCppAdapter"]
+

@@ -10,8 +10,8 @@ class OllamaRuntime(ModelRuntime):
     Production-grade Ollama runtime adapter.
     Communicates directly with Ollama daemon via async HTTP streaming.
     """
-    def __init__(self, base_url: str, default_model: str = "llama3"):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_url: str = "http://localhost:11434", default_model: str = "llama3"):
+        self.base_url = (base_url or "http://localhost:11434").rstrip('/')
         self.default_model = default_model
         self._cancel = False
 
@@ -131,3 +131,10 @@ class OllamaProvider(ProviderContract):
     def get_runtime(self) -> ModelRuntime:
         default_model = self.config.get("model", "llama3")
         return OllamaRuntime(self.base_url, default_model=default_model)
+
+
+# Backward compatibility aliases
+OllamaAdapter = OllamaRuntime
+
+__all__ = ["OllamaRuntime", "OllamaProvider", "OllamaAdapter"]
+

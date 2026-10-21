@@ -261,3 +261,24 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             yield f"Error: Failed to parse LLM response as JSON. {e}\nResponse was:\n{llm_text}\n"
         except Exception as e:
             yield f"Error during execution: {e}\n"
+
+    def write_code(self, task_description: str, files: Optional[List[str]] = None) -> str:
+        """Convenience method to run coding agent synchronously on a task."""
+        from lmms.backend.tasks.core_tasks.tasks.task import Task
+        from lmms.backend.agents.core_agents.agents.context import ExecutionContext as EC
+        ec = EC(workspace_id="default", task=Task(id="task-1", title="Coding Task", description=task_description), files=files or [])
+        return self.execute_sync(ec)
+
+    def generate_patch(self, original: str, modified: str, filepath: str = "file.py") -> str:
+        """Generates unified diff patch between original and modified code."""
+        orig_lines = original.splitlines(keepends=True)
+        mod_lines = modified.splitlines(keepends=True)
+        diff = difflib.unified_diff(orig_lines, mod_lines, fromfile=f"a/{filepath}", tofile=f"b/{filepath}")
+        return "".join(diff)
+
+    def execute_tool_step(self, tool_name: str, kwargs: Dict[str, Any]) -> Any:
+        """Executes a single tool step using the default executor."""
+        from lmms.backend.tools.core import default_executor
+        return default_executor.execute(tool_name, kwargs)
+
+

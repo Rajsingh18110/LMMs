@@ -499,6 +499,158 @@ class CapabilityManager:
 
 
 
+def robust_parse_tool_call(raw_tc: str) -> dict:
+    """Robust dual parser that handles native tool_calls, OpenAI schemas, unescaped code literals, and truncation."""
+    import re
+    import json
+
+    if not raw_tc:
+        return {}
+
+    raw_tc = raw_tc.strip()
+    # Strip <tool_call> tags if present
+    if "<tool_call>" in raw_tc:
+        tc_m = re.search(r'<tool_call>\s*(.*?)\s*(?:</tool_call>|$)', raw_tc, re.DOTALL)
+        if tc_m:
+            raw_tc = tc_m.group(1).strip()
+    if raw_tc.startswith("```json"):
+        raw_tc = raw_tc[7:].strip()
+    elif raw_tc.startswith("```"):
+        raw_tc = raw_tc[3:].strip()
+    if raw_tc.endswith("```"):
+        raw_tc = raw_tc[:-3].strip()
+
+    def normalize_payload(data: dict) -> dict:
+        if not isinstance(data, dict):
+            return {}
+        # Format A: {"tool": "name", "kwargs": {...}}
+        if "tool" in data:
+            return {
+                "tool": data["tool"],
+                "kwargs": data.get("kwargs", {}) if isinstance(data.get("kwargs"), dict) else {}
+            }
+        # Format B: {"name": "...", "arguments": {...}} (OpenAI Function Calling)
+        if "name" in data and ("arguments" in data or "parameters" in data):
+            args = data.get("arguments", data.get("parameters", {}))
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args, strict=False)
+                except Exception:
+                    args = {"raw_arguments": args}
+            return {
+                "tool": data["name"],
+                "kwargs": args if isinstance(args, dict) else {}
+            }
+        # Format C: {"function": {"name": "...", "arguments": {...}}}
+        if "function" in data and isinstance(data["function"], dict):
+            fn = data["function"]
+            args = fn.get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args, strict=False)
+                except Exception:
+                    pass
+            return {
+                "tool": fn.get("name", ""),
+                "kwargs": args if isinstance(args, dict) else {}
+            }
+        # Format D: Direct function name as top-level key: {"files.read": {"path": "..."}}
+        for k, v in data.items():
+            if isinstance(v, dict) and any(sep in k for sep in [".", "_"]):
+                return {"tool": k, "kwargs": v}
+        return data
+
+    # 1. Try standard JSON (strict=False permits literal newlines/tabs inside strings)
+    try:
+        parsed = json.loads(raw_tc, strict=False)
+        norm = normalize_payload(parsed)
+        if norm.get("tool"):
+            return norm
+    except Exception:
+        pass
+
+    # 2. Try ast.literal_eval with JS booleans converted
+    try:
+        import ast
+        s = re.sub(r'\btrue\b', 'True', raw_tc)
+        s = re.sub(r'\bfalse\b', 'False', s)
+        s = re.sub(r'\bnull\b', 'None', s)
+        parsed = ast.literal_eval(s)
+        norm = normalize_payload(parsed)
+        if norm.get("tool"):
+            return norm
+    except Exception:
+        pass
+
+    # 3. Regex extraction fallback for large code blocks with internal quotes/truncation
+    tool_match = re.search(r'"(?:tool|name)"\s*:\s*"([^"]+)"', raw_tc)
+    if tool_match:
+        t_name = tool_match.group(1).strip()
+        kwargs = {}
+        if t_name in ("files.write", "file.write", "write_file", "write_to_file"):
+            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+            if path_m:
+                kwargs["path"] = path_m.group(1)
+            content_m = re.search(r'"content"\s*:\s*"(.*)', raw_tc, re.DOTALL)
+            if content_m:
+                c_str = content_m.group(1)
+                c_str = re.sub(r'"?\s*\}?\s*\}?\s*$', '', c_str)
+                try:
+                    c_str = c_str.encode('utf-8').decode('unicode_escape')
+                except Exception:
+                    pass
+                kwargs["content"] = c_str
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("replace_in_file", "files.replace_in_file"):
+            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+            if path_m: kwargs["path"] = path_m.group(1)
+            old_m = re.search(r'"(?:old_code|search)"\s*:\s*"(.*?)"(?:\s*,\s*"(?:new_code|replace)")', raw_tc, re.DOTALL)
+            if old_m: kwargs["old_code"] = old_m.group(1)
+            new_m = re.search(r'"(?:new_code|replace)"\s*:\s*"(.*?)"(?:\s*\}|$)', raw_tc, re.DOTALL)
+            if new_m: kwargs["new_code"] = new_m.group(1)
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("read_file_lines", "files.read_file_lines"):
+            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+            if path_m: kwargs["path"] = path_m.group(1)
+            s_m = re.search(r'"start_line"\s*:\s*(\d+)', raw_tc)
+            if s_m: kwargs["start_line"] = int(s_m.group(1))
+            e_m = re.search(r'"end_line"\s*:\s*(\d+)', raw_tc)
+            if e_m: kwargs["end_line"] = int(e_m.group(1))
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("view_file_outline", "files.view_file_outline", "files.read", "file.read", "view_file"):
+            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
+            if path_m: kwargs["path"] = path_m.group(1)
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("terminal.run", "run_command"):
+            cmd_m = re.search(r'"command"\s*:\s*"([^"]+)"', raw_tc)
+            if cmd_m:
+                kwargs["command"] = cmd_m.group(1)
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("web_search", "vector_db.search", "rag.search"):
+            q_m = re.search(r'"query"\s*:\s*"([^"]+)"', raw_tc)
+            if q_m:
+                kwargs["query"] = q_m.group(1)
+            return {"tool": t_name, "kwargs": kwargs}
+        elif t_name in ("browser.open_url", "browser.crawl_url"):
+            u_m = re.search(r'"url"\s*:\s*"([^"]+)"', raw_tc)
+            if u_m:
+                kwargs["url"] = u_m.group(1)
+            return {"tool": t_name, "kwargs": kwargs}
+
+    # 4. Repair trailing syntax
+    trimmed = raw_tc.rstrip()
+    for fix in ['"}}', '"}', '}}', '}']:
+        try:
+            parsed = json.loads(trimmed + fix, strict=False)
+            norm = normalize_payload(parsed)
+            if norm.get("tool"):
+                return norm
+        except Exception:
+            pass
+
+    raise ValueError("Could not parse tool call as valid JSON.")
+
+
 def run_cli():
     import nest_asyncio
     nest_asyncio.apply()

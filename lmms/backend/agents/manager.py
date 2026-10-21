@@ -19,10 +19,10 @@ from lmms.backend.agents.specialized import (
 )
 
 class AgentManager:
-    def __init__(self, backend_manager, db):
+    def __init__(self, backend_manager=None, db=None):
         self.backend = backend_manager
         self.db = db
-        self.events = backend_manager.events
+        self.events = getattr(backend_manager, "events", None)
         
         # Initialize Registry
         manifests_path = os.path.expanduser("~/.lmms/manifests")
@@ -37,18 +37,28 @@ class AgentManager:
         # Initialize Validator
         self.validator = PermissionValidator()
         
-        # Map class types
+        # Map class types (both PascalCase and lowercase keys)
         self.agent_classes = {
             "CodingAgent": CodingAgent,
+            "coding": CodingAgent,
             "ResearchAgent": ResearchAgent,
+            "research": ResearchAgent,
             "ChatAgent": ChatAgent,
+            "chat": ChatAgent,
             "GitAgent": GitAgent,
+            "git": GitAgent,
             "OrchestratorAgent": OrchestratorAgent,
+            "orchestrator": OrchestratorAgent,
             "ReviewerAgent": ReviewerAgent,
+            "reviewer": ReviewerAgent,
             "TaskAgent": TaskAgent,
+            "task": TaskAgent,
             "TesterAgent": TesterAgent,
+            "tester": TesterAgent,
             "UniversalAgent": UniversalAgent,
+            "universal": UniversalAgent,
             "VisionAgent": VisionAgent,
+            "vision": VisionAgent,
         }
 
     def execute_agent(self, intent_name: str, workspace_id: str, task_id: str):
