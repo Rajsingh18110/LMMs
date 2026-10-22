@@ -31,6 +31,8 @@ class NodeType(str, Enum):
     CONDITION = "condition"
     VALIDATION = "validation"
     PYTHON = "python"
+    WEBHOOK = "webhook"
+    REPO = "repo"
 
 
 class NodeStatus(str, Enum):

@@ -300,3 +300,156 @@ class TestPanelCLI:
         handle_panel_cli([], str(tmp_path))
         handle_panel_cli(["list"], str(tmp_path))
         handle_panel_cli(["runs"], str(tmp_path))
+
+
+class TestWebhooksAndRepoNodes:
+    """Verifies webhook HTTP dispatch and repo-aware git operations."""
+
+    def test_webhook_node_dispatch(self, tmp_path):
+        import http.server
+        import threading
+
+        # Spin up quick ephemeral HTTP server
+        received = []
+        class TestHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length).decode("utf-8")
+                received.append(body)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status": "received", "code": 1}')
+
+            def log_message(self, format, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), TestHandler)
+        port = server.server_port
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        async def _test():
+            wf = Workflow(id="webhook_test", name="Webhook Test")
+            wf.add_node(
+                WorkflowNode(
+                    id="wh1",
+                    name="Dispatch Webhook",
+                    node_type=NodeType.WEBHOOK,
+                    config={
+                        "url": f"http://127.0.0.1:{port}/notify",
+                        "method": "POST",
+                        "payload": {"event": "build_success", "metric": 99},
+                    },
+                )
+            )
+            engine = WorkflowEngine(workspace_root=str(tmp_path))
+            run = await engine.execute(wf)
+            assert run.status == NodeStatus.SUCCESS
+            assert run.results["wh1"].status == NodeStatus.SUCCESS
+            out = run.results["wh1"].output
+            assert out["status_code"] == 200
+            assert out["body"]["status"] == "received"
+            assert len(received) == 1
+            assert "build_success" in received[0]
+
+        asyncio.run(_test())
+        server.server_close()
+
+    def test_repo_node_operations(self, tmp_path):
+        import subprocess
+        # Initialize a real git repository inside tmp_path
+        subprocess.run(["git", "init"], cwd=str(tmp_path), check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=str(tmp_path), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(tmp_path), check=True)
+
+        # Create an initial file and initial commit
+        (tmp_path / "README.md").write_text("# Test Repo\n")
+        subprocess.run(["git", "add", "."], cwd=str(tmp_path), check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(tmp_path), check=True)
+
+        async def _test():
+            wf = Workflow(id="repo_test", name="Repo Test")
+            # Step 1: Check initial status
+            wf.add_node(
+                WorkflowNode(
+                    id="git_status",
+                    name="Check Git Status",
+                    node_type=NodeType.REPO,
+                    config={"action": "status", "workspace": str(tmp_path)},
+                )
+            )
+            # Create a file for the workflow node to commit
+            (tmp_path / "hello.txt").write_text("hello repo automation")
+            wf.add_node(
+                WorkflowNode(
+                    id="git_commit",
+                    name="Commit Changes",
+                    node_type=NodeType.REPO,
+                    config={"action": "commit", "message": "workflow repo commit", "workspace": str(tmp_path)},
+                )
+            )
+            wf.add_node(
+                WorkflowNode(
+                    id="git_branch",
+                    name="Branch Check",
+                    node_type=NodeType.REPO,
+                    config={"action": "branch", "workspace": str(tmp_path)},
+                )
+            )
+            wf.add_edge("git_status", "git_commit")
+            wf.add_edge("git_commit", "git_branch")
+
+            engine = WorkflowEngine(workspace_root=str(tmp_path))
+            run = await engine.execute(wf)
+            assert run.status == NodeStatus.SUCCESS
+            assert "hello.txt" in run.results["git_status"].output["modified_files"]
+            assert run.results["git_commit"].output["committed"] is True
+            assert run.results["git_branch"].output["branch"] in ["main", "master"]
+
+        asyncio.run(_test())
+
+
+class TestProviderRegistryPresets:
+    """Verifies the 50+ provider preset catalog and connection testing."""
+
+    def test_presets_catalog_coverage(self):
+        from lmms.backend.core.registry.provider_presets import PROVIDER_PRESETS
+        from lmms.backend.core.registry.provider_registry import ProviderRegistry
+
+        presets = ProviderRegistry.list_presets()
+        assert len(presets) >= 50
+        # Check essential local providers
+        assert "ollama" in presets
+        assert "vllm" in presets
+        assert "lm_studio" in presets
+        assert "llama_cpp" in presets
+        assert "jan" in presets
+        assert "localai" in presets
+
+        # Check essential cloud providers
+        assert "openai" in presets
+        assert "anthropic" in presets
+        assert "gemini" in presets
+        assert "groq" in presets
+        assert "deepseek" in presets
+        assert "mistral" in presets
+        assert "openrouter" in presets
+        assert "together" in presets
+        assert "fireworks" in presets
+
+    def test_preset_instantiation(self, tmp_path, monkeypatch):
+        from lmms.backend.core.registry.provider_registry import ProviderRegistry
+        test_file = str(tmp_path / "providers.json")
+        monkeypatch.setattr("lmms.backend.core.registry.provider_registry.PROVIDERS_FILE", test_file)
+
+        pid = ProviderRegistry.create_from_preset("groq", api_key="gsk-testkey123")
+        assert pid is not None
+
+        prov = ProviderRegistry.get(pid)
+        assert prov is not None
+        assert prov["name"] == "Groq Fast LPU"
+        assert prov["type"] == "openai_compatible"
+        assert prov["api_key"] == "gsk-testkey123"
+        assert "https://api.groq.com/openai/v1" in prov["base_url"]
+        assert "llama-3.3-70b-versatile" in prov["default_model"]

@@ -22,6 +22,7 @@ import json
 import os
 import re
 import time
+import urllib.request
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import networkx as nx
@@ -150,6 +151,10 @@ class WorkflowEngine:
                 output = await self._run_validation_node(cfg)
             elif node.node_type == NodeType.PYTHON:
                 output = self._run_python_node(cfg, context, results, prev_node)
+            elif node.node_type == NodeType.WEBHOOK:
+                output = await self._run_webhook_node(cfg)
+            elif node.node_type == NodeType.REPO:
+                output = await self._run_repo_node(cfg)
             elif node.node_type == NodeType.GATE:
                 # Gate nodes require explicit human approval
                 status = NodeStatus.WAITING_APPROVAL
@@ -205,34 +210,174 @@ class WorkflowEngine:
         return {"stdout": res.stdout, "stderr": res.stderr, "exit_code": res.exit_code, "output": res.output}
 
     async def _run_model_node(self, cfg: Dict[str, Any]) -> str:
-        """Executes LLM reasoning step via local engine or configured provider."""
+        """Executes LLM reasoning step via custom LMMs engine or configured model provider."""
         prompt = cfg.get("prompt", "")
-        model = cfg.get("model", "qwen2.5-1.5b-instruct-q5_k_m")
+        model = cfg.get("model")
         sys_prompt = cfg.get("system_prompt", "You are an automated workflow execution node. Answer concisely.")
+        timeout = float(cfg.get("timeout", 90.0))
 
+        # Check if a specific provider is requested
+        provider_id = cfg.get("provider_id") or cfg.get("provider")
+        provider = None
+        if provider_id:
+            try:
+                from lmms.backend.core.registry.provider_registry import ProviderRegistry
+                provider = ProviderRegistry.get(provider_id)
+                if not provider:
+                    for p in ProviderRegistry.list_safe():
+                        if p.get("name", "").lower() == str(provider_id).lower():
+                            provider = ProviderRegistry.get(p.get("id"))
+                            break
+            except Exception:
+                provider = None
+
+        if provider:
+            base_url = provider.get("base_url", "").rstrip("/")
+            api_key = provider.get("api_key", "")
+            target_model = model or provider.get("default_model") or "gpt-4o"
+            endpoint = f"{base_url}/chat/completions" if not base_url.endswith("/chat/completions") else base_url
+            headers = dict(provider.get("headers", {}))
+            headers["Content-Type"] = "application/json"
+            if api_key and "Authorization" not in headers:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            payload = {
+                "model": target_model,
+                "messages": [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+            }
+            try:
+                req_data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(endpoint, data=req_data, headers=headers, method="POST")
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    resp_body = resp.read().decode("utf-8", errors="ignore")
+                    data = json.loads(resp_body)
+                    if "choices" in data and len(data["choices"]) > 0:
+                        return data["choices"][0].get("message", {}).get("content", "").strip()
+                    elif "message" in data:
+                        return data.get("message", {}).get("content", "").strip()
+                    return resp_body
+            except Exception as e:
+                if cfg.get("fallback_response"):
+                    return str(cfg.get("fallback_response"))
+                raise RuntimeError(f"Provider '{provider.get('name')}' model call failed: {e}")
+
+        # Default: Use local custom LMMs engine on http://localhost:11435
+        target_model = model or "qwen2.5-1.5b-instruct-q5_k_m"
         try:
-            import requests
-            resp = requests.post(
+            payload = {
+                "model_name": target_model,
+                "messages": [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+            }
+            req_data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
                 "http://localhost:11435/v1/chat/completions",
-                json={
-                    "model_name": model,
-                    "messages": [
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                },
-                timeout=cfg.get("timeout", 90.0),
+                data=req_data,
+                headers={"Content-Type": "application/json"},
+                method="POST"
             )
-            if resp.status_code == 200:
-                data = resp.json()
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                resp_body = resp.read().decode("utf-8", errors="ignore")
+                data = json.loads(resp_body)
                 return data.get("message", {}).get("content", "").strip()
-            else:
-                raise RuntimeError(f"Model call failed: HTTP {resp.status_code}: {resp.text}")
         except Exception as e:
             if cfg.get("fallback_response"):
                 return str(cfg.get("fallback_response"))
             raise RuntimeError(f"Model node error ({e}). Ensure local LLM engine is running on http://localhost:11435")
+
+    async def _run_webhook_node(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """Dispatches an HTTP webhook or external API request."""
+        url = cfg.get("url")
+        if not url:
+            raise ValueError("WebhookNode requires 'url' parameter")
+
+        method = cfg.get("method", "POST").upper()
+        headers = dict(cfg.get("headers", {}))
+        payload = cfg.get("payload") if "payload" in cfg else cfg.get("data")
+        timeout = float(cfg.get("timeout", 30.0))
+
+        data_bytes = None
+        if payload is not None:
+            if isinstance(payload, (dict, list)):
+                data_bytes = json.dumps(payload).encode("utf-8")
+                if "Content-Type" not in headers:
+                    headers["Content-Type"] = "application/json"
+            elif isinstance(payload, str):
+                data_bytes = payload.encode("utf-8")
+
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status_code = resp.status
+                resp_text = resp.read().decode("utf-8", errors="ignore")
+                try:
+                    parsed_json = json.loads(resp_text)
+                    return {"status_code": status_code, "body": parsed_json, "success": 200 <= status_code < 300}
+                except Exception:
+                    return {"status_code": status_code, "body": resp_text, "success": 200 <= status_code < 300}
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            if cfg.get("ignore_errors", False):
+                return {"status_code": he.code, "error": f"HTTP {he.code}: {he.reason}", "body": err_body, "success": False}
+            raise RuntimeError(f"Webhook HTTP {he.code}: {err_body or he.reason}")
+        except Exception as e:
+            if cfg.get("ignore_errors", False):
+                return {"status_code": 0, "error": str(e), "success": False}
+            raise RuntimeError(f"Webhook request failed: {e}")
+
+    async def _run_repo_node(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """Performs repo-aware operations (status, diff, branch, commit, log)."""
+        import subprocess
+        action = cfg.get("action", "status").lower()
+        ws = cfg.get("workspace", self.workspace_dir)
+        if not ws or not os.path.exists(ws):
+            raise ValueError(f"Workspace directory does not exist: {ws}")
+
+        if action == "status":
+            proc = subprocess.run(["git", "status", "--porcelain"], cwd=ws, capture_output=True, text=True, check=False)
+            lines = proc.stdout.strip().splitlines() if proc.stdout.strip() else []
+            return {
+                "clean": len(lines) == 0,
+                "modified_files": [l[3:] for l in lines],
+                "raw": proc.stdout.strip(),
+            }
+        elif action == "diff":
+            target_path = cfg.get("path")
+            cmd = ["git", "diff"]
+            if target_path:
+                cmd.append(target_path)
+            proc = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, check=False)
+            return {"diff": proc.stdout, "has_diff": bool(proc.stdout.strip())}
+        elif action == "branch":
+            proc = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ws, capture_output=True, text=True, check=False)
+            current_branch = proc.stdout.strip()
+            new_branch = cfg.get("create_branch")
+            if new_branch:
+                sub = subprocess.run(["git", "checkout", "-b", new_branch], cwd=ws, capture_output=True, text=True, check=False)
+                if sub.returncode != 0:
+                    raise RuntimeError(f"Failed to create branch {new_branch}: {sub.stderr}")
+                return {"branch": new_branch, "created": True}
+            return {"branch": current_branch}
+        elif action == "commit":
+            msg = cfg.get("message", "automated workflow commit")
+            add_proc = subprocess.run(["git", "add", "."], cwd=ws, capture_output=True, text=True, check=False)
+            if add_proc.returncode != 0:
+                raise RuntimeError(f"Git add failed: {add_proc.stderr}")
+            comm_proc = subprocess.run(["git", "commit", "-m", msg], cwd=ws, capture_output=True, text=True, check=False)
+            return {"committed": comm_proc.returncode == 0, "output": comm_proc.stdout.strip() or comm_proc.stderr.strip()}
+        elif action == "log":
+            n = int(cfg.get("count", 5))
+            proc = subprocess.run(["git", "log", f"-n{n}", "--oneline"], cwd=ws, capture_output=True, text=True, check=False)
+            return {"log": proc.stdout.strip().splitlines()}
+        else:
+            raise ValueError(f"Unknown repo action: {action}")
 
     async def _run_mcp_node(self, cfg: Dict[str, Any]) -> Any:
         """Invokes dynamic MCP tool on configured server."""

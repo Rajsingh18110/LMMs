@@ -561,6 +561,10 @@ class PanelWindow(QMainWindow):
         self.mcp_tab = self._build_mcp_servers_tab()
         self.main_tabs.addTab(self.mcp_tab, "🛠 MCP Servers & Tools")
 
+        # Tab 4: Webhooks & Custom Connectors
+        self.webhooks_tab = self._build_webhooks_tab()
+        self.main_tabs.addTab(self.webhooks_tab, "🪝 Webhooks & Connectors")
+
         main_layout.addWidget(self.main_tabs)
 
     def _build_model_providers_tab(self) -> QWidget:
@@ -570,8 +574,28 @@ class PanelWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        header = QLabel("<h3>Model Provider Registry (Local & Cloud)</h3><span style='color:#a0aec0;'>Register local LLM endpoints (Ollama, llama.cpp, vLLM) or Cloud API providers (OpenAI, Anthropic, Gemini).</span>")
+        header = QLabel("<h3>Model Provider Registry (Local & Cloud)</h3><span style='color:#a0aec0;'>Register local LLM endpoints (Ollama, llama.cpp, vLLM) or Cloud API providers (OpenAI, Anthropic, Gemini, Groq, DeepSeek).</span>")
         layout.addWidget(header)
+
+        # Quick Presets Selector row
+        preset_frame = QFrame()
+        preset_frame.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; border-radius: 8px; padding: 8px;")
+        p_row = QHBoxLayout(preset_frame)
+        p_row.setSpacing(10)
+        p_row.addWidget(QLabel("<b>⚡ Quick Preset (50+ Supported):</b>"))
+
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItem("-- Select a Provider Preset to Auto-Fill --", "")
+        try:
+            from lmms.backend.core.registry.provider_presets import PROVIDER_PRESETS
+            for pid, pdata in sorted(PROVIDER_PRESETS.items(), key=lambda x: x[1].get("name", "")):
+                cat = pdata.get("category", "cloud").upper()
+                self.preset_combo.addItem(f"[{cat}] {pdata.get('name')}", pid)
+        except Exception:
+            pass
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
+        p_row.addWidget(self.preset_combo)
+        layout.addWidget(preset_frame)
 
         # Form row for adding new provider
         form_frame = QFrame()
@@ -605,14 +629,183 @@ class PanelWindow(QMainWindow):
 
         # Table of registered providers
         self.providers_table = QTableWidget()
-        self.providers_table.setColumnCount(5)
-        self.providers_table.setHorizontalHeaderLabels(["Name", "Type", "Base URL", "Status", "Actions"])
+        self.providers_table.setColumnCount(6)
+        self.providers_table.setHorizontalHeaderLabels(["Name", "Type", "Base URL", "Default Model", "Status", "Actions"])
         self.providers_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.providers_table.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; gridline-color: #2d3748; color: #f7fafc;")
         layout.addWidget(self.providers_table)
 
         self._refresh_providers_table()
         return tab
+
+    def _on_preset_selected(self, index: int):
+        pid = self.preset_combo.currentData()
+        if not pid:
+            return
+        try:
+            from lmms.backend.core.registry.provider_presets import PROVIDER_PRESETS
+            preset = PROVIDER_PRESETS.get(pid)
+            if preset:
+                self.p_name_edit.setText(preset.get("name", ""))
+                self.p_url_edit.setText(preset.get("base_url", ""))
+                idx = self.p_type_combo.findText(preset.get("type", "openai_compatible"))
+                if idx >= 0:
+                    self.p_type_combo.setCurrentIndex(idx)
+                else:
+                    self.p_type_combo.setCurrentIndex(0)
+                if preset.get("api_key_required"):
+                    self.p_key_edit.setPlaceholderText("API Key (Required for this provider)")
+                else:
+                    self.p_key_edit.setPlaceholderText("API Key (Optional / None required)")
+        except Exception:
+            pass
+
+    def _build_webhooks_tab(self) -> QWidget:
+        """Constructs management interface for incoming trigger endpoints and outgoing webhook dispatches."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
+        header = QLabel(
+            "<h3>Webhooks & Custom Connectors Hub</h3>"
+            "<span style='color:#a0aec0;'>Test outgoing automation webhooks and configure incoming event triggers.</span>"
+        )
+        layout.addWidget(header)
+
+        # Incoming webhook trigger status frame
+        incoming_frame = QFrame()
+        incoming_frame.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; border-radius: 8px; padding: 12px;")
+        inc_layout = QVBoxLayout(incoming_frame)
+        inc_title = QLabel("<b>📥 Incoming Webhook Listener Status</b>")
+        inc_info = QLabel(
+            "<span style='color:#68d391;'>● Listener Active:</span> "
+            "<code>http://127.0.0.1:11435/v1/webhook/{workflow_id}</code><br/>"
+            "<span style='color:#a0aec0;'>Send an HTTP POST with JSON payload to instantly trigger and pass variables into DAG workflows.</span>"
+        )
+        inc_layout.addWidget(inc_title)
+        inc_layout.addWidget(inc_info)
+        layout.addWidget(incoming_frame)
+
+        # Outgoing Webhook Sandbox / Dispatcher
+        out_frame = QFrame()
+        out_frame.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; border-radius: 8px; padding: 12px;")
+        out_layout = QVBoxLayout(out_frame)
+        out_title = QLabel("<b>📤 Outgoing Webhook Sandbox Dispatcher</b>")
+        out_layout.addWidget(out_title)
+
+        form_grid = QHBoxLayout()
+        form_grid.setSpacing(8)
+
+        self.wh_method_combo = QComboBox()
+        self.wh_method_combo.addItems(["POST", "GET", "PUT", "PATCH", "DELETE"])
+        form_grid.addWidget(self.wh_method_combo)
+
+        self.wh_url_edit = QLineEdit()
+        self.wh_url_edit.setPlaceholderText("Webhook Endpoint URL (e.g. http://localhost:8080/events or external API)")
+        form_grid.addWidget(self.wh_url_edit)
+
+        btn_dispatch = QPushButton("🚀 Dispatch Webhook")
+        btn_dispatch.setStyleSheet("background-color: #10b981; color: white; font-weight: bold; border-radius: 6px; padding: 6px 16px;")
+        btn_dispatch.clicked.connect(self._on_dispatch_webhook_clicked)
+        form_grid.addWidget(btn_dispatch)
+        out_layout.addLayout(form_grid)
+
+        # Payload and Headers inputs
+        split_inputs = QHBoxLayout()
+        split_inputs.setSpacing(8)
+
+        headers_v = QVBoxLayout()
+        headers_v.addWidget(QLabel("<span style='color:#cbd5e0; font-size:11px;'>Custom Headers (JSON or Key: Value)</span>"))
+        self.wh_headers_edit = QPlainTextEdit()
+        self.wh_headers_edit.setPlaceholderText('{\n  "Authorization": "Bearer secret_token",\n  "Content-Type": "application/json"\n}')
+        self.wh_headers_edit.setMaximumHeight(85)
+        headers_v.addWidget(self.wh_headers_edit)
+        split_inputs.addLayout(headers_v)
+
+        payload_v = QVBoxLayout()
+        payload_v.addWidget(QLabel("<span style='color:#cbd5e0; font-size:11px;'>Request Payload (JSON)</span>"))
+        self.wh_payload_edit = QPlainTextEdit()
+        self.wh_payload_edit.setPlaceholderText('{\n  "event": "build_finished",\n  "status": "success",\n  "repo": "LMMs"\n}')
+        self.wh_payload_edit.setMaximumHeight(85)
+        payload_v.addWidget(self.wh_payload_edit)
+        split_inputs.addLayout(payload_v)
+        out_layout.addLayout(split_inputs)
+
+        # Response preview box
+        out_layout.addWidget(QLabel("<b>Response Preview:</b>"))
+        self.wh_response_view = QPlainTextEdit()
+        self.wh_response_view.setReadOnly(True)
+        self.wh_response_view.setPlaceholderText("HTTP status and response body will appear here...")
+        self.wh_response_view.setMaximumHeight(120)
+        out_layout.addWidget(self.wh_response_view)
+
+        layout.addWidget(out_frame)
+        return tab
+
+    def _on_dispatch_webhook_clicked(self):
+        url = self.wh_url_edit.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Invalid URL", "Please provide a valid Webhook Endpoint URL.")
+            return
+
+        method = self.wh_method_combo.currentText()
+        headers_raw = self.wh_headers_edit.toPlainText().strip()
+        payload_raw = self.wh_payload_edit.toPlainText().strip()
+
+        headers = {}
+        if headers_raw:
+            try:
+                headers = json.loads(headers_raw)
+            except Exception:
+                for line in headers_raw.splitlines():
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        headers[k.strip()] = v.strip()
+
+        payload = None
+        if payload_raw:
+            try:
+                payload = json.loads(payload_raw)
+            except Exception:
+                payload = payload_raw
+
+        self.wh_response_view.setPlainText(f"⏳ Dispatching {method} request to {url}...")
+
+        def _worker():
+            t0 = time.time()
+            try:
+                import urllib.request
+                data_bytes = None
+                if payload is not None:
+                    if isinstance(payload, (dict, list)):
+                        data_bytes = json.dumps(payload).encode("utf-8")
+                        if "Content-Type" not in headers:
+                            headers["Content-Type"] = "application/json"
+                    elif isinstance(payload, str):
+                        data_bytes = payload.encode("utf-8")
+
+                req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
+                with urllib.request.urlopen(req, timeout=15.0) as resp:
+                    dur = round((time.time() - t0) * 1000, 1)
+                    code = resp.status
+                    body = resp.read().decode("utf-8", errors="ignore")
+                    msg = f"HTTP {code} OK ({dur} ms)\n\n"
+                    try:
+                        msg += json.dumps(json.loads(body), indent=2)
+                    except Exception:
+                        msg += body
+                    QTimer.singleShot(0, lambda: self.wh_response_view.setPlainText(msg))
+            except urllib.error.HTTPError as he:
+                dur = round((time.time() - t0) * 1000, 1)
+                err_b = he.read().decode("utf-8", errors="ignore")
+                msg = f"HTTP Error {he.code}: {he.reason} ({dur} ms)\n\n{err_b}"
+                QTimer.singleShot(0, lambda: self.wh_response_view.setPlainText(msg))
+            except Exception as e:
+                msg = f"Request Failed: {e}"
+                QTimer.singleShot(0, lambda: self.wh_response_view.setPlainText(msg))
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _build_mcp_servers_tab(self) -> QWidget:
         """Constructs configuration tab for dynamic MCP servers and tool discovery."""
@@ -672,14 +865,43 @@ class PanelWindow(QMainWindow):
             self.providers_table.setItem(r, 0, QTableWidgetItem(p.get("name", "Unnamed")))
             self.providers_table.setItem(r, 1, QTableWidgetItem(p.get("type", "openai_compatible")))
             self.providers_table.setItem(r, 2, QTableWidgetItem(p.get("base_url", "")))
+            self.providers_table.setItem(r, 3, QTableWidgetItem(p.get("default_model", "-") or "-"))
             st = "Active" if p.get("enabled", True) else "Disabled"
-            self.providers_table.setItem(r, 3, QTableWidgetItem(st))
+            self.providers_table.setItem(r, 4, QTableWidgetItem(st))
+
+            actions_container = QWidget()
+            act_l = QHBoxLayout(actions_container)
+            act_l.setContentsMargins(2, 2, 2, 2)
+            act_l.setSpacing(6)
+
+            pid = p.get("id")
+
+            btn_test = QPushButton("⚡ Ping")
+            btn_test.setStyleSheet("background-color: #059669; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;")
+            btn_test.clicked.connect(lambda _, x=pid, row_idx=r: self._on_test_provider(x, row_idx))
+            act_l.addWidget(btn_test)
 
             btn_del = QPushButton("Delete")
-            btn_del.setStyleSheet("background-color: #dc2626; color: white; padding: 3px 8px; border-radius: 4px;")
-            pid = p.get("id")
+            btn_del.setStyleSheet("background-color: #dc2626; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;")
             btn_del.clicked.connect(lambda _, x=pid: self._on_delete_provider(x))
-            self.providers_table.setCellWidget(r, 4, btn_del)
+            act_l.addWidget(btn_del)
+
+            self.providers_table.setCellWidget(r, 5, actions_container)
+
+    def _on_test_provider(self, p_id: str, row: int):
+        self.providers_table.setItem(row, 4, QTableWidgetItem("Pinging..."))
+        def _worker():
+            try:
+                from lmms.backend.core.registry.provider_registry import ProviderRegistry
+                res = ProviderRegistry.test_connection(p_id)
+                if res.get("success"):
+                    st = f"✓ Online ({res.get('status_code', 200)})"
+                else:
+                    st = f"✗ {res.get('error', 'Error')[:25]}"
+            except Exception as e:
+                st = f"✗ {str(e)[:25]}"
+            QTimer.singleShot(0, lambda: self.providers_table.setItem(row, 4, QTableWidgetItem(st)))
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _on_add_provider_clicked(self):
         name = self.p_name_edit.text().strip()
