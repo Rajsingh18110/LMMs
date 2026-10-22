@@ -1856,6 +1856,16 @@ def run_cli():
                 current_chat_id = str(uuid.uuid4())
                 current_chat_name = "Untitled"
                 chat_history.clear()
+                try:
+                    from lmms_sessions.cli import default_session_cli
+                    new_s = default_session_cli.store.create_session(
+                        session_id=current_chat_id,
+                        title=current_chat_name,
+                        metadata={"workspace": current_workspace}
+                    )
+                    default_session_cli.active_session_id = new_s.session_id
+                except Exception:
+                    pass
                 console.print("[bold green]Started a new chat session![/bold green]")
                 
             elif base_cmd == "/chat":
@@ -2065,14 +2075,33 @@ def run_cli():
             elif base_cmd == "/fork":
                 from lmms_sessions.cli import default_session_cli
                 default_session_cli.handle_fork(parts[1:])
+                if default_session_cli.active_session_id and default_session_cli.active_session_id != current_chat_id:
+                    current_chat_id = default_session_cli.active_session_id
+                    chat_history = [
+                        {"role": m["role"], "content": m["content"]}
+                        for m in default_session_cli.get_live_messages()
+                    ]
+                    sess_obj = default_session_cli.store.get_session(current_chat_id)
+                    current_chat_name = sess_obj.title if sess_obj else "Forked Session"
 
             elif base_cmd == "/resume":
                 from lmms_sessions.cli import default_session_cli
                 default_session_cli.handle_resume(parts[1:])
+                if default_session_cli.active_session_id and default_session_cli.active_session_id != current_chat_id:
+                    current_chat_id = default_session_cli.active_session_id
+                    chat_history = [
+                        {"role": m["role"], "content": m["content"]}
+                        for m in default_session_cli.get_live_messages()
+                    ]
+                    sess_obj = default_session_cli.store.get_session(current_chat_id)
+                    current_chat_name = sess_obj.title if sess_obj else "Resumed Session"
 
             elif base_cmd == "/rename":
                 from lmms_sessions.cli import default_session_cli
                 default_session_cli.handle_rename(parts[1:])
+                sess_obj = default_session_cli.store.get_session(default_session_cli.active_session_id)
+                if sess_obj:
+                    current_chat_name = sess_obj.title
 
             elif base_cmd == "/compact":
                 from lmms_sessions.cli import default_session_cli
