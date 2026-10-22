@@ -6,6 +6,7 @@ Prevents untrusted user inputs or tool observations from escalating to privilege
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
+from lmms.backend.context.workspace_rules import load_workspace_rules
 from .registry import DynamicToolDefinition, ToolRegistry
 from .router import IntentResult, IntentType
 from .selector import SelectionResult
@@ -121,7 +122,7 @@ class ContextBuilder:
             if tool.id != "discover_additional_tool" and tool.enabled:
                 # Keep discovery useful without letting the catalog consume the
                 # context budget on ordinary turns. Full detail is loaded lazily.
-                summary = " ".join(tool.metadata.summary.split())[:64].rstrip()
+                summary = " ".join(tool.metadata.summary.split())[:32].rstrip()
                 lines.append(f"- {tool.id}: {summary}")
 
         lines.append(
@@ -172,8 +173,16 @@ class ContextBuilder:
         # 2. Workspace boundary context & AST RepoMap
         workspace_context = ""
         repo_map_context = ""
+        workspace_rules_context = ""
         if current_workspace and current_workspace != "None":
             workspace_context = f"Active Workspace Directory: {current_workspace}"
+            try:
+                workspace_rules = load_workspace_rules(current_workspace, current_dir=current_workspace)
+                if workspace_rules:
+                    workspace_rules_context = "## Workspace Rules\n" + workspace_rules
+            except Exception:
+                workspace_rules_context = ""
+
             if intent_result.intent == IntentType.CODING or active_mode == "/code":
                 try:
                     from lmms.backend.core.intelligence.file_indexer import FileIndexer
@@ -208,6 +217,8 @@ class ContextBuilder:
         system_blocks = [base_prompt]
         if workspace_context:
             system_blocks.append(workspace_context)
+        if workspace_rules_context:
+            system_blocks.append(workspace_rules_context)
         if repo_map_context:
             system_blocks.append(repo_map_context)
         if task_instructions:
