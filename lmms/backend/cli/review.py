@@ -46,3 +46,33 @@ def git_review(workspace: str) -> dict:
         "check": check.stdout.strip() or "No whitespace errors.",
         "clean": check.returncode == 0,
     }
+
+
+def verify_workspace_state(workspace: str) -> dict:
+    """Verifies workspace syntax and git diff status before emitting final completion."""
+    review = git_review(workspace)
+    syntax_errors = []
+    if workspace and workspace != "None" and os.path.isdir(workspace):
+        try:
+            diff_files = subprocess.run(
+                ["git", "diff", "--name-only"], cwd=workspace, capture_output=True, text=True, check=False
+            ).stdout.splitlines()
+            for rel in diff_files:
+                if rel.endswith(".py"):
+                    full_p = os.path.join(workspace, rel)
+                    if os.path.isfile(full_p):
+                        try:
+                            import ast
+                            with open(full_p, "r", encoding="utf-8") as f:
+                                ast.parse(f.read(), filename=rel)
+                        except SyntaxError as syn_err:
+                            syntax_errors.append(f"{rel}:{syn_err.lineno}: {syn_err.msg}")
+        except Exception:
+            pass
+
+    return {
+        "git": review,
+        "syntax_clean": len(syntax_errors) == 0,
+        "syntax_errors": syntax_errors,
+        "passed": review.get("clean", True) and len(syntax_errors) == 0,
+    }

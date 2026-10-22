@@ -3003,6 +3003,17 @@ def run_cli():
                 except Exception:
                     pass
                     
+                # Review and validation gate before final completion
+                try:
+                    if intent_res.intent == IntentType.CODING and current_workspace and current_workspace != "None":
+                        from lmms.backend.cli.review import verify_workspace_state
+                        ws_verification = verify_workspace_state(current_workspace)
+                        if not ws_verification.get("passed", True):
+                            err_msg = "\n".join(ws_verification.get("syntax_errors", []))
+                            console.print(f"[yellow]⚠️ Post-execution review warning: Syntax or git validation issues detected:\n{err_msg}[/yellow]")
+                except Exception:
+                    pass
+
                 # Telemetry trace recording
                 try:
                     import uuid
