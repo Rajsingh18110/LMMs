@@ -162,9 +162,10 @@ Context files:
             
         prompt += """
 Please plan the implementation, modify the files, and run a validation command.
-Return ONLY valid JSON in this exact format, with no markdown code blocks around it. Use exact text from the file for 'search'.
+Return ONLY valid JSON in this exact format. You can specify code changes using a Codex-grade "patch" string (using '*** Begin Patch' / '*** Update File: <path>' or Unified Diff) OR search/replace "edits":
 {
     "thoughts": "explain your plan",
+    "patch": "*** Begin Patch\\n*** Update File: file/path.py\\n@@ ...\\n-exact old lines\\n+new lines\\n*** End Patch",
     "edits": [
         {
             "path": "file/path.py",
@@ -172,7 +173,7 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             "replace": "new lines to insert"
         }
     ],
-    "command": "python3 -m py_compile file/path.py"
+    "command": "python3 -m unittest"
 }
 """
 
@@ -188,18 +189,36 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
             resp.raise_for_status()
             llm_text = resp.json().get("message", {}).get("content", "")
             
+            response_json = {}
             json_str = llm_text
             match = re.search(r'```(?:json)?\s*(.*?)\s*```', llm_text, re.DOTALL | re.IGNORECASE)
             if match:
                 json_str = match.group(1).strip()
             else:
-                json_str = re.sub(r'<think>.*?</think>', '', llm_text, flags=re.DOTALL).strip()
-                start = json_str.find('{')
-                end = json_str.rfind('}')
+                cleaned = re.sub(r'<think>.*?</think>', '', llm_text, flags=re.DOTALL).strip()
+                start = cleaned.find('{')
+                end = cleaned.rfind('}')
                 if start != -1 and end != -1:
-                    json_str = json_str[start:end+1]
+                    json_str = cleaned[start:end+1]
+                else:
+                    json_str = cleaned
                 
-            response_json = json.loads(json_str)
+            try:
+                response_json = json.loads(json_str)
+            except Exception:
+                # Fallback: model emitted raw patch or text without JSON wrapper
+                raw_patch_match = re.search(r'(\*\*\* Begin Patch.*?\*\*\* End Patch)', llm_text, re.DOTALL)
+                if not raw_patch_match:
+                    raw_patch_match = re.search(r'(diff --git.*)', llm_text, re.DOTALL)
+                if raw_patch_match:
+                    response_json = {
+                        "thoughts": "Extracted raw patch from model completion",
+                        "patch": raw_patch_match.group(1).strip(),
+                        "command": "python3 -m unittest"
+                    }
+                else:
+                    response_json = {"thoughts": llm_text, "edits": []}
+
             yield f"Thoughts: {response_json.get('thoughts', 'No thoughts provided')}\n"
             
             edits = response_json.get("edits", [])
@@ -213,9 +232,15 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                 from lmms.backend.tools.patch import default_patch_engine
                 patch_res = default_patch_engine.apply_patch(patch_str)
                 if patch_res.get("success"):
-                    yield f"Patch applied successfully to: {', '.join(patch_res.get('files_modified', []))}\n"
+                    files_mod = patch_res.get('files_modified', [])
+                    yield f"Patch applied successfully to: {', '.join(files_mod)}\n"
                     if patch_res.get("diff"):
                         yield f"\n[Patch Diff]:\n{patch_res['diff']}\n"
+                    try:
+                        from lmms.backend.events.bus import get_event_bus
+                        get_event_bus().publish("patch_applied", {"files": files_mod, "diff": patch_res.get("diff", "")})
+                    except Exception:
+                        pass
                 else:
                     yield f"Patch application failed: {patch_res.get('error')}\n"
                     edits_successful = False
@@ -260,10 +285,20 @@ Return ONLY valid JSON in this exact format, with no markdown code blocks around
                     out = t_res.get("output", "")
                     exit_code = t_res.get("exit_code", 0)
                     yield f"  Sandbox Terminal Output (exit code {exit_code}):\n{out}\n"
+                    try:
+                        from lmms.backend.events.bus import get_event_bus
+                        get_event_bus().publish("test_result", {"command": cmd, "exit_code": exit_code, "output": out})
+                    except Exception:
+                        pass
                     if exit_code != 0:
                         validation_successful = False
                 except Exception as e:
                     yield f"  Sandbox Terminal Error: {e}\n"
+                    try:
+                        from lmms.backend.events.bus import get_event_bus
+                        get_event_bus().publish("error", {"command": cmd, "error": str(e)})
+                    except Exception:
+                        pass
                     validation_successful = False
                     
             if edits_successful and validation_successful:
