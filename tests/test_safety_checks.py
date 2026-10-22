@@ -45,6 +45,49 @@ class TestSafetyChecks(unittest.TestCase):
                     self.assertEqual(exit_code, -1)
                     self.assertTrue(output.startswith("REFUSED"), f"Output was: {output}")
 
+    def test_4b_worktree_auto_merge_blocks_on_dirty_user_files(self):
+        """When user working directory has uncommitted edits on files touched by worktree, auto-merge must refuse."""
+        import subprocess
+        # Initialize real git repo
+        subprocess.run(["git", "init"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "tester@lmms.local"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        target_file = os.path.join(self.tmp_dir, "app.py")
+        with open(target_file, "w") as f:
+            f.write("def run():\n    return 'initial'\n")
+        subprocess.run(["git", "add", "app.py"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        # 1. Enable worktree isolation
+        session = default_worktree_manager.enable(self.tmp_dir)
+        self.assertIsNotNone(session)
+
+        # 2. Worktree makes changes to app.py
+        wt_file = os.path.join(session.worktree_dir, "app.py")
+        with open(wt_file, "w") as f:
+            f.write("def run():\n    return 'worktree_agent_version'\n")
+
+        # 3. User simultaneously makes UNCOMMITTED changes to app.py in their own working directory
+        with open(target_file, "w") as f:
+            f.write("def run():\n    return 'USER_IMPORTANT_UNCOMMITTED_WORK'\n")
+
+        # 4. Attempt to apply worktree
+        applied, msg = default_worktree_manager.apply(self.tmp_dir)
+
+        # 5. Must FAIL merge to protect user's uncommitted work
+        self.assertFalse(applied, "Worktree apply should have refused due to dirty working tree conflicts")
+        self.assertIn("CONFLICT_PREVENTED", msg)
+        self.assertIn("app.py", msg)
+
+        # 6. Verify user's uncommitted work was NOT destroyed
+        with open(target_file, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "def run():\n    return 'USER_IMPORTANT_UNCOMMITTED_WORK'\n")
+
+        # Cleanup worktree
+        default_worktree_manager.discard(self.tmp_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

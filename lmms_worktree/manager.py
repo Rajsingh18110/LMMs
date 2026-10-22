@@ -250,6 +250,25 @@ class WorktreeManager:
             if code != 0:
                 return False, f"Failed to auto-commit changes in worktree: {err}"
 
+        # 1.5. Conflict Prevention Guard: Verify user working tree doesn't have conflicting uncommitted changes
+        _, wt_diff_files, _ = self._run_git(["diff", "--name-only", f"{session.base_commit}..HEAD"], cwd=session.worktree_dir)
+        touched_files = set(f.strip() for f in wt_diff_files.splitlines() if f.strip())
+        _, user_dirty_status, _ = self._run_git(["status", "--porcelain"], cwd=abs_workspace)
+        user_dirty_files = set()
+        for line in user_dirty_status.splitlines():
+            if len(line) > 2:
+                user_dirty_files.add(line[2:].strip())
+
+        conflicting = touched_files.intersection(user_dirty_files)
+        if conflicting:
+            conflicts_list = ", ".join(sorted(conflicting))
+            return False, (
+                f"CONFLICT_PREVENTED: Cannot merge worktree into working directory. "
+                f"You have uncommitted changes on {len(conflicting)} file(s): {conflicts_list}. "
+                f"Please commit, stash, or revert your changes before applying the worktree.\n"
+                f"The worktree remains safely preserved at: {session.worktree_dir}"
+            )
+
         # 2. Create checkpoint in user workspace before merge
         try:
             from lmms.backend.cli.checkpoints import create_checkpoint
