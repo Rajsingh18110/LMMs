@@ -132,6 +132,24 @@ class TestEventBusAndP0Wiring(unittest.TestCase):
         self.assertIn("Always write typed code", rules)
         self.assertIn("Use FastAPI and pydantic models", rules)
 
+    def test_06_graph_execution_and_rule_injection(self):
+        router = RuleRouter()
+        graph = router.route("fix the failing unit tests and verify")
+
+        self.assertIn("CodingAgent", [s.agent_name for s in graph.steps])
+        self.assertIn("TesterAgent", [s.agent_name for s in graph.steps])
+
+        # workspace rules should be loaded and injected in a usable system prompt fragment
+        with open(os.path.join(self.tmp_dir, "AGENTS.md"), "w", encoding="utf-8") as f:
+            f.write("# Workspace rules\nDo not ignore verification.\n")
+
+        rule_text = load_workspace_rules(self.tmp_dir)
+        self.assertNotEqual(rule_text, "")
+        self.assertIn("Do not ignore verification", rule_text)
+
+        exec_out = router.execute_graph(graph)
+        self.assertTrue(any("OrchestratorAgent" in line or "CodingAgent" in line or "TesterAgent" in line for line in exec_out))
+
 
 if __name__ == "__main__":
     unittest.main()
