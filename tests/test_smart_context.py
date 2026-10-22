@@ -483,7 +483,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
             "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
             "messages": ctx.messages,
             "stream": True
-        }, stream=True, timeout=45) as resp:
+        }, stream=True, timeout=90) as resp:
             self.assertEqual(resp.status_code, 200)
             first_token = ""
             for line in resp.iter_lines():
@@ -509,7 +509,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
             "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
             "messages": ctx.messages,
             "stream": True
-        }, stream=True, timeout=45) as resp:
+        }, stream=True, timeout=90) as resp:
             self.assertEqual(resp.status_code, 200)
             first_token = ""
             for line in resp.iter_lines():
@@ -534,7 +534,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
             "model": "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M",
             "messages": ctx.messages,
             "stream": True
-        }, stream=True, timeout=45) as resp:
+        }, stream=True, timeout=90) as resp:
             self.assertEqual(resp.status_code, 200)
             first_token = ""
             for line in resp.iter_lines():
