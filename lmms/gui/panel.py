@@ -26,6 +26,9 @@ from lmms.gui.qt import (
     QLabel,
     QPushButton,
     QCheckBox,
+    QComboBox,
+    QFrame,
+    QMessageBox,
     QSplitter,
     QTextEdit,
     QPlainTextEdit,
@@ -55,6 +58,7 @@ class NodeState:
     RUNNING = "running"
     SUCCESS = "success"
     FAIL = "fail"
+    WAITING_APPROVAL = "waiting_approval"
 
 
 NODE_COLORS = {
@@ -62,6 +66,7 @@ NODE_COLORS = {
     NodeState.RUNNING: {"bg": QColor(26, 44, 76), "border": QColor(66, 153, 225), "text": QColor(235, 248, 255), "glow": QColor(66, 153, 225, 180)},
     NodeState.SUCCESS: {"bg": QColor(24, 52, 38), "border": QColor(72, 187, 120), "text": QColor(240, 255, 244), "glow": QColor(72, 187, 120, 160)},
     NodeState.FAIL: {"bg": QColor(60, 25, 25), "border": QColor(245, 101, 101), "text": QColor(255, 245, 245), "glow": QColor(245, 101, 101, 180)},
+    NodeState.WAITING_APPROVAL: {"bg": QColor(65, 50, 15), "border": QColor(234, 179, 8), "text": QColor(254, 240, 138), "glow": QColor(234, 179, 8, 180)},
 }
 
 
@@ -375,8 +380,47 @@ class PanelWindow(QMainWindow):
 
         # Top Toolbar
         top_bar = QHBoxLayout()
-        title_lbl = QLabel("⚡ <b>Execution Canvas</b> <span style='color:#718096;'>| Real-time Agent Pipeline</span>")
+        title_lbl = QLabel("⚡ <b>Automation Canvas</b> <span style='color:#718096;'>| n8n-Style Native Studio</span>")
         top_bar.addWidget(title_lbl)
+        top_bar.addSpacing(16)
+
+        # Workflow selector
+        self.wf_combo = QComboBox()
+        self.wf_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #1f2937;
+                border: 1px solid #374151;
+                border-radius: 6px;
+                padding: 4px 10px;
+                color: #f3f4f6;
+                font-size: 12px;
+                min-width: 180px;
+            }
+        """)
+        self._populate_workflows_combo()
+        top_bar.addWidget(self.wf_combo)
+
+        # Run Workflow button
+        self.btn_run_wf = QPushButton("▶ Run Workflow")
+        self.btn_run_wf.setStyleSheet("""
+            QPushButton {
+                background-color: #059669;
+                color: white;
+                border: 1px solid #10b981;
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #10b981; }
+            QPushButton:disabled { background-color: #374151; color: #9ca3af; }
+        """)
+        self.btn_run_wf.clicked.connect(self._run_selected_workflow)
+        top_bar.addWidget(self.btn_run_wf)
+
+        self.btn_export = QPushButton("Export JSON")
+        self.btn_export.clicked.connect(self._export_selected_workflow)
+        top_bar.addWidget(self.btn_export)
+
         top_bar.addStretch()
 
         self.status_badge = QLabel("<span style='color:#48bb78;'>● Connected (Live Bus)</span>")
@@ -394,6 +438,56 @@ class PanelWindow(QMainWindow):
         top_bar.addWidget(clear_btn)
 
         main_layout.addLayout(top_bar)
+
+        # Approval Gate Action Banner (Hidden until gate paused)
+        self.approval_banner = QFrame()
+        self.approval_banner.setStyleSheet("""
+            QFrame {
+                background-color: #2b2311;
+                border: 1px solid #eab308;
+                border-radius: 8px;
+                padding: 6px 12px;
+            }
+        """)
+        ab_layout = QHBoxLayout(self.approval_banner)
+        ab_layout.setContentsMargins(8, 4, 8, 4)
+        ab_layout.setSpacing(12)
+
+        self.lbl_approval_msg = QLabel("<b>⚠️ APPROVAL REQUIRED:</b> Workflow paused at human review gate.")
+        self.lbl_approval_msg.setStyleSheet("color: #fef08a; font-size: 12px;")
+        ab_layout.addWidget(self.lbl_approval_msg)
+        ab_layout.addStretch()
+
+        self.btn_approve = QPushButton("✔ Approve & Resume")
+        self.btn_approve.setStyleSheet("""
+            QPushButton {
+                background-color: #16a34a;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 5px 14px;
+            }
+            QPushButton:hover { background-color: #22c55e; }
+        """)
+        self.btn_approve.clicked.connect(self._on_approve_gate)
+        ab_layout.addWidget(self.btn_approve)
+
+        self.btn_deny = QPushButton("✖ Reject & Abort")
+        self.btn_deny.setStyleSheet("""
+            QPushButton {
+                background-color: #dc2626;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 5px 14px;
+            }
+            QPushButton:hover { background-color: #ef4444; }
+        """)
+        self.btn_deny.clicked.connect(self._on_deny_gate)
+        ab_layout.addWidget(self.btn_deny)
+
+        self.approval_banner.setVisible(False)
+        main_layout.addWidget(self.approval_banner)
 
         # Splitter: Canvas View on Left, Details Inspector on Right
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -422,6 +516,181 @@ class PanelWindow(QMainWindow):
         splitter.setStretchFactor(1, 3)
 
         main_layout.addWidget(splitter)
+
+    def _populate_workflows_combo(self):
+        self.wf_combo.clear()
+        try:
+            from lmms_workflow.store import default_workflow_store
+            wfs = default_workflow_store.list_workflows(include_builtins=True)
+            for w in wfs:
+                self.wf_combo.addItem(f"{w['name']} ({w['id']})", w['id'])
+        except Exception:
+            self.wf_combo.addItem("Default Agent Pipeline", "default")
+
+    def _render_workflow_dag(self, wf: Any):
+        """Dynamically renders workflow nodes and curved connections on the scene."""
+        self.scene.clear()
+        self.nodes.clear()
+        self.connections.clear()
+
+        import networkx as nx
+        from lmms_workflow.engine import WorkflowEngine
+        engine = WorkflowEngine()
+        dag = engine.build_dag(wf)
+        generations = list(nx.topological_generations(dag))
+
+        x_start = 40
+        y_start = 140
+        col_width = 240
+        row_height = 110
+
+        for col_idx, gen in enumerate(generations):
+            x = x_start + (col_idx * col_width)
+            total_in_col = len(gen)
+            for row_idx, nid in enumerate(gen):
+                y = y_start + (row_idx * row_height) - ((total_in_col - 1) * 35)
+                wnode = wf.nodes[nid]
+                title = wnode.name[:20]
+                sub = f"Type: {wnode.node_type.value}"
+                cnode = CanvasNode(nid, title, sub, x, y, self)
+                self.scene.addItem(cnode)
+                self.nodes[nid] = cnode
+
+        for edge in wf.edges:
+            if edge.source_node in self.nodes and edge.target_node in self.nodes:
+                conn = FlowConnection(self.nodes[edge.source_node], self.nodes[edge.target_node])
+                self.scene.addItem(conn)
+                self.connections.append(conn)
+
+    def _run_selected_workflow(self):
+        wid = self.wf_combo.currentData()
+        if not wid:
+            return
+        from lmms_workflow.store import default_workflow_store
+        from lmms_workflow.engine import WorkflowEngine
+        from lmms_workflow.models import NodeStatus
+
+        wf = default_workflow_store.get_workflow(wid)
+        if not wf:
+            self.inspector_summary.setText(f"<span style='color:#f56565;'>Workflow '{wid}' not found.</span>")
+            return
+
+        self._render_workflow_dag(wf)
+        self.btn_run_wf.setEnabled(False)
+        self.btn_run_wf.setText("Running...")
+        self.status_badge.setText("<span style='color:#4299e1;'>● Executing DAG...</span>")
+        self.approval_banner.setVisible(False)
+
+        engine = WorkflowEngine(workspace_root=os.getcwd())
+        self.active_engine = engine
+        self.active_wf = wf
+
+        def _on_engine_event(evt_name, payload):
+            self.event_received.emit({"type": f"engine_{evt_name}", "data": payload})
+
+        engine.add_listener(_on_engine_event)
+
+        def _worker():
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                run = loop.run_until_complete(engine.execute(wf))
+                default_workflow_store.save_run(run)
+                self.active_run = run
+                QTimer.singleShot(0, lambda: self._on_workflow_finished(run))
+            except Exception as e:
+                err_text = str(e)
+                QTimer.singleShot(0, lambda: self._on_workflow_error(err_text))
+            finally:
+                loop.close()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_workflow_finished(self, run: Any):
+        from lmms_workflow.models import NodeStatus
+        self.btn_run_wf.setEnabled(True)
+        self.btn_run_wf.setText("▶ Run Workflow")
+
+        for nid, res in run.results.items():
+            if nid in self.nodes:
+                st = NodeState.SUCCESS if res.status == NodeStatus.SUCCESS else (
+                    NodeState.WAITING_APPROVAL if res.status == NodeStatus.WAITING_APPROVAL else NodeState.FAIL
+                )
+                self.nodes[nid].set_state(st, f"{res.duration_ms:.0f}ms • {res.status.value}", {
+                    "output": res.output,
+                    "error": res.error,
+                    "status": res.status.value,
+                    "duration_ms": res.duration_ms,
+                })
+
+        if run.status == NodeStatus.WAITING_APPROVAL and run.pending_approval:
+            self.status_badge.setText("<span style='color:#ecc94b;'>⏸ Waiting Approval</span>")
+            self.lbl_approval_msg.setText(f"<b>⚠️ APPROVAL REQUIRED:</b> Gate <code>{run.pending_approval}</code> requires operator review.")
+            self.approval_banner.setVisible(True)
+            if run.pending_approval in self.nodes:
+                self.on_node_clicked(self.nodes[run.pending_approval])
+        elif run.status == NodeStatus.SUCCESS:
+            self.status_badge.setText("<span style='color:#48bb78;'>✔ Completed Successfully</span>")
+        else:
+            self.status_badge.setText("<span style='color:#f56565;'>✖ Workflow Failed</span>")
+
+    def _on_workflow_error(self, err_msg: str):
+        self.btn_run_wf.setEnabled(True)
+        self.btn_run_wf.setText("▶ Run Workflow")
+        self.status_badge.setText(f"<span style='color:#f56565;'>✖ Error</span>")
+        self.inspector_summary.setText(f"<span style='color:#f56565;'>Execution error: {err_msg}</span>")
+
+    def _on_approve_gate(self):
+        self.approval_banner.setVisible(False)
+        if not hasattr(self, "active_run") or not self.active_run or not self.active_run.pending_approval:
+            return
+
+        run = self.active_run
+        wf = self.active_wf
+        gate_nid = run.pending_approval
+        engine = self.active_engine
+
+        self.btn_run_wf.setEnabled(False)
+        self.btn_run_wf.setText("Resuming...")
+        self.status_badge.setText("<span style='color:#4299e1;'>● Resuming DAG...</span>")
+
+        def _resume():
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                res_run = loop.run_until_complete(engine.approve_gate(wf, run, gate_nid, approved=True))
+                from lmms_workflow.store import default_workflow_store
+                default_workflow_store.save_run(res_run)
+                self.active_run = res_run
+                QTimer.singleShot(0, lambda: self._on_workflow_finished(res_run))
+            finally:
+                loop.close()
+
+        threading.Thread(target=_resume, daemon=True).start()
+
+    def _on_deny_gate(self):
+        self.approval_banner.setVisible(False)
+        if hasattr(self, "active_run") and self.active_run and self.active_run.pending_approval:
+            gate_nid = self.active_run.pending_approval
+            if gate_nid in self.nodes:
+                self.nodes[gate_nid].set_state(NodeState.FAIL, "Approval denied", {"status": "denied by user"})
+            self.status_badge.setText("<span style='color:#f56565;'>✖ Gate Rejected by User</span>")
+            self.btn_run_wf.setEnabled(True)
+            self.btn_run_wf.setText("▶ Run Workflow")
+
+    def _export_selected_workflow(self):
+        wid = self.wf_combo.currentData()
+        if not wid:
+            return
+        from lmms_workflow.store import default_workflow_store
+        wf = default_workflow_store.get_workflow(wid)
+        if wf:
+            out_file = f"{wid}.json"
+            with open(out_file, "w", encoding="utf-8") as f:
+                f.write(wf.to_json())
+            self.inspector_summary.setText(f"<span style='color:#48bb78;'>✔ Workflow exported to {os.path.abspath(out_file)}</span>")
 
     def _build_workflow_pipeline(self):
         """Construct the 7 primary execution graph nodes with curved connections."""
@@ -545,6 +814,31 @@ class PanelWindow(QMainWindow):
         elif etype == "turn_end":
             summary = event.get("summary", "Complete")
             self.nodes["response"].set_state(NodeState.SUCCESS, summary[:25], event)
+
+        elif etype == "engine_node_start":
+            data = event.get("data", {})
+            nid = data.get("node_id")
+            if nid in self.nodes:
+                self.nodes[nid].set_state(NodeState.RUNNING, "Executing...")
+                for conn in self.connections:
+                    if conn.target.node_id == nid:
+                        conn.is_flowing = True
+                        conn.update()
+
+        elif etype == "engine_node_end":
+            data = event.get("data", {})
+            nid = data.get("node_id")
+            st_val = data.get("status")
+            if nid in self.nodes:
+                st = NodeState.SUCCESS if st_val == "success" else (
+                    NodeState.WAITING_APPROVAL if st_val == "waiting_approval" else NodeState.FAIL
+                )
+                dur = data.get("duration_s", 0) * 1000.0
+                self.nodes[nid].set_state(st, f"{dur:.0f}ms • {st_val}", data)
+                for conn in self.connections:
+                    if conn.source.node_id == nid:
+                        conn.is_flowing = False
+                        conn.update()
 
         elif etype == "error":
             err_msg = event.get("message", "Error")
