@@ -486,6 +486,10 @@ def test_real_model_opt_in_or_skip(temp_runtime_dir):
         model_name = "qwen2.5-1.5b-instruct-q5_k_m"
     elif active:
         model_name = active[0]
+    elif os.path.exists(os.path.expanduser("~/.lmms/models/qwen2.5-1.5b-instruct-q5_k_m.gguf")):
+        model_name = "qwen2.5-1.5b-instruct-q5_k_m"
+    elif os.path.exists(os.path.expanduser("~/.lmms/models/Qwen3-8B-Q4_K_M.gguf")):
+        model_name = "Qwen3-8B-Q4_K_M"
     else:
         model_name = list(models.keys())[0]
 
@@ -509,7 +513,7 @@ def test_real_model_opt_in_or_skip(temp_runtime_dir):
                 "method": "message.send",
                 "params": {
                     "session_id": session_id,
-                    "content": "Count from 1 to 5.",
+                    "content": "Count from 1 to 5: 1, 2, 3, 4, 5.",
                     "model": model_name,
                 },
             }
