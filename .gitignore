@@ -31,6 +31,7 @@ test_*.py
 !tests/test_codex_parity.py
 !tests/test_undo_checkpoint.py
 !tests/test_event_bus.py
+!tests/test_safety_checks.py
 
 patch_*.py
 build_*.py

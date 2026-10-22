@@ -46,7 +46,7 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
         from lmms_sandbox.runner import default_runner
         res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, enforce_sandbox=True)
         if not res.success and res.exit_code == -1:
-            raise PermissionError(res.stderr)
+            raise PermissionError(f"REFUSED: Sandbox isolation unavailable. {res.stderr}")
         return {
             "stdout": res.stdout,
             "stderr": res.stderr,
@@ -55,6 +55,10 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
             "sandboxed": True,
             "backend": res.backend_used,
         }
+
+    # Fail-closed: Direct host execution blocked unless permission level is 'full'
+    if config.get("permission_level") != "full":
+        raise PermissionError("REFUSED: Direct un-sandboxed execution on host is blocked. Set /perm full to override.")
 
     try:
         if isinstance(command, str):
@@ -131,9 +135,17 @@ class TerminalTool:
         if sandboxed or config.get("permission_level") == "sandboxed":
             from lmms_sandbox.runner import default_runner
             res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, require_confirm=False, enforce_sandbox=True)
+            if not res.success and res.exit_code == -1:
+                msg = f"REFUSED: Sandbox containment unavailable. {res.stderr}"
+                return (-1, msg) if return_exit_code else msg
             if return_exit_code:
                 return (res.exit_code, res.output)
             return res.output
+
+        # Fail-closed: refusing un-sandboxed execution unless permission_level is explicitly 'full'
+        if config.get("permission_level") != "full":
+            msg = "REFUSED: Direct un-sandboxed execution on host is blocked. Permission level 'full' is required."
+            return (-1, msg) if return_exit_code else msg
 
         try:
             if isinstance(command, str):
