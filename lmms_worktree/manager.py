@@ -279,7 +279,15 @@ class WorktreeManager:
                 f"The worktree remains safely preserved at: {session.worktree_dir}"
             )
 
-        # 2. Create checkpoint in user workspace before merge
+        # 2. Record pre-state for non-destructive /undo and create checkpoint
+        try:
+            from lmms.backend.context.checkpoint import get_turn_checkpoint_manager
+            turn_mgr = get_turn_checkpoint_manager(abs_workspace)
+            for f in touched_files:
+                turn_mgr.record_pre_state(os.path.join(abs_workspace, f))
+        except Exception:
+            pass
+
         try:
             from lmms.backend.cli.checkpoints import create_checkpoint
             create_checkpoint(abs_workspace, "Before worktree apply")
