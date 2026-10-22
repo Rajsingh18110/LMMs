@@ -5,15 +5,20 @@ lmms_sessions.cli - CLI Command Handler for /sessions, /fork, /resume, /rename, 
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-
 from lmms_sessions.compactor import SessionCompactor
 from lmms_sessions.models import CompactionResult
 from lmms_sessions.store import SessionStore
 
-console = Console()
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    console = Console()
+except ImportError:
+    Console = None  # type: ignore
+    Panel = None  # type: ignore
+    Table = None  # type: ignore
+    console = None  # type: ignore
 
 
 class SessionCLI:
