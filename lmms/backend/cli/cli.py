@@ -15,7 +15,6 @@ def handle_cli(args):
     parser.add_argument("--air", dest="air_scheduler", action="store_true", help="Run multiple models via Air Scheduler")
     
     # Fast aliases for modes
-    parser.add_argument("-g", "--gui-alias", action="store_true", help="Launch GUI mode")
     parser.add_argument("-c", "--cli-alias", action="store_true", help="Launch CLI mode")
     parser.add_argument("-e", "--engine-alias", action="store_true", help="Launch Engine mode")
 
@@ -23,11 +22,9 @@ def handle_cli(args):
 
     # 1. Launcher & Mode Selection
     set_parser = subparsers.add_parser("set", help="Set default launch mode")
-    set_parser.add_argument("--gui", action="store_true")
     set_parser.add_argument("--cli", action="store_true")
     set_parser.add_argument("--engine", action="store_true")
     
-    subparsers.add_parser("gui", help="Directly launch GUI mode")
     subparsers.add_parser("cli", help="Directly launch CLI mode")
     subparsers.add_parser("engine", help="Directly launch Engine-only mode")
 
@@ -80,14 +77,12 @@ def handle_cli(args):
 
     # 4. Install / Uninstall Components
     install_parser = subparsers.add_parser("install", help="Install LMMS components")
-    install_parser.add_argument("--gui", action="store_true")
     install_parser.add_argument("--cli", action="store_true")
     install_parser.add_argument("--engine", action="store_true")
     install_parser.add_argument("--air", action="store_true")
     install_parser.add_argument("--full", action="store_true")
 
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove LMMS components")
-    uninstall_parser.add_argument("--gui", action="store_true")
     uninstall_parser.add_argument("--cli", action="store_true")
     uninstall_parser.add_argument("--engine", action="store_true")
     uninstall_parser.add_argument("--air", action="store_true")
@@ -171,32 +166,18 @@ def handle_cli(args):
     from lmms.backend.logic.manager import backend_manager
 
     # Resolve Default Launch if no args provided
-    if not parsed.command and not (parsed.gui_alias or parsed.cli_alias or parsed.engine_alias):
+    if not parsed.command and not (parsed.cli_alias or parsed.engine_alias):
         mode = backend_manager.config.get("default_mode")
         if not mode:
+            mode = "cli"
+            backend_manager.config.set("default_mode", mode)
             console.print("[cyan]Welcome to LMMS Operating System.[/cyan]")
-            console.print("Select default mode:")
-            console.print("[1] GUI")
-            console.print("[2] CLI")
-            console.print("[3] Engine")
-            try:
-                choice = input("Choice: ").strip()
-                if choice == "1": mode = "gui"
-                elif choice == "2": mode = "cli"
-                elif choice == "3": mode = "engine"
-                else:
-                    console.print("[red]Invalid choice. Defaulting to CLI.[/red]")
-                    mode = "cli"
-                backend_manager.config.set("default_mode", mode)
-                console.print(f"[green]Saved default mode: {mode}[/green]")
-            except KeyboardInterrupt:
-                sys.exit(0)
+            console.print("[green]Default mode set to CLI. Desktop GUI entrypoints are disabled.[/green]")
         
         # Override parsed command to boot the mode
         parsed.command = mode
 
     # Alias overrides
-    if parsed.gui_alias: parsed.command = "gui"
     if parsed.cli_alias: parsed.command = "cli"
     if parsed.engine_alias: parsed.command = "engine"
 
@@ -204,20 +185,11 @@ def handle_cli(args):
     # The CLI strictly parses commands. Backend executes logic.
 
     if parsed.command == "set":
-        if parsed.gui:
-            backend_manager.config.set("default_mode", "gui")
-        elif parsed.cli:
+        if parsed.cli:
             backend_manager.config.set("default_mode", "cli")
         elif parsed.engine:
             backend_manager.config.set("default_mode", "engine")
         console.print(f"[green]Default mode saved: {backend_manager.config.get('default_mode')}[/green]")
-
-    elif parsed.command == "gui":
-        console.print("[green]Launching GUI (Face)...[/green]")
-        import subprocess
-        script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        subprocess.Popen(["python3", "-m", "lmms.gui.app"], cwd=script_dir)
-        sys.exit(0)
 
     elif parsed.command == "cli":
         console.print("[green]Starting CLI Chat Shell (Nervous System)...[/green]")

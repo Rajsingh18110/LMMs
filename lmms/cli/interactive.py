@@ -162,8 +162,6 @@ class InteractiveChat:
                 f"  {COLOR_CYAN}/resume [id]{COLOR_RESET}           Switch or interactively pick session\n"
                 f"  {COLOR_CYAN}/rename <name>{COLOR_RESET}         Rename active session\n"
                 f"  {COLOR_CYAN}/compact [restore]{COLOR_RESET}     Compact context with local model or restore\n"
-                f"  {COLOR_CYAN}/panel{COLOR_RESET}                 Launch Automation Canvas (n8n-style workflow builder)\n"
-                f"  {COLOR_CYAN}/gui [page]{COLOR_RESET}            Launch or focus Desktop Studio (e.g. /gui automation)\n"
                 f"  {COLOR_CYAN}/voice, /mic{COLOR_RESET}           Record query from microphone\n"
                 f"  {COLOR_CYAN}/clear{COLOR_RESET}             Clear conversation history & screen\n"
                 f"  {COLOR_CYAN}/exit{COLOR_RESET}              Exit chat\n\n"
@@ -209,17 +207,6 @@ class InteractiveChat:
             except Exception as e:
                 sys.stdout.write(f"{COLOR_RED}✖ Voice error:{COLOR_RESET} {e}\n\n")
             return False
-
-        elif cmd in ("/gui", "/panel"):
-            sub = parts[1].lower() if len(parts) > 1 else ("automation" if cmd == "/panel" else "automation")
-            sys.stdout.write(f"\n{COLOR_CYAN}lmms{COLOR_RESET} {COLOR_DIM}›{COLOR_RESET} Launching Desktop Studio on page: {sub}...\n")
-            import subprocess
-            try:
-                subprocess.Popen([sys.executable, "launcher.py", "gui", f"--page={sub}"])
-                sys.stdout.write(f"  {COLOR_GREEN}✓ Studio launched/focused on {sub}{COLOR_RESET}\n\n")
-            except Exception as e:
-                sys.stdout.write(f"  {COLOR_RED}✖ Failed to launch Studio: {e}{COLOR_RESET}\n\n")
-            sys.stdout.flush()
 
         elif cmd == "/mcp":
             from lmms_mcp.cli import handle_mcp_cli

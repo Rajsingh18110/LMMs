@@ -36,7 +36,6 @@ CLI_COMMANDS = {
     "/mcp": "Model Context Protocol (MCP) servers, tools, and live dashboard.",
     "/perm": "Set or view permission tiers: sandboxed (bwrap/landlock), low, medium, or full.",
     "/worktree": "Git worktree isolation: /worktree on|off|status|diff|apply|discard.",
-    "/gui": "Launch Desktop Studio (e.g. /gui tools to open MCP & Tools).",
     "/exit": "Exit LMMs CLI."
 }
 

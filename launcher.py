@@ -190,13 +190,34 @@ def run_system_check():
 
 def get_installed_components():
     p = os.path.expanduser("~/.lmms/config/installed_components.json")
+    installed = {}
     if os.path.exists(p):
         try:
             with open(p, "r") as f:
-                return json.load(f)
+                installed = json.load(f)
         except Exception:
-            pass
-    return {}
+            installed = {}
+
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    has_gui = os.path.isdir(os.path.join(repo_root, "lmms", "gui")) or os.path.exists(os.path.join(repo_root, "gui.py"))
+    has_cli = os.path.isdir(os.path.join(repo_root, "lmms", "cli")) or os.path.exists(os.path.join(repo_root, "main.py"))
+    has_engine = (
+        os.path.isdir(os.path.join(repo_root, "lmms", "engine"))
+        or os.path.isdir(os.path.join(repo_root, "lmms", "lmmsengine"))
+        or os.path.isdir(os.path.join(repo_root, "lmms", "api"))
+    )
+
+    if has_gui:
+        installed["gui"] = True
+    if has_cli:
+        installed["cli"] = True
+    if has_engine:
+        installed["engine"] = True
+
+    if has_gui and has_cli and has_engine:
+        installed["all"] = True
+
+    return installed
 
 def main():
     threading.Thread(target=check_for_updates, daemon=True).start()

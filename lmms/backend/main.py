@@ -1170,8 +1170,6 @@ def run_cli():
         "/perm": "Set or view permission tiers: sandboxed, low, medium, or full",
         "/worktree": "Git worktree isolation (/worktree on|off|status|diff|apply|discard)",
         "/mcp": "Model Context Protocol tools, servers, and live dashboard",
-        "/gui": "Launch Desktop Studio (e.g. /gui automation)",
-        "/panel": "AI Workflow Engine dashboard (/panel list|run|runs|view|approve)",
         "/voice": "Full interactive voice mode with wave animation [F4]",
         "/mic": "Record audio directly from microphone",
         "exit": "Quit CLI",
@@ -1465,7 +1463,7 @@ def run_cli():
   [green]lmms pull <model>[/green]          Download a model from HuggingFace
   [green]lmms run <model>[/green]           Start a model directly
   [green]lmms ps, stop, rm[/green]        View active, stop, or delete models
-  [green]lmms set --gui|--cli[/green]     Change default launch mode
+  [green]lmms set --cli[/green]            Change default launch mode
 
 [dim]For full help, type any command followed by --help[/dim]
 """)
@@ -1671,38 +1669,6 @@ def run_cli():
             elif base_cmd == "/mcp":
                 from lmms_mcp.cli import handle_mcp_cli
                 handle_mcp_cli(parts[1:])
-
-            elif base_cmd == "/panel":
-                # If explicit CLI subcommands passed (list, run, runs, approve, deny, export, import)
-                if len(parts) > 1 and parts[1] in ("list", "run", "runs", "view", "approve", "deny", "export", "import"):
-                    from lmms_workflow.cli import handle_panel_cli
-                    handle_panel_cli(parts[1:], current_workspace)
-                else:
-                    # Default: Launch native PyQt workflow canvas window!
-                    has_display = "DISPLAY" in os.environ or "WAYLAND_DISPLAY" in os.environ or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
-                    if has_display:
-                        console.print("[bold cyan]Opening Native PyQt Workflow Canvas Window (/panel)...[/bold cyan]")
-                        try:
-                            p = subprocess.Popen([sys.executable, "-m", "lmms.gui.panel"])
-                            console.print(f"[green]✔ Native PyQt Workflow Window running (PID: {p.pid}). CLI remains fully active.[/green]")
-                        except Exception as pe:
-                            console.print(f"[red]Failed to launch native PyQt window: {pe}[/red]")
-                            from lmms_workflow.cli import handle_panel_cli
-                            handle_panel_cli([], current_workspace)
-                    else:
-                        console.print("[yellow]No graphical display detected ($DISPLAY unset). Falling back to terminal workflow panel:[/yellow]")
-                        from lmms_workflow.cli import handle_panel_cli
-                        handle_panel_cli([], current_workspace)
-
-            elif base_cmd == "/gui":
-                gui_args = parts[1:]
-                target_page = gui_args[0] if gui_args else "automation"
-                console.print(f"[bold cyan]Launching Desktop Studio (GUI)...[/bold cyan] [dim](focusing: {target_page})[/dim]")
-                cmd = [sys.executable, "-m", "lmms.gui.app", f"--page={target_page}"]
-                try:
-                    subprocess.Popen(cmd)
-                except Exception as ge:
-                    console.print(f"[red]Failed to launch GUI:[/red] {ge}")
 
             elif base_cmd == "/report":
                 console.print("[cyan]Triggering AI to generate a security report...[/cyan]")
@@ -2888,7 +2854,7 @@ def run_cli():
                                 if t_name != "terminal.run":
                                     record_tool_evidence(req, perm, ToolResult(str(observation), "", 0))
                                     
-                                # Broadcast tool completion and results to live event bus (/panel)
+                                # Broadcast tool completion and results to live event bus
                                 try:
                                     from lmms.backend.events.bus import get_event_bus
                                     eb = get_event_bus()

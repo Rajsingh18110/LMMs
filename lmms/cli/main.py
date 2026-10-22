@@ -17,7 +17,6 @@ from lmms.cli.commands import (
     cmd_list,
     cmd_stats,
     cmd_server,
-    cmd_gui,
     cmd_tui,
     cmd_engine,
 )
@@ -36,7 +35,6 @@ def print_banner() -> None:
     sys.stdout.write(f"{COLOR_BOLD_WHITE}Commands:{COLOR_RESET}\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms engine [status|mode|run]{COLOR_RESET}  Standalone dual-engine runner & telemetry\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms server [start|stop|status]{COLOR_RESET} Local API engine service manager\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms gui                        {COLOR_RESET} Launch desktop GUI studio\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms tui                        {COLOR_RESET} Launch interactive terminal studio\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms connect [ip:port]{COLOR_RESET}          Connect to LAN engine or auto-discover\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms remote [status|scan|list|use]{COLOR_RESET} Wi-Fi/LAN engine manager\n")
@@ -45,8 +43,8 @@ def print_banner() -> None:
     sys.stdout.write(f"  {COLOR_CYAN}lmms ps{COLOR_RESET}                         Active model memory inspection\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms list{COLOR_RESET}                       Available model catalog\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms stats{COLOR_RESET}                      Hardware & system telemetry\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--gui|--engine]{COLOR_RESET} Package resolver & interactive installer\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms update [--all|--cli|--gui|--engine]{COLOR_RESET}  Component version updater\n\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms install [--all|--cli|--engine]{COLOR_RESET} Package resolver & interactive installer\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms update [--all|--cli|--engine]{COLOR_RESET}  Component version updater\n\n")
     sys.stdout.flush()
 
 
@@ -69,8 +67,6 @@ def main(args: Optional[List[str]] = None) -> None:
         cmd_engine(sub_args)
     elif cmd in ["server", "serve", "daemon"]:
         cmd_server(sub_args)
-    elif cmd in ["gui", "-g", "--gui"]:
-        cmd_gui(sub_args)
     elif cmd in ["tui", "-t", "--tui"]:
         cmd_tui(sub_args)
     elif cmd == "connect":

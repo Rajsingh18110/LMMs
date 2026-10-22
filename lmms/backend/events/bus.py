@@ -1,5 +1,5 @@
 """
-Live Event Bus for LMMs OS and Automation Canvas (/panel).
+Live Event Bus for LMMs OS runtime.
 Broadcasts real-time runtime events (tool_start, tool_end, patch_applied,
 test_result, error, agent_transition) to local subscribers (UNIX socket / QLocalServer)
 and persists them to JSONL for audit and replay.
@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 
 class LMMsEventBus:
-    """Non-blocking, thread-safe Event Bus for CLI, Agents, and /panel GUI."""
+    """Non-blocking, thread-safe Event Bus for CLI and agents."""
 
     def __init__(self, socket_path: Optional[str] = None, jsonl_path: Optional[str] = None):
         self.socket_path = socket_path or os.path.expanduser("~/.lmms/events/lmms_events.sock")
@@ -100,7 +100,7 @@ class LMMsEventBus:
             except Exception:
                 pass
 
-        # 3. Broadcast to socket subscribers (e.g. /panel GUI subprocess)
+        # 3. Broadcast to socket subscribers
         msg_bytes = (json.dumps(payload) + "\n").encode("utf-8")
         dead_clients = []
 

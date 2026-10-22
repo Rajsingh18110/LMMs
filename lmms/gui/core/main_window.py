@@ -91,13 +91,14 @@ class MainWindow(QMainWindow):
         self.heartbeat_timer.timeout.connect(self.ping_engine)
         self.heartbeat_timer.start(5000)
 
-        # Check CLI arguments for target page (e.g. /panel or /gui automation)
+        # Check CLI arguments for target page; the desktop GUI stays available, but the stale automation canvas is disabled.
         for arg in sys.argv[1:]:
             if arg.startswith("--page="):
                 target = arg.split("=", 1)[1]
-                QTimer.singleShot(150, lambda t=target: self.navigate_to_page(t))
-                break
-            elif arg in ("automation", "panel", "tools", "mcp"):
+                if target not in {"automation", "panel", "workflow", "workflows"}:
+                    QTimer.singleShot(150, lambda t=target: self.navigate_to_page(t))
+                    break
+            elif arg in ("tools", "mcp"):
                 QTimer.singleShot(150, lambda t=arg: self.navigate_to_page(t))
                 break
 
@@ -561,7 +562,6 @@ class MainWindow(QMainWindow):
             ("📁", "Explorer", os.path.join(assets_dir, "icon_explorer.svg")),
             ("🔍", "Search", os.path.join(assets_dir, "icon_search.svg")),
             ("🌿", "Source Control", os.path.join(assets_dir, "icon_source_control.svg")),
-            ("⚡", "Automation", None),
             ("🧩", "Extensions", os.path.join(assets_dir, "icon_extensions.svg")),
             ("🛠️", "MCP & Tools", None),
             ("📦", "Models", os.path.join(assets_dir, "icon_models.svg")),
@@ -785,8 +785,6 @@ class MainWindow(QMainWindow):
         # Settings handled specially, or toggle dock
         if name == "Settings":
             btn.clicked.connect(lambda checked: CommandRegistry.execute("settings.providers"))
-        elif name == "Automation":
-            btn.clicked.connect(lambda checked: self.open_automation_studio())
         else:
             if is_extension and name not in self.docks:
                 # Real extension docks should render an actual extension detail page,
@@ -874,23 +872,11 @@ class MainWindow(QMainWindow):
         if name != "Settings":
             self.nav_buttons[name] = btn
 
-    def open_automation_studio(self):
-        """Opens or switches to the n8n-style Automation Studio canvas in the main editor area."""
-        if not hasattr(self, "automation_page") or self.automation_page is None:
-            from lmms.gui.pages.automation_page import AutomationPage
-            self.automation_page = AutomationPage()
-            # Wire Open Chat button to right chat panel
-            self.automation_page.canvas.open_chat_requested.connect(self.toggle_right_panel)
-
-        self.editor_manager.open_custom_tab(self.automation_page, "⚡ Automation", "automation")
-        if "Automation" in self.nav_buttons:
-            self.nav_buttons["Automation"].setChecked(True)
-
     def navigate_to_page(self, page_name: str):
         """Navigates to a specific studio view or page by name (supporting CLI switches)."""
         page = (page_name or "").lower().strip()
         if page in ("automation", "panel", "workflow", "workflows"):
-            self.open_automation_studio()
+            return
         elif page in ("mcp", "tools", "mcp & tools"):
             if "MCP & Tools" in self.docks:
                 self.docks["MCP & Tools"].show()
