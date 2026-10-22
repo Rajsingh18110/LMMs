@@ -21,12 +21,22 @@ def engine_health(engine_url: str, request_get=requests.get) -> tuple[bool, str]
 def collect_status(workspace: str, engine_url: str, request_get=requests.get) -> dict:
     engine_online, engine_detail = engine_health(engine_url, request_get)
     workspace_active = bool(workspace and workspace != "None")
+    worktree_status = "inactive"
+    if workspace_active:
+        try:
+            from lmms_worktree.manager import default_worktree_manager
+            wt_stat = default_worktree_manager.status(workspace)
+            if wt_stat.active:
+                worktree_status = f"active ({wt_stat.ephemeral_branch})"
+        except Exception:
+            pass
     return {
         "engine": "online" if engine_online else "offline",
         "engine_detail": engine_detail,
         "workspace": workspace if workspace_active else "No active workspace",
         "workspace_exists": workspace_active and os.path.isdir(workspace),
         "git_repository": workspace_active and os.path.isdir(os.path.join(workspace, ".git")),
+        "worktree": worktree_status,
         "python": platform.python_version(),
         "platform": platform.platform(),
     }
@@ -48,6 +58,7 @@ def render_status(console, status: dict) -> None:
     table.add_row("Engine detail", status["engine_detail"])
     table.add_row("Workspace", status["workspace"])
     table.add_row("Git workspace", "yes" if status["git_repository"] else "no")
+    table.add_row("Worktree isolation", status.get("worktree", "inactive"))
     table.add_row("Python", status["python"])
     console.print(table)
 
