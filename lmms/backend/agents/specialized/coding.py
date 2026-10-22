@@ -257,33 +257,33 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
             # 2. Apply surgical edits with AST Compile Guard only if patch was not applied
             if not patch_applied_successfully and edits:
                 for edit in edits:
-                path = edit.get("path")
-                search = edit.get("search")
-                replace = edit.get("replace")
-                
-                if path and search is not None and replace is not None:
-                    # Backup original content for safe rollback
-                    if os.path.exists(path) and path not in backups:
-                        try:
-                            with open(path, "r", encoding="utf-8") as bf:
-                                backups[path] = bf.read()
-                        except Exception:
-                            pass
+                    path = edit.get("path")
+                    search = edit.get("search")
+                    replace = edit.get("replace")
+                    
+                    if path and search is not None and replace is not None:
+                        # Backup original content for safe rollback
+                        if os.path.exists(path) and path not in backups:
+                            try:
+                                with open(path, "r", encoding="utf-8") as bf:
+                                    backups[path] = bf.read()
+                            except Exception:
+                                pass
 
-                    from lmms.backend.tools.files import FileTool
-                    ft = FileTool()
-                    res_msg = ft.replace_in_file(path, search, replace)
-                    if "Successfully modified" in res_msg:
-                        yield f"Applied surgical edit to: {path} (AST validated)\n"
-                        # Extract diff lines if returned
-                        diff_part = res_msg.partition("Diff:")[2]
-                        if diff_part:
-                            yield f"[Diff for {path}]:{diff_part}\n"
+                        from lmms.backend.tools.files import FileTool
+                        ft = FileTool()
+                        res_msg = ft.replace_in_file(path, search, replace)
+                        if "Successfully modified" in res_msg:
+                            yield f"Applied surgical edit to: {path} (AST validated)\n"
+                            # Extract diff lines if returned
+                            diff_part = res_msg.partition("Diff:")[2]
+                            if diff_part:
+                                yield f"[Diff for {path}]:{diff_part}\n"
+                        else:
+                            yield f"Edit in {path} failed: {res_msg}\n"
+                            edits_successful = False
                     else:
-                        yield f"Edit in {path} failed: {res_msg}\n"
                         edits_successful = False
-                else:
-                    edits_successful = False
                     
             cmd = response_json.get("command")
             if cmd and cmd.strip() == "python3 -m unittest" and os.path.isdir(os.path.join(effective_ws, "tests")):

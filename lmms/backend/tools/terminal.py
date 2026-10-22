@@ -39,7 +39,19 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
     target_cwd = cwd if cwd else workspace_dir
     
     # Boundary enforcement
-    if not is_within_workspace(target_cwd, workspace_dir):
+    is_valid_cwd = is_within_workspace(target_cwd, workspace_dir)
+    if not is_valid_cwd:
+        try:
+            from lmms_worktree.manager import default_worktree_manager
+            for s in default_worktree_manager.active_sessions.values():
+                if is_within_workspace(target_cwd, s.worktree_dir):
+                    is_valid_cwd = True
+                    workspace_dir = s.worktree_dir
+                    break
+        except Exception:
+            pass
+
+    if not is_valid_cwd:
         raise PermissionError("CWD is outside the allowed workspace boundary.")
 
     if sandboxed or config.get("permission_level") == "sandboxed":
@@ -136,7 +148,19 @@ class TerminalTool:
         workspace_dir = get_workspace_dir()
         target_cwd = cwd if cwd else workspace_dir
 
-        if not is_within_workspace(target_cwd, workspace_dir):
+        is_valid_cwd = is_within_workspace(target_cwd, workspace_dir)
+        if not is_valid_cwd:
+            try:
+                from lmms_worktree.manager import default_worktree_manager
+                for s in default_worktree_manager.active_sessions.values():
+                    if is_within_workspace(target_cwd, s.worktree_dir):
+                        is_valid_cwd = True
+                        workspace_dir = s.worktree_dir
+                        break
+            except Exception:
+                pass
+
+        if not is_valid_cwd:
             msg = "CWD is outside the allowed workspace boundary."
             return (-1, msg) if return_exit_code else msg
 

@@ -125,6 +125,8 @@ class LMMsEventBus:
 
         return payload
 
+    publish = emit
+
     # Specific event helpers
     def tool_start(self, tool_name: str, kwargs: Dict[str, Any], step: int = 1) -> Dict[str, Any]:
         return self.emit("tool_start", {"tool": tool_name, "kwargs": kwargs, "step": step})

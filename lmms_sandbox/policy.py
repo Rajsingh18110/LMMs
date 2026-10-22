@@ -56,6 +56,8 @@ patterns = [
     "^whereis(\\\\s|$)",
     "^git\\\\s+(status|diff|log|branch|show|rev-parse)(\\\\s|$)",
     "^python3?\\\\s+--version$",
+    "^python3?\\\\s+-m\\\\s+unittest(\\\\s|$)",
+    "^pytest(\\\\s|$)",
     "^node\\\\s+--version$",
 ]
 
