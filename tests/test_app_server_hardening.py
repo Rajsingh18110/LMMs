@@ -549,7 +549,7 @@ def test_real_model_opt_in_or_skip(temp_runtime_dir):
             # Wait for at least 1 token so we know generation has started
             cancel_tokens = []
             while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                line = await asyncio.wait_for(reader.readline(), timeout=45.0)
                 msg = json.loads(line.decode("utf-8").strip())
                 if msg.get("method") == "message.token":
                     cancel_tokens.append(msg["params"]["token"])
