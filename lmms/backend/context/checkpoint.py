@@ -160,12 +160,13 @@ class TurnCheckpointManager:
         except Exception:
             pass
 
-    def undo(self, target_file: Optional[str] = None) -> Tuple[bool, str]:
+    def undo(self, target_file: Optional[str] = None, force: bool = False) -> Tuple[bool, str]:
         """Undo changes made during the last turn.
 
         If target_file is provided, only reverts that file from the last turn.
         Otherwise reverts all files modified in the last turn.
         Never touches untouched files, Git index, or uncommitted work.
+        If a file was modified after the turn ended, refuses unless force=True.
         """
         # Ensure any active turn is ended first
         if self.active_turn is not None and self.active_turn.pre_state:
@@ -180,6 +181,30 @@ class TurnCheckpointManager:
         errors = []
 
         files_to_revert = [self._to_rel_path(target_file)] if target_file else list(turn.pre_state.keys())
+
+        # Check for post-turn manual edits by user
+        if not force:
+            dirty_after_turn = []
+            for rel_path in files_to_revert:
+                abs_path = self._to_abs_path(rel_path)
+                post_data = turn.post_state.get(rel_path)
+                if os.path.exists(abs_path) and os.path.isfile(abs_path):
+                    try:
+                        with open(abs_path, "rb") as f:
+                            cur_data = f.read()
+                        if post_data is not None and cur_data != post_data:
+                            dirty_after_turn.append(rel_path)
+                    except Exception:
+                        pass
+            if dirty_after_turn:
+                # Put turn back on undo stack so it is not lost
+                self.undo_stack.append(turn)
+                mod_str = ", ".join(sorted(dirty_after_turn))
+                return False, (
+                    f"WARNING: File(s) [{mod_str}] were modified after agent turn. "
+                    f"Undo cancelled to protect your manual edits. "
+                    f"Use `/undo --force` to override and discard manual edits."
+                )
 
         for rel_path in files_to_revert:
             if rel_path not in turn.pre_state:

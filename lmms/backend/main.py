@@ -2134,13 +2134,15 @@ def run_cli():
                 ws_root = current_workspace if current_workspace != "None" else os.getcwd()
                 turn_mgr = get_turn_checkpoint_manager(ws_root)
                 target_file = None
-                if len(parts) > 2 and parts[1] in ["-f", "--file"]:
-                    target_file = parts[2]
-                elif len(parts) > 1 and not parts[1].startswith("-"):
-                    target_file = parts[1]
+                force_undo = "--force" in parts or "-force" in parts
+                clean_parts = [p for p in parts[1:] if p not in ["--force", "-force"]]
+                if len(clean_parts) > 1 and clean_parts[0] in ["-f", "--file"]:
+                    target_file = clean_parts[1]
+                elif clean_parts and not clean_parts[0].startswith("-"):
+                    target_file = clean_parts[0]
 
                 if base_cmd == "/undo":
-                    ok, msg = turn_mgr.undo(target_file=target_file)
+                    ok, msg = turn_mgr.undo(target_file=target_file, force=force_undo)
                     if ok:
                         console.print(f"[bold green]✓ {msg}[/bold green]")
                     else:

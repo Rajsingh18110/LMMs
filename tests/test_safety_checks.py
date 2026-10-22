@@ -88,6 +88,43 @@ class TestSafetyChecks(unittest.TestCase):
         # Cleanup worktree
         default_worktree_manager.discard(self.tmp_dir)
 
+    def test_4c_undo_warns_and_preserves_post_agent_user_manual_edits(self):
+        """When user manually modifies a file after the agent turn, /undo must warn and NOT overwrite."""
+        svc_file = os.path.join(self.tmp_dir, "service.py")
+        with open(svc_file, "w") as f:
+            f.write("# Initial file version\nPORT = 8000\n")
+
+        mgr = get_turn_checkpoint_manager(self.tmp_dir)
+        mgr.start_turn(turn_id="turn_agent_work", summary="agent edits port")
+
+        # Agent modifies file
+        canonical_file_write(svc_file, "# Agent version\nPORT = 9000\n")
+        mgr.end_turn()
+
+        # User now manually edits the file post-agent turn
+        with open(svc_file, "w") as f:
+            f.write("# USER MANUAL WORK POST-AGENT\nPORT = 7777\n")
+
+        # Attempt to undo without force
+        ok, msg = mgr.undo(force=False)
+
+        # Must refuse / warn to protect manual user edits
+        self.assertFalse(ok, f"Undo should have refused due to post-turn manual edits, but got msg: {msg}")
+        self.assertIn("modified after agent turn", msg)
+        self.assertIn("service.py", msg)
+
+        # Verify file on disk still contains the user's manual edits!
+        with open(svc_file, "r") as f:
+            disk_content = f.read()
+        self.assertEqual(disk_content, "# USER MANUAL WORK POST-AGENT\nPORT = 7777\n")
+
+        # With explicit force=True, it should allow overwriting
+        ok_force, msg_force = mgr.undo(force=True)
+        self.assertTrue(ok_force)
+        with open(svc_file, "r") as f:
+            restored_content = f.read()
+        self.assertEqual(restored_content, "# Initial file version\nPORT = 8000\n")
+
 
 if __name__ == "__main__":
     unittest.main()
