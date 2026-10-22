@@ -183,6 +183,7 @@ class TurnCheckpointManager:
         files_to_revert = [self._to_rel_path(target_file)] if target_file else list(turn.pre_state.keys())
 
         # Check for post-turn manual edits by user
+        backed_up = []
         if not force:
             dirty_after_turn = []
             for rel_path in files_to_revert:
@@ -205,6 +206,22 @@ class TurnCheckpointManager:
                     f"Undo cancelled to protect your manual edits. "
                     f"Use `/undo --force` to override and discard manual edits."
                 )
+        else:
+            # Reversible force: create backup copies of manual edits before overwriting
+            for rel_path in files_to_revert:
+                abs_path = self._to_abs_path(rel_path)
+                post_data = turn.post_state.get(rel_path)
+                if os.path.exists(abs_path) and os.path.isfile(abs_path):
+                    try:
+                        with open(abs_path, "rb") as f:
+                            cur_data = f.read()
+                        if post_data is not None and cur_data != post_data:
+                            bak_path = f"{abs_path}.pre_force.bak"
+                            with open(bak_path, "wb") as bf:
+                                bf.write(cur_data)
+                            backed_up.append(f"{rel_path}.pre_force.bak")
+                    except Exception:
+                        pass
 
         for rel_path in files_to_revert:
             if rel_path not in turn.pre_state:
@@ -232,6 +249,8 @@ class TurnCheckpointManager:
         self.redo_stack.append(turn)
 
         summary_parts = []
+        if backed_up:
+            summary_parts.append(f"backed up manual edits to {', '.join(backed_up)}")
         if restored:
             summary_parts.append(f"restored {', '.join(restored)}")
         if removed:

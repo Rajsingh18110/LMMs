@@ -46,7 +46,11 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
         from lmms_sandbox.runner import default_runner
         res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, enforce_sandbox=True)
         if not res.success and res.exit_code == -1:
-            raise PermissionError(f"REFUSED: Sandbox isolation unavailable. {res.stderr}")
+            raise PermissionError(
+                "REFUSED: Sandbox isolation unavailable (bubblewrap/bwrap not found on system).\n"
+                "Reason: LMMS operates in fail-closed security mode; commands will not execute on host without container isolation.\n"
+                "Remedy: Install bubblewrap (`sudo apt install bubblewrap`) or explicitly allow host execution via `/perm full`."
+            )
         return {
             "stdout": res.stdout,
             "stderr": res.stderr,
@@ -58,7 +62,11 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
 
     # Fail-closed: Direct host execution blocked unless permission level is 'full'
     if config.get("permission_level") != "full":
-        raise PermissionError("REFUSED: Direct un-sandboxed execution on host is blocked. Set /perm full to override.")
+        raise PermissionError(
+            "REFUSED: Direct un-sandboxed execution on host is blocked.\n"
+            "Reason: Unsandboxed execution can mutate host environment.\n"
+            "Remedy: Enable sandboxing or explicitly set permission tier to full via `/perm full`."
+        )
 
     try:
         if isinstance(command, str):
@@ -136,7 +144,11 @@ class TerminalTool:
             from lmms_sandbox.runner import default_runner
             res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, require_confirm=False, enforce_sandbox=True)
             if not res.success and res.exit_code == -1:
-                msg = f"REFUSED: Sandbox containment unavailable. {res.stderr}"
+                msg = (
+                    "REFUSED: Sandbox containment unavailable (bubblewrap/bwrap not found on system).\n"
+                    "Reason: LMMS operates in fail-closed security mode; commands will not execute on host without container isolation.\n"
+                    "Remedy: Install bubblewrap (`sudo apt install bubblewrap`) or explicitly allow host execution via `/perm full`."
+                )
                 return (-1, msg) if return_exit_code else msg
             if return_exit_code:
                 return (res.exit_code, res.output)
@@ -144,7 +156,11 @@ class TerminalTool:
 
         # Fail-closed: refusing un-sandboxed execution unless permission_level is explicitly 'full'
         if config.get("permission_level") != "full":
-            msg = "REFUSED: Direct un-sandboxed execution on host is blocked. Permission level 'full' is required."
+            msg = (
+                "REFUSED: Direct un-sandboxed execution on host is blocked.\n"
+                "Reason: Unsandboxed execution can mutate host environment.\n"
+                "Remedy: Enable sandboxing or explicitly set permission tier to full via `/perm full`."
+            )
             return (-1, msg) if return_exit_code else msg
 
         try:

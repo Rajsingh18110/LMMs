@@ -251,13 +251,19 @@ class WorktreeManager:
                 return False, f"Failed to auto-commit changes in worktree: {err}"
 
         # 1.5. Conflict Prevention Guard: Verify user working tree doesn't have conflicting uncommitted changes
-        _, wt_diff_files, _ = self._run_git(["diff", "--name-only", f"{session.base_commit}..HEAD"], cwd=session.worktree_dir)
-        touched_files = set(f.strip() for f in wt_diff_files.splitlines() if f.strip())
+        _, wt_diff_files, _ = self._run_git(["diff", "--name-only", "--no-renames", f"{session.base_commit}..HEAD"], cwd=session.worktree_dir)
+        touched_files = set(f.strip().strip('"') for f in wt_diff_files.splitlines() if f.strip())
         _, user_dirty_status, _ = self._run_git(["status", "--porcelain"], cwd=abs_workspace)
         user_dirty_files = set()
         for line in user_dirty_status.splitlines():
             if len(line) > 2:
-                user_dirty_files.add(line[2:].strip())
+                path_part = line[2:].strip().strip('"')
+                if " -> " in path_part:
+                    old_p, new_p = path_part.split(" -> ", 1)
+                    user_dirty_files.add(old_p.strip().strip('"'))
+                    user_dirty_files.add(new_p.strip().strip('"'))
+                else:
+                    user_dirty_files.add(path_part)
 
         conflicting = touched_files.intersection(user_dirty_files)
         if conflicting:

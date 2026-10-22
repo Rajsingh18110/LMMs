@@ -36,7 +36,8 @@ class TestSafetyChecks(unittest.TestCase):
                     # 1. canonical_terminal_callback should raise PermissionError
                     with self.assertRaises(PermissionError) as ctx:
                         canonical_terminal_callback("echo host_escape", sandboxed=True)
-                    self.assertIn("NOT isolated", str(ctx.exception))
+                    self.assertIn("REFUSED: Sandbox isolation unavailable", str(ctx.exception))
+                    self.assertIn("/perm full", str(ctx.exception))
 
                     # 2. TerminalTool.run must REFUSE execution and NOT run command on host
                     tool = TerminalTool()
@@ -118,12 +119,119 @@ class TestSafetyChecks(unittest.TestCase):
             disk_content = f.read()
         self.assertEqual(disk_content, "# USER MANUAL WORK POST-AGENT\nPORT = 7777\n")
 
-        # With explicit force=True, it should allow overwriting
+        # With explicit force=True, it should allow overwriting AND create a reversible .pre_force.bak backup
         ok_force, msg_force = mgr.undo(force=True)
         self.assertTrue(ok_force)
         with open(svc_file, "r") as f:
             restored_content = f.read()
         self.assertEqual(restored_content, "# Initial file version\nPORT = 8000\n")
+
+        # Verify .pre_force.bak was created and holds user's manual edits
+        bak_file = svc_file + ".pre_force.bak"
+        self.assertTrue(os.path.exists(bak_file), f"Expected backup file {bak_file} to exist")
+        with open(bak_file, "r") as f:
+            bak_content = f.read()
+        self.assertEqual(bak_content, "# USER MANUAL WORK POST-AGENT\nPORT = 7777\n")
+        self.assertIn("backed up manual edits to service.py.pre_force.bak", msg_force)
+
+    def test_worktree_edge_untracked_file_collision(self):
+        """(a) Agent creates new file and user has untracked file of same name -> REFUSE merge and retain worktree."""
+        import subprocess
+        subprocess.run(["git", "init"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "tester@lmms.local"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        base_file = os.path.join(self.tmp_dir, "base.py")
+        with open(base_file, "w") as f:
+            f.write("# base\n")
+        subprocess.run(["git", "add", "base.py"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "initial"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        session = default_worktree_manager.enable(self.tmp_dir)
+        wt_new_file = os.path.join(session.worktree_dir, "feature.py")
+        with open(wt_new_file, "w") as f:
+            f.write("def feature(): return 'agent'\n")
+
+        # User creates untracked file of same name in main workspace
+        user_file = os.path.join(self.tmp_dir, "feature.py")
+        with open(user_file, "w") as f:
+            f.write("# User untracked local draft\n")
+
+        applied, msg = default_worktree_manager.apply(self.tmp_dir)
+        self.assertFalse(applied, "Merge should be refused due to untracked file collision")
+        self.assertIn("CONFLICT_PREVENTED", msg)
+        self.assertIn("feature.py", msg)
+
+        # Verify worktree is retained and user file is unharmed
+        self.assertIn(os.path.abspath(self.tmp_dir), default_worktree_manager.active_sessions)
+        self.assertTrue(os.path.exists(session.worktree_dir))
+        with open(user_file, "r") as f:
+            self.assertEqual(f.read(), "# User untracked local draft\n")
+
+        default_worktree_manager.discard(self.tmp_dir)
+
+    def test_worktree_edge_rename_collision(self):
+        """(b) Rename collision: agent renames file while user modified original -> REFUSE merge and retain worktree."""
+        import subprocess
+        subprocess.run(["git", "init"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "tester@lmms.local"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        mod_file = os.path.join(self.tmp_dir, "data_model.py")
+        with open(mod_file, "w") as f:
+            f.write("class Model: pass\n")
+        subprocess.run(["git", "add", "data_model.py"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init model"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        session = default_worktree_manager.enable(self.tmp_dir)
+        # Agent renames data_model.py to models.py in worktree
+        subprocess.run(["git", "mv", "data_model.py", "models.py"], cwd=session.worktree_dir, capture_output=True, check=True)
+
+        # User modifies data_model.py in working directory
+        with open(mod_file, "a") as f:
+            f.write("# User added field\n")
+
+        applied, msg = default_worktree_manager.apply(self.tmp_dir)
+        self.assertFalse(applied, "Merge should be refused due to rename collision with dirty working tree")
+        self.assertIn("CONFLICT_PREVENTED", msg)
+        self.assertIn("data_model.py", msg)
+
+        # Verify worktree retained
+        self.assertIn(os.path.abspath(self.tmp_dir), default_worktree_manager.active_sessions)
+        self.assertTrue(os.path.exists(session.worktree_dir))
+        default_worktree_manager.discard(self.tmp_dir)
+
+    def test_worktree_edge_delete_collision(self):
+        """(c) Delete collision: agent modifies file while user deleted it locally -> REFUSE merge and retain worktree."""
+        import subprocess
+        subprocess.run(["git", "init"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "tester@lmms.local"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        cfg_file = os.path.join(self.tmp_dir, "settings.json")
+        with open(cfg_file, "w") as f:
+            f.write('{"env": "dev"}\n')
+        subprocess.run(["git", "add", "settings.json"], cwd=self.tmp_dir, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init settings"], cwd=self.tmp_dir, capture_output=True, check=True)
+
+        session = default_worktree_manager.enable(self.tmp_dir)
+        # Agent edits settings.json in worktree
+        wt_cfg = os.path.join(session.worktree_dir, "settings.json")
+        with open(wt_cfg, "w") as f:
+            f.write('{"env": "agent_prod"}\n')
+
+        # User deletes settings.json in working tree
+        os.remove(cfg_file)
+
+        applied, msg = default_worktree_manager.apply(self.tmp_dir)
+        self.assertFalse(applied, "Merge should be refused when agent-touched file is deleted locally by user")
+        self.assertIn("CONFLICT_PREVENTED", msg)
+        self.assertIn("settings.json", msg)
+
+        # Verify worktree retained
+        self.assertIn(os.path.abspath(self.tmp_dir), default_worktree_manager.active_sessions)
+        self.assertTrue(os.path.exists(session.worktree_dir))
+        default_worktree_manager.discard(self.tmp_dir)
 
 
 if __name__ == "__main__":
