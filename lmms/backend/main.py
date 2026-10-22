@@ -1171,7 +1171,7 @@ def run_cli():
         "/worktree": "Git worktree isolation (/worktree on|off|status|diff|apply|discard)",
         "/mcp": "Model Context Protocol tools, servers, and live dashboard",
         "/gui": "Launch Desktop Studio (e.g. /gui automation)",
-        "/panel": "Launch Automation Canvas (n8n-style workflow builder)",
+        "/panel": "AI Workflow Engine dashboard (/panel list|run|runs|view|approve)",
         "/voice": "Full interactive voice mode with wave animation [F4]",
         "/mic": "Record audio directly from microphone",
         "exit": "Quit CLI",
@@ -1672,21 +1672,13 @@ def run_cli():
                 from lmms_mcp.cli import handle_mcp_cli
                 handle_mcp_cli(parts[1:])
 
-            elif base_cmd in ("/gui", "/panel"):
-                if base_cmd == "/panel":
-                    console.print("[bold cyan]Launching Automation Canvas (/panel)...[/bold cyan]")
-                    if "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-                        console.print("[yellow]No display available ($DISPLAY / $WAYLAND_DISPLAY unset). /panel requires an active graphical session.[/yellow]")
-                        continue
-                    try:
-                        p = subprocess.Popen([sys.executable, "-m", "lmms.gui.panel"])
-                        console.print(f"[green]Automation Canvas running in separate process (PID: {p.pid}). CLI remains fully active.[/green]")
-                    except Exception as pe:
-                        console.print(f"[red]Failed to launch /panel:[/red] {pe}")
-                    continue
+            elif base_cmd == "/panel":
+                from lmms_workflow.cli import handle_panel_cli
+                handle_panel_cli(parts[1:], current_workspace)
 
+            elif base_cmd == "/gui":
                 gui_args = parts[1:]
-                target_page = gui_args[0] if (gui_args and base_cmd != "/panel") else ("automation" if base_cmd == "/panel" else "automation")
+                target_page = gui_args[0] if gui_args else "automation"
                 console.print(f"[bold cyan]Launching Desktop Studio (GUI)...[/bold cyan] [dim](focusing: {target_page})[/dim]")
                 cmd = [sys.executable, "-m", "lmms.gui.app", f"--page={target_page}"]
                 try:
