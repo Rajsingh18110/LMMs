@@ -38,6 +38,7 @@ class RuleRouter:
             graph.add_step(agent_name="OrchestratorAgent", action_type="PlanTask")
             graph.add_step(agent_name="CodingAgent", action_type="WriteCode", dependencies=["OrchestratorAgent"])
             graph.add_step(agent_name="TesterAgent", action_type="VerifyCode", dependencies=["CodingAgent"])
+            graph.add_step(agent_name="ReviewerAgent", action_type="ReviewDiff", dependencies=["TesterAgent"])
         elif detected_intent == IntentType.WORKSPACE_FILE_OPS or any(keyword in norm for keyword in workspace_keywords):
             graph.add_step(agent_name="CodingAgent", action_type="FileOps")
         elif any(keyword in norm for keyword in terminal_keywords):
@@ -65,6 +66,7 @@ class RuleRouter:
             "OrchestratorAgent": "PlanTask",
             "CodingAgent": "WriteCode",
             "TesterAgent": "VerifyCode",
+            "ReviewerAgent": "ReviewDiff",
             "ResearchAgent": "DeepResearch",
             "GitAgent": "CommitChanges",
             "ChatAgent": "GeneralChat",
@@ -94,6 +96,12 @@ class RuleRouter:
                         from lmms.backend.agents.specialized.tester import TesterAgent
                         tester = TesterAgent()
                         status = "verified"
+                    elif step_name == "ReviewerAgent":
+                        from lmms.backend.agents.specialized.reviewer import ReviewerAgent
+                        reviewer = ReviewerAgent()
+                        desc = context.task.description if getattr(context, "task", None) else str(context)
+                        rev = reviewer.review(task_description=desc)
+                        status = "reviewed: " + rev.get("status", "PASS")
                     elif step_name == "GitAgent":
                         from lmms.backend.agents.specialized.git import GitAgent
                         git_agent = GitAgent()

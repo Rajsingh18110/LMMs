@@ -2285,7 +2285,7 @@ def run_cli():
                         eb = get_event_bus()
                         rule_router = RuleRouter()
                         exec_graph = rule_router.route(cmd)
-                        graph_summary = rule_router.execute_graph(exec_graph)
+                        graph_summary = rule_router.execute_graph(exec_graph, context={"task": cmd, "workspace": current_workspace, "model": current_model})
                         eb.emit("execution_graph_planned", {
                             "intent": intent_res.intent.value,
                             "steps": [{"agent": s.agent_name, "action": s.action_type} for s in exec_graph.steps],
