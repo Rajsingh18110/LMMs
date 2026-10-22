@@ -17,9 +17,12 @@ def get_workspace_dir() -> str:
     if env_ws and os.path.isdir(env_ws):
         return env_ws
     ws = str(config.get("workspace_dir", ""))
-    if ws and os.path.isdir(ws):
-        return ws
-    return os.getcwd()
+    base_ws = ws if (ws and os.path.isdir(ws)) else os.getcwd()
+    try:
+        from lmms_worktree.manager import default_worktree_manager
+        return default_worktree_manager.get_active_workspace(base_ws)
+    except Exception:
+        return base_ws
 
 def enforce_boundary(path: str):
     return require_workspace_path(path, get_workspace_dir())

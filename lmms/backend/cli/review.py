@@ -54,9 +54,13 @@ def verify_workspace_state(workspace: str) -> dict:
     syntax_errors = []
     if workspace and workspace != "None" and os.path.isdir(workspace):
         try:
-            diff_files = subprocess.run(
+            diff_proc = subprocess.run(
                 ["git", "diff", "--name-only"], cwd=workspace, capture_output=True, text=True, check=False
-            ).stdout.splitlines()
+            )
+            untracked_proc = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"], cwd=workspace, capture_output=True, text=True, check=False
+            )
+            diff_files = set(diff_proc.stdout.splitlines() + untracked_proc.stdout.splitlines())
             for rel in diff_files:
                 if rel.endswith(".py"):
                     full_p = os.path.join(workspace, rel)

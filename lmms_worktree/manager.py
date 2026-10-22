@@ -36,6 +36,7 @@ class WorktreeSession:
     base_commit: str
     session_id: str
     is_detached: bool = False
+    is_auto_ephemeral: bool = False
 
     @property
     def worktree_path(self) -> str:

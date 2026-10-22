@@ -2350,6 +2350,19 @@ def run_cli():
                 except Exception:
                     turn_mgr = None
 
+                # Automatic ephemeral worktree isolation for coding turns in Git repositories
+                is_auto_worktree = False
+                try:
+                    from lmms_worktree.manager import default_worktree_manager
+                    if intent_res.intent == IntentType.CODING and current_workspace and current_workspace != "None":
+                        if default_worktree_manager.is_git_repo(current_workspace) and not default_worktree_manager.get_session(current_workspace):
+                            wt_session = default_worktree_manager.enable(current_workspace)
+                            wt_session.is_auto_ephemeral = True
+                            is_auto_worktree = True
+                            console.print(f"[dim cyan]🔒 [Worktree] Ephemeral workspace active: {wt_session.worktree_dir}[/dim cyan]")
+                except Exception:
+                    is_auto_worktree = False
+
                 reply = ""
                 full_reply = ""
                 executed_tool_calls = []
@@ -3005,12 +3018,28 @@ def run_cli():
                     
                 # Review and validation gate before final completion
                 try:
-                    if intent_res.intent == IntentType.CODING and current_workspace and current_workspace != "None":
-                        from lmms.backend.cli.review import verify_workspace_state
-                        ws_verification = verify_workspace_state(current_workspace)
-                        if not ws_verification.get("passed", True):
-                            err_msg = "\n".join(ws_verification.get("syntax_errors", []))
-                            console.print(f"[yellow]⚠️ Post-execution review warning: Syntax or git validation issues detected:\n{err_msg}[/yellow]")
+                    if current_workspace and current_workspace != "None":
+                        from lmms_worktree.manager import default_worktree_manager
+                        wt_sess = default_worktree_manager.get_session(current_workspace)
+                        if wt_sess and getattr(wt_sess, "is_auto_ephemeral", False):
+                            from lmms.backend.cli.review import verify_workspace_state
+                            ws_verification = verify_workspace_state(wt_sess.worktree_dir)
+                            if ws_verification.get("passed", True):
+                                applied, app_msg = default_worktree_manager.apply(current_workspace)
+                                if applied:
+                                    console.print(f"[bold green]✓ [Worktree] Changes verified and merged cleanly into {current_workspace}[/bold green]")
+                                else:
+                                    console.print(f"[yellow]⚠️ [Worktree] Merge warning: {app_msg}[/yellow]")
+                            else:
+                                default_worktree_manager.discard(current_workspace)
+                                err_msg = "\n".join(ws_verification.get("syntax_errors", []))
+                                console.print(f"[bold red]✗ [Worktree] Verification failed: changes cleanly discarded.\n{err_msg}[/bold red]")
+                        elif intent_res.intent == IntentType.CODING:
+                            from lmms.backend.cli.review import verify_workspace_state
+                            ws_verification = verify_workspace_state(current_workspace)
+                            if not ws_verification.get("passed", True):
+                                err_msg = "\n".join(ws_verification.get("syntax_errors", []))
+                                console.print(f"[yellow]⚠️ Post-execution review warning: Syntax or git validation issues detected:\n{err_msg}[/yellow]")
                 except Exception:
                     pass
 
@@ -3091,6 +3120,15 @@ def run_cli():
                     voice_mode_active = False
 
         except KeyboardInterrupt:
+            try:
+                from lmms_worktree.manager import default_worktree_manager
+                if current_workspace and current_workspace != "None":
+                    wt_sess = default_worktree_manager.get_session(current_workspace)
+                    if wt_sess and getattr(wt_sess, "is_auto_ephemeral", False):
+                        default_worktree_manager.discard(current_workspace)
+                        console.print("\n[dim yellow]● Cleaned up ephemeral worktree on interrupt.[/dim yellow]")
+            except Exception:
+                pass
             if 'voice_mode_active' in locals() and voice_mode_active:
                 if 'vsession' in locals() and vsession is not None:
                     try:

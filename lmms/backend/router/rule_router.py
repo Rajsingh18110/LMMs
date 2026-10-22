@@ -84,13 +84,19 @@ class RuleRouter:
                     eb = get_event_bus()
                     eb.emit("agent_started", {"agent": step_name, "action": action_type})
 
+                    if isinstance(context, dict):
+                        task_desc = context.get("task", "")
+                    elif getattr(context, "task", None):
+                        task_desc = context.task.description
+                    else:
+                        task_desc = str(context)
+
                     if step_name == "OrchestratorAgent":
                         status = "planned"
                     elif step_name == "CodingAgent":
                         from lmms.backend.agents.specialized.coding import CodingAgent
                         coder = CodingAgent()
-                        desc = context.task.description if getattr(context, "task", None) else str(context)
-                        code_res = coder.write_code(desc)
+                        code_res = coder.write_code(task_desc)
                         status = "executed: " + (code_res[:40] if code_res else "done")
                     elif step_name == "TesterAgent":
                         from lmms.backend.agents.specialized.tester import TesterAgent
@@ -99,8 +105,7 @@ class RuleRouter:
                     elif step_name == "ReviewerAgent":
                         from lmms.backend.agents.specialized.reviewer import ReviewerAgent
                         reviewer = ReviewerAgent()
-                        desc = context.task.description if getattr(context, "task", None) else str(context)
-                        rev = reviewer.review(task_description=desc)
+                        rev = reviewer.review(task_description=task_desc)
                         status = "reviewed: " + rev.get("status", "PASS")
                     elif step_name == "GitAgent":
                         from lmms.backend.agents.specialized.git import GitAgent

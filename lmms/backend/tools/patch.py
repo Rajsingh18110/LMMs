@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from lmms.backend.tools.files import enforce_boundary
+from lmms.backend.tools.files import enforce_boundary, get_workspace_dir
 
 
 # Patch markers for OpenAI Codex format
@@ -104,7 +104,17 @@ class ApplyPatchEngine:
     """
 
     def __init__(self, workspace_root: Optional[str] = None):
-        self.workspace_root = workspace_root or os.getcwd()
+        self._workspace_root = workspace_root
+
+    @property
+    def workspace_root(self) -> str:
+        if self._workspace_root:
+            return self._workspace_root
+        return get_workspace_dir()
+
+    @workspace_root.setter
+    def workspace_root(self, val: Optional[str]):
+        self._workspace_root = val
 
     def resolve_path(self, path: str) -> str:
         clean = path.strip().strip("'\"`")
