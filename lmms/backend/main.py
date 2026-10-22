@@ -2078,6 +2078,81 @@ def run_cli():
                 from lmms_sessions.cli import default_session_cli
                 default_session_cli.handle_compact(parts[1:])
 
+            elif base_cmd == "/mcp":
+                from lmms_mcp.config import default_config_manager
+                cfg = default_config_manager.load_config()
+                sub = parts[1] if len(parts) > 1 else "list"
+                if sub in ["list", "ls"]:
+                    console.print("\n[bold cyan]=== Configured MCP Servers (~/.lmms/mcp.json) ===[/bold cyan]")
+                    for sname, sinfo in cfg.mcp_servers.items():
+                        status_str = "[green]ENABLED[/green]" if sinfo.enabled else "[dim]disabled[/dim]"
+                        console.print(f" • [bold]{sname}[/bold] ({sinfo.transport}): {status_str} — {sinfo.command}")
+                elif sub == "enable" and len(parts) > 2:
+                    default_config_manager.set_server_enabled(parts[2], True)
+                    console.print(f"[green]✓ Enabled MCP server '{parts[2]}'[/green]")
+                elif sub == "disable" and len(parts) > 2:
+                    default_config_manager.set_server_enabled(parts[2], False)
+                    console.print(f"[yellow]✓ Disabled MCP server '{parts[2]}'[/yellow]")
+                else:
+                    console.print("Usage: /mcp list | /mcp enable <name> | /mcp disable <name>")
+
+            elif base_cmd == "/metrics":
+                from lmms.backend.telemetry.metrics import default_metrics
+                summary = default_metrics.get_summary()
+                console.print(Panel(json.dumps(summary, indent=2), title="LMMs OS Execution Metrics", border_style="green"))
+
+            elif base_cmd == "/diff":
+                ws = current_workspace if current_workspace != "None" else os.getcwd()
+                res = subprocess.run(["git", "diff"], cwd=ws, capture_output=True, text=True)
+                diff_out = res.stdout.strip()
+                if not diff_out:
+                    res_staged = subprocess.run(["git", "diff", "--cached"], cwd=ws, capture_output=True, text=True)
+                    diff_out = res_staged.stdout.strip()
+                if diff_out:
+                    console.print(Panel(diff_out[:6000], title="Working Tree Diff", border_style="cyan"))
+                else:
+                    console.print("[dim]No uncommitted git diff in current workspace.[/dim]")
+
+            elif base_cmd == "/checkpoint":
+                from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
+                ws = current_workspace if current_workspace != "None" else os.getcwd()
+                sub = parts[1] if len(parts) > 1 else "create"
+                if sub in ["list", "ls"]:
+                    list_checkpoints(ws)
+                elif sub in ["rollback", "restore"] and len(parts) > 2:
+                    rollback_checkpoint(ws, parts[2])
+                else:
+                    cname = " ".join(parts[2:]) if len(parts) > 2 else (" ".join(parts[1:]) if len(parts) > 1 and parts[1] != "create" else "Manual Checkpoint")
+                    create_checkpoint(ws, cname)
+
+            elif base_cmd == "/review":
+                from lmms.backend.agents.specialized.reviewer import ReviewerAgent
+                from lmms.backend.agents.core_agents.agents.context import ExecutionContext
+                from lmms.backend.tasks.core_tasks.tasks.task import Task, TaskStatus
+
+                ws = current_workspace if current_workspace != "None" else os.getcwd()
+                diff_cmd = ["git", "diff", "HEAD"]
+                diff_res = subprocess.run(diff_cmd, cwd=ws, capture_output=True, text=True)
+                diff_text = diff_res.stdout.strip()
+                if not diff_text:
+                    diff_res2 = subprocess.run(["git", "diff", "--cached"], cwd=ws, capture_output=True, text=True)
+                    diff_text = diff_res2.stdout.strip()
+
+                task_desc = " ".join(parts[1:]) if len(parts) > 1 else f"Review current uncommitted diff in {ws}"
+                if diff_text:
+                    task_desc += f"\n\nUncommitted Diff:\n{diff_text[:4000]}"
+
+                async def run_review():
+                    ctx = ExecutionContext(workspace_id=ws)
+                    ctx.task = Task(id="review-1", title="Code Review", description=task_desc, status=TaskStatus.IN_PROGRESS)
+                    ctx.selected_model = current_model
+                    rev = ReviewerAgent()
+                    console.print(f"[bold cyan]Running ReviewerAgent on workspace:[/bold cyan] {ws}")
+                    async for chunk in rev.execute(ctx):
+                        console.print(chunk, end="")
+
+                asyncio.run(run_review())
+
                     
             elif base_cmd == "/agent":
                 if len(parts) > 1:

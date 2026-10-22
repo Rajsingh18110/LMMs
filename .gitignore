@@ -32,6 +32,9 @@ test_*.py
 !tests/test_undo_checkpoint.py
 !tests/test_event_bus.py
 !tests/test_safety_checks.py
+!tests/test_notifications_keyring.py
+!tests/capture_panel_live_proof.py
+!tests/run_demo_benchmark.py
 
 patch_*.py
 build_*.py

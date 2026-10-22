@@ -133,12 +133,29 @@ class CanvasNode(QGraphicsItem):
         self.parent_canvas.on_node_clicked(self)
 
     def set_state(self, state: str, subtitle: Optional[str] = None, payload: Optional[Dict[str, Any]] = None):
+        old_state = self.state
         self.state = state
         if subtitle:
             self.subtitle = subtitle
         if payload is not None:
             self.payload = payload
         self.update()
+
+        try:
+            log_entry = {
+                "timestamp": time.time(),
+                "datetime": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
+                "node_id": self.node_id,
+                "old_state": old_state,
+                "new_state": state,
+                "subtitle": self.subtitle
+            }
+            log_path = os.path.expanduser("~/.lmms/events/panel_node_states.jsonl")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
 
 
 class FlowConnection(QGraphicsPathItem):
@@ -509,17 +526,20 @@ class PanelWindow(QMainWindow):
             self.nodes["tool_call"].set_state(st, f"{tname} ({'✓' if success else '✗'})", event)
 
         elif etype == "patch_applied":
-            mods = event.get("files_modified", [])
-            diff = event.get("diff_summary", "")
-            self.nodes["patch_engine"].set_state(NodeState.SUCCESS, f"Modified {len(mods)} files", event)
+            mods = event.get("files_modified", event.get("files", []))
+            diff = event.get("diff_summary", event.get("diff", ""))
+            self.nodes["patch_engine"].set_state(NodeState.SUCCESS, f"Modified {len(mods)} file(s)", event)
             self._set_flow("tool_call", "patch_engine", True)
             self._set_flow("patch_engine", "test_verify", True)
 
         elif etype == "test_result":
-            passed = event.get("passed", False)
+            exit_code = event.get("exit_code", 0)
+            passed = event.get("passed", exit_code == 0)
             cmd = event.get("command", "")
             st = NodeState.SUCCESS if passed else NodeState.FAIL
             self.nodes["test_verify"].set_state(st, f"{'PASS' if passed else 'FAIL'}: {cmd[:18]}", event)
+            if "sandbox_run" in self.nodes:
+                self.nodes["sandbox_run"].set_state(st, f"{'Exit 0' if passed else f'Exit {exit_code}'}", event)
             self._set_flow("test_verify", "response", True)
 
         elif etype == "turn_end":
