@@ -59,6 +59,9 @@ patterns = [
     "^python3?\\\\s+-m\\\\s+unittest(\\\\s|$)",
     "^pytest(\\\\s|$)",
     "^node\\\\s+--version$",
+    "^whoami$",
+    "^id(\\\\s|$)",
+    "^uname(\\\\s|$)",
 ]
 
 # Dangerously destructive commands that are ALWAYS denied
