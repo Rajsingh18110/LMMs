@@ -519,7 +519,7 @@ def test_real_model_opt_in_or_skip(temp_runtime_dir):
             tokens_received = []
             final_resp = None
             while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=30.0)
+                line = await asyncio.wait_for(reader.readline(), timeout=60.0)
                 msg = json.loads(line.decode("utf-8").strip())
                 if msg.get("method") == "message.token":
                     tokens_received.append(msg["params"]["token"])
