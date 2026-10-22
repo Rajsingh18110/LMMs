@@ -93,6 +93,11 @@ patterns = [
     "apt(-get)?\\\\s+(install|remove|purge)(\\\\s|$)",
     "^rm(\\\\s|$)",
     "^mv(\\\\s|$)",
+    "^chmod(\\\\s|$)",
+    "^chown(\\\\s|$)",
+    "^make\\\\s+install(\\\\s|$)",
+    "^curl(\\\\s|$)",
+    "^wget(\\\\s|$)",
 ]
 
 # [filesystem]

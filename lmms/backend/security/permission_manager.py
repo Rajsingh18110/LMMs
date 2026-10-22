@@ -16,15 +16,14 @@ class PermissionManager:
         # Special case for terminal.run where we need to parse the inner command or apply sandboxing
         if request.tool_name == "terminal.run":
             command = request.kwargs.get("command", "")
-            if request.permission_level == "sandboxed":
-                from lmms_sandbox.runner import default_runner
-                pol_res = default_runner.evaluate_command(command)
-                if pol_res.action.value == "deny":
-                    return PermissionResult(allowed=False, reason=pol_res.reason, risk_level="critical")
-                elif pol_res.action.value == "ask":
-                    return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="high", requires_confirmation=True)
-                else:
-                    return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="low", requires_confirmation=False)
+            from lmms_sandbox.runner import default_runner
+            pol_res = default_runner.evaluate_command(command)
+            if pol_res.action.value == "deny":
+                return PermissionResult(allowed=False, reason=pol_res.reason, risk_level="critical")
+            elif pol_res.action.value == "ask" and request.permission_level != "full":
+                return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="high", requires_confirmation=True)
+            elif request.permission_level == "sandboxed":
+                return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="low", requires_confirmation=False)
 
             try:
                 parsed_cmds = parse_shell_command(command)
