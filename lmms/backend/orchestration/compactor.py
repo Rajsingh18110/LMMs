@@ -27,7 +27,7 @@ class ContextCompactor:
     def __init__(
         self,
         recent_turns_to_preserve: int = 8,
-        max_observation_chars: int = 15000,
+        max_observation_chars: int = 4000,
         token_count_fn: Optional[Any] = None
     ):
         self.recent_turns_to_preserve = recent_turns_to_preserve
@@ -63,16 +63,15 @@ class ContextCompactor:
 
         compacted = [dict(m) for m in messages]
 
-        # Stage 1: Compact bulky <observation> blocks from older turns
-        # Keep recent turns intact
-        cutoff_index = max(1, len(compacted) - self.recent_turns_to_preserve)
-        
-        for idx in range(cutoff_index):
+        # Stage 1: Compact bulky <observation> blocks from history turns
+        # In budget overflow, inspect any prior turn with an oversized observation
+        effective_max_obs = min(self.max_observation_chars, max(800, int(usable_budget * 1.5)))
+        for idx in range(1, len(compacted) - 1):
             content = compacted[idx].get("content")
             if isinstance(content, str) and "<observation>" in content:
-                if len(content) > self.max_observation_chars:
+                if len(content) > effective_max_obs:
                     before_len = len(content)
-                    compacted[idx]["content"] = self._compact_observation(content)
+                    compacted[idx]["content"] = self._compact_observation(content, max_chars=effective_max_obs)
                     obs_pruned += 1
                     tokens_saved += max(0, (before_len - len(compacted[idx]["content"])) // 3)
 
@@ -87,6 +86,7 @@ class ContextCompactor:
             )
 
         # Stage 2: Condense older observation turns instead of deleting conversation turns
+        cutoff_index = max(1, len(compacted) - self.recent_turns_to_preserve)
         for idx in range(1, cutoff_index):
             msg = compacted[idx]
             if msg.get("role") in ("user", "tool") and "<observation>" in str(msg.get("content", "")):
@@ -107,41 +107,51 @@ class ContextCompactor:
 
         summary_applied = False
         # Stage 3: Condense oldest turns into an explicit summary message
-        # Keep system prompt [0] and recent turns
-        if len(compacted) > (self.recent_turns_to_preserve + 2):
+        # Trigger when still overflowing and there are conversation turns to summarize
+        current_tokens = self._estimate_tokens(compacted, model_name)
+        if current_tokens > usable_budget and len(compacted) >= 3:
             system_msg = compacted[0] if compacted and compacted[0].get("role") == "system" else None
             start_idx = 1 if system_msg else 0
-            end_idx = max(start_idx + 1, len(compacted) - self.recent_turns_to_preserve)
 
-            turns_to_summarize = compacted[start_idx:end_idx]
-            summary_text = self._build_turn_summary(turns_to_summarize)
+            # Scale preserved turns by budget pressure
+            if usable_budget < 250:
+                recent_to_keep = min(2, max(1, len(compacted) - start_idx - 1))
+            else:
+                recent_to_keep = min(self.recent_turns_to_preserve, max(2, len(compacted) - start_idx - 2))
 
-            new_messages = []
-            if system_msg:
-                new_messages.append(system_msg)
+            end_idx = len(compacted) - recent_to_keep
+            if end_idx > start_idx:
+                turns_to_summarize = compacted[start_idx:end_idx]
+                summary_text = self._build_turn_summary(turns_to_summarize)
 
-            new_messages.append({
-                "role": "user",
-                "content": f"[Previous Conversation Context Summary]\n{summary_text}\n[End of Context Summary]"
-            })
-            new_messages.append({
-                "role": "assistant",
-                "content": "Understood. I have recorded the previous conversation context and task history."
-            })
-            new_messages.extend(compacted[end_idx:])
+                new_messages = []
+                if system_msg:
+                    new_messages.append(system_msg)
 
-            tokens_saved += 400
-            summary_applied = True
-            current_tokens = self._estimate_tokens(new_messages, model_name)
-            if current_tokens <= usable_budget:
-                return new_messages, CompactionReport(
-                    original_turns=original_turns,
-                    compacted_turns=len(new_messages),
-                    observations_pruned=obs_pruned,
-                    tokens_saved_estimate=tokens_saved,
-                    summary_applied=True
-                )
-            compacted = new_messages
+                new_messages.append({
+                    "role": "user",
+                    "content": f"[Previous Conversation Context Summary]\n{summary_text}\n[End of Context Summary]"
+                })
+                new_messages.append({
+                    "role": "assistant",
+                    "content": "Understood. I have recorded the previous conversation context and task history."
+                })
+                new_messages.extend(compacted[end_idx:])
+
+                before_summary_tokens = current_tokens
+                current_tokens = self._estimate_tokens(new_messages, model_name)
+                tokens_saved += max(100, before_summary_tokens - current_tokens)
+                summary_applied = True
+                compacted = new_messages
+
+                if current_tokens <= usable_budget:
+                    return new_messages, CompactionReport(
+                        original_turns=original_turns,
+                        compacted_turns=len(new_messages),
+                        observations_pruned=obs_pruned,
+                        tokens_saved_estimate=tokens_saved,
+                        summary_applied=True
+                    )
 
         # Stage 4: Aggressive truncation of oversized history messages if still overflowing
         current_tokens = self._estimate_tokens(compacted, model_name)
@@ -171,17 +181,18 @@ class ContextCompactor:
             summary_applied=summary_applied
         )
 
-    def _compact_observation(self, observation_str: str) -> str:
+    def _compact_observation(self, observation_str: str, max_chars: Optional[int] = None) -> str:
         """
         Extracts head and tail of an observation to preserve critical status and return values.
         """
+        limit = max_chars if max_chars is not None else self.max_observation_chars
         match = re.search(r"<observation>(.*?)</observation>", observation_str, re.DOTALL)
         body = match.group(1).strip() if match else observation_str
 
-        head_len = int(self.max_observation_chars * 0.7)
-        tail_len = int(self.max_observation_chars * 0.3)
+        head_len = int(limit * 0.7)
+        tail_len = int(limit * 0.3)
 
-        if len(body) <= self.max_observation_chars:
+        if len(body) <= limit:
             return observation_str
 
         condensed_body = (
