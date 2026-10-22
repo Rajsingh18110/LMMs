@@ -47,6 +47,11 @@ from lmms.gui.qt import (
     QTimer,
     QRectF,
     QPointF,
+    QTabWidget,
+    QLineEdit,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
     Qt,
     pyqtSignal,
     pyqtSlot,
@@ -489,7 +494,37 @@ class PanelWindow(QMainWindow):
         self.approval_banner.setVisible(False)
         main_layout.addWidget(self.approval_banner)
 
-        # Splitter: Canvas View on Left, Details Inspector on Right
+        # Main Center Tabs (Canvas, Model Providers, MCP Servers)
+        self.main_tabs = QTabWidget()
+        self.main_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #2d3748;
+                background-color: #12151a;
+            }
+            QTabBar::tab {
+                background: #1a202c;
+                color: #a0aec0;
+                padding: 8px 18px;
+                border: 1px solid #2d3748;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                font-weight: 600;
+                margin-right: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #2d3748;
+                color: #f7fafc;
+                border-color: #4a5568;
+            }
+        """)
+
+        # Tab 1: Visual Canvas & Inspector Splitter
+        canvas_container = QWidget()
+        c_layout = QVBoxLayout(canvas_container)
+        c_layout.setContentsMargins(0, 0, 0, 0)
+        c_layout.setSpacing(0)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.view)
 
@@ -514,8 +549,209 @@ class PanelWindow(QMainWindow):
         splitter.addWidget(inspector)
         splitter.setStretchFactor(0, 7)
         splitter.setStretchFactor(1, 3)
+        c_layout.addWidget(splitter)
 
-        main_layout.addWidget(splitter)
+        self.main_tabs.addTab(canvas_container, "⚡ Workflow Canvas")
+
+        # Tab 2: Model Providers Manager
+        self.providers_tab = self._build_model_providers_tab()
+        self.main_tabs.addTab(self.providers_tab, "🧠 Model Providers")
+
+        # Tab 3: MCP Servers & Tool Discovery
+        self.mcp_tab = self._build_mcp_servers_tab()
+        self.main_tabs.addTab(self.mcp_tab, "🛠 MCP Servers & Tools")
+
+        main_layout.addWidget(self.main_tabs)
+
+    def _build_model_providers_tab(self) -> QWidget:
+        """Constructs native configuration tab for local and cloud model providers."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        header = QLabel("<h3>Model Provider Registry (Local & Cloud)</h3><span style='color:#a0aec0;'>Register local LLM endpoints (Ollama, llama.cpp, vLLM) or Cloud API providers (OpenAI, Anthropic, Gemini).</span>")
+        layout.addWidget(header)
+
+        # Form row for adding new provider
+        form_frame = QFrame()
+        form_frame.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; border-radius: 8px; padding: 10px;")
+        f_layout = QHBoxLayout(form_frame)
+        f_layout.setSpacing(8)
+
+        self.p_name_edit = QLineEdit()
+        self.p_name_edit.setPlaceholderText("Provider Name (e.g. Local vLLM)")
+        f_layout.addWidget(self.p_name_edit)
+
+        self.p_type_combo = QComboBox()
+        self.p_type_combo.addItems(["openai_compatible", "ollama", "llama_cpp", "anthropic", "gemini"])
+        f_layout.addWidget(self.p_type_combo)
+
+        self.p_url_edit = QLineEdit()
+        self.p_url_edit.setPlaceholderText("Base URL (e.g. http://localhost:11435/v1)")
+        f_layout.addWidget(self.p_url_edit)
+
+        self.p_key_edit = QLineEdit()
+        self.p_key_edit.setPlaceholderText("API Key (optional for local)")
+        self.p_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        f_layout.addWidget(self.p_key_edit)
+
+        btn_add_p = QPushButton("➕ Add Provider")
+        btn_add_p.setStyleSheet("background-color: #3b82f6; color: white; font-weight: bold; border-radius: 6px; padding: 6px 14px;")
+        btn_add_p.clicked.connect(self._on_add_provider_clicked)
+        f_layout.addWidget(btn_add_p)
+
+        layout.addWidget(form_frame)
+
+        # Table of registered providers
+        self.providers_table = QTableWidget()
+        self.providers_table.setColumnCount(5)
+        self.providers_table.setHorizontalHeaderLabels(["Name", "Type", "Base URL", "Status", "Actions"])
+        self.providers_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.providers_table.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; gridline-color: #2d3748; color: #f7fafc;")
+        layout.addWidget(self.providers_table)
+
+        self._refresh_providers_table()
+        return tab
+
+    def _build_mcp_servers_tab(self) -> QWidget:
+        """Constructs configuration tab for dynamic MCP servers and tool discovery."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        header = QLabel("<h3>Model Context Protocol (MCP) Server Hub</h3><span style='color:#a0aec0;'>Manage local subprocess or remote SSE tools integrated with workflow nodes.</span>")
+        layout.addWidget(header)
+
+        # Form row for adding MCP server
+        mcp_form = QFrame()
+        mcp_form.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; border-radius: 8px; padding: 10px;")
+        mf_layout = QHBoxLayout(mcp_form)
+        mf_layout.setSpacing(8)
+
+        self.mcp_name_edit = QLineEdit()
+        self.mcp_name_edit.setPlaceholderText("Server Name (e.g. filesystem)")
+        mf_layout.addWidget(self.mcp_name_edit)
+
+        self.mcp_trans_combo = QComboBox()
+        self.mcp_trans_combo.addItems(["stdio", "sse", "http"])
+        mf_layout.addWidget(self.mcp_trans_combo)
+
+        self.mcp_cmd_edit = QLineEdit()
+        self.mcp_cmd_edit.setPlaceholderText("Command / URL (e.g. npx -y @modelcontextprotocol/server-filesystem)")
+        mf_layout.addWidget(self.mcp_cmd_edit)
+
+        btn_add_mcp = QPushButton("➕ Register MCP")
+        btn_add_mcp.setStyleSheet("background-color: #8b5cf6; color: white; font-weight: bold; border-radius: 6px; padding: 6px 14px;")
+        btn_add_mcp.clicked.connect(self._on_add_mcp_clicked)
+        mf_layout.addWidget(btn_add_mcp)
+
+        layout.addWidget(mcp_form)
+
+        # Table of registered MCP servers
+        self.mcp_table = QTableWidget()
+        self.mcp_table.setColumnCount(4)
+        self.mcp_table.setHorizontalHeaderLabels(["Server", "Transport", "Command / Target", "Discovered Tools"])
+        self.mcp_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.mcp_table.setStyleSheet("background-color: #1a202c; border: 1px solid #2d3748; gridline-color: #2d3748; color: #f7fafc;")
+        layout.addWidget(self.mcp_table)
+
+        self._refresh_mcp_table()
+        return tab
+
+    def _refresh_providers_table(self):
+        try:
+            from lmms.backend.core.registry.provider_registry import ProviderRegistry
+            safe_providers = ProviderRegistry.list_safe()
+        except Exception:
+            safe_providers = []
+
+        self.providers_table.setRowCount(len(safe_providers))
+        for r, p in enumerate(safe_providers):
+            self.providers_table.setItem(r, 0, QTableWidgetItem(p.get("name", "Unnamed")))
+            self.providers_table.setItem(r, 1, QTableWidgetItem(p.get("type", "openai_compatible")))
+            self.providers_table.setItem(r, 2, QTableWidgetItem(p.get("base_url", "")))
+            st = "Active" if p.get("enabled", True) else "Disabled"
+            self.providers_table.setItem(r, 3, QTableWidgetItem(st))
+
+            btn_del = QPushButton("Delete")
+            btn_del.setStyleSheet("background-color: #dc2626; color: white; padding: 3px 8px; border-radius: 4px;")
+            pid = p.get("id")
+            btn_del.clicked.connect(lambda _, x=pid: self._on_delete_provider(x))
+            self.providers_table.setCellWidget(r, 4, btn_del)
+
+    def _on_add_provider_clicked(self):
+        name = self.p_name_edit.text().strip()
+        ptype = self.p_type_combo.currentText()
+        url = self.p_url_edit.text().strip()
+        key = self.p_key_edit.text().strip()
+
+        if not name or not url:
+            QMessageBox.warning(self, "Invalid Input", "Provider name and Base URL are required.")
+            return
+
+        try:
+            from lmms.backend.core.registry.provider_registry import ProviderRegistry
+            ProviderRegistry.create(name=name, p_type=ptype, base_url=url, api_key=key)
+            self.p_name_edit.clear()
+            self.p_url_edit.clear()
+            self.p_key_edit.clear()
+            self._refresh_providers_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to register provider: {e}")
+
+    def _on_delete_provider(self, p_id: str):
+        try:
+            from lmms.backend.core.registry.provider_registry import ProviderRegistry
+            data = ProviderRegistry._load_raw()
+            if p_id in data:
+                del data[p_id]
+                ProviderRegistry._save_raw(data)
+            self._refresh_providers_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to delete provider: {e}")
+
+    def _refresh_mcp_table(self):
+        try:
+            from lmms_mcp.config import MCPConfigManager
+            cfg_mgr = MCPConfigManager()
+            servers = cfg_mgr.list_servers()
+        except Exception:
+            servers = {}
+
+        self.mcp_table.setRowCount(len(servers))
+        for r, (sname, scfg) in enumerate(servers.items()):
+            self.mcp_table.setItem(r, 0, QTableWidgetItem(sname))
+            self.mcp_table.setItem(r, 1, QTableWidgetItem(scfg.transport))
+            cmd_target = f"{scfg.command or ''} {' '.join(scfg.args or [])}".strip() or (scfg.url or "")
+            self.mcp_table.setItem(r, 2, QTableWidgetItem(cmd_target))
+            self.mcp_table.setItem(r, 3, QTableWidgetItem(f"{len(scfg.args)} arg(s) registered"))
+
+    def _on_add_mcp_clicked(self):
+        sname = self.mcp_name_edit.text().strip()
+        transport = self.mcp_trans_combo.currentText()
+        cmd_raw = self.mcp_cmd_edit.text().strip()
+
+        if not sname or not cmd_raw:
+            QMessageBox.warning(self, "Invalid Input", "Server name and Command / URL are required.")
+            return
+
+        try:
+            from lmms_mcp.config import MCPConfigManager, MCPServerConfig
+            cfg_mgr = MCPConfigManager()
+            parts = cmd_raw.split()
+            if transport == "stdio":
+                new_srv = MCPServerConfig(name=sname, transport="stdio", command=parts[0], args=parts[1:])
+            else:
+                new_srv = MCPServerConfig(name=sname, transport=transport, url=cmd_raw)
+
+            cfg_mgr.add_server(new_srv)
+            self.mcp_name_edit.clear()
+            self.mcp_cmd_edit.clear()
+            self._refresh_mcp_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to register MCP server: {e}")
 
     def _populate_workflows_combo(self):
         self.wf_combo.clear()
