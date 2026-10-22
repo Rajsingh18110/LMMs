@@ -178,7 +178,7 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
             "replace": "new lines to insert"
         }
     ],
-    "command": "python3 -m unittest"
+    "command": "python3 -m unittest discover tests"
 }
 """
 
@@ -231,6 +231,7 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
             edits_successful = True
             backups = {}
 
+            patch_applied_successfully = False
             # 1. Apply Codex-grade Patch if provided
             if patch_str:
                 yield f"Applying Codex-grade patch...\n"
@@ -242,6 +243,8 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
                     yield f"Patch applied successfully to: {', '.join(files_mod)}\n"
                     if patch_res.get("diff"):
                         yield f"\n[Patch Diff]:\n{patch_res['diff']}\n"
+                    patch_applied_successfully = True
+                    edits_successful = True
                     try:
                         from lmms.backend.events.bus import get_event_bus
                         get_event_bus().publish("patch_applied", {"files": files_mod, "diff": patch_res.get("diff", "")})
@@ -251,8 +254,9 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
                     yield f"Patch application failed: {patch_res.get('error')}\n"
                     edits_successful = False
             
-            # 2. Apply surgical edits with AST Compile Guard and fuzzy line seeking
-            for edit in edits:
+            # 2. Apply surgical edits with AST Compile Guard only if patch was not applied
+            if not patch_applied_successfully and edits:
+                for edit in edits:
                 path = edit.get("path")
                 search = edit.get("search")
                 replace = edit.get("replace")
@@ -282,6 +286,8 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
                     edits_successful = False
                     
             cmd = response_json.get("command")
+            if cmd and cmd.strip() == "python3 -m unittest" and os.path.isdir(os.path.join(effective_ws, "tests")):
+                cmd = "python3 -m unittest discover tests"
             validation_successful = True
             if cmd:
                 yield f"Running validation command in sandbox: `{cmd}`...\n"
