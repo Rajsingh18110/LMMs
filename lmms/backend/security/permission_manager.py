@@ -18,10 +18,14 @@ class PermissionManager:
             command = request.kwargs.get("command", "")
             from lmms_sandbox.runner import default_runner
             pol_res = default_runner.evaluate_command(command)
+            is_managed = getattr(default_runner.policy, "is_managed", False)
+
             if pol_res.action.value == "deny":
-                return PermissionResult(allowed=False, reason=pol_res.reason, risk_level="critical")
-            elif pol_res.action.value == "ask" and request.permission_level != "full":
-                return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="high", requires_confirmation=True)
+                return PermissionResult(allowed=False, reason=f"BLOCKED by execpolicy: {pol_res.reason}", risk_level="critical")
+            elif pol_res.action.value == "ask":
+                # If managed policy is active, even permission_level == 'full' requires confirmation
+                if request.permission_level != "full" or is_managed:
+                    return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="high", requires_confirmation=True)
             elif request.permission_level == "sandboxed":
                 return PermissionResult(allowed=True, reason=pol_res.reason, risk_level="low", requires_confirmation=False)
 

@@ -101,6 +101,8 @@ class SandboxRunner:
             "landlock_available": landlock_ok,
             "landlock_abi": self.landlock.get_abi_version(),
             "policy_path": str(self.policy.config_path),
+            "is_managed": getattr(self.policy, "is_managed", False),
+            "managed_source": getattr(self.policy, "managed_source", None),
             "default_action": self.policy.default_action.value,
             "deny_network": self.policy.deny_network,
         }

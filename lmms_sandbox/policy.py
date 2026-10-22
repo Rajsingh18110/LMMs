@@ -130,11 +130,21 @@ writable_paths = []
 class ExecPolicy:
     """Manages command execution policies and evaluates commands against rules."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, managed_path: Optional[str] = None):
         if config_path:
             self.config_path = Path(os.path.expanduser(config_path))
         else:
             self.config_path = Path(os.path.expanduser("~/.lmms/execpolicy.toml"))
+
+        env_managed = os.environ.get("LMMS_MANAGED_POLICY")
+        if managed_path:
+            self.managed_path: Optional[Path] = Path(os.path.expanduser(managed_path))
+        elif env_managed:
+            self.managed_path = Path(os.path.expanduser(env_managed))
+        elif os.path.exists("/etc/lmms/execpolicy.toml"):
+            self.managed_path = Path("/etc/lmms/execpolicy.toml")
+        else:
+            self.managed_path = None
 
         self.default_action = PolicyAction.ASK
         self.sandbox_mode = "auto"
@@ -145,6 +155,8 @@ class ExecPolicy:
         self.hidden_paths: List[str] = []
         self.read_only_paths: List[str] = []
         self.writable_paths: List[str] = []
+        self.is_managed: bool = False
+        self.managed_source: Optional[str] = None
 
         self._load_or_create()
 
@@ -191,6 +203,38 @@ class ExecPolicy:
         ])
         self.read_only_paths = fs_section.get("read_only_paths", [])
         self.writable_paths = fs_section.get("writable_paths", [])
+
+        # Apply enterprise managed overrides if managed policy exists
+        if self.managed_path and self.managed_path.exists():
+            try:
+                m_content = self.managed_path.read_text(encoding="utf-8")
+                m_data = tomllib.loads(m_content)
+                self.is_managed = True
+                self.managed_source = str(self.managed_path)
+
+                m_policy = m_data.get("policy", {})
+                if "default_action" in m_policy:
+                    m_def = str(m_policy["default_action"]).lower()
+                    if m_def in ("allow", "ask", "deny"):
+                        self.default_action = PolicyAction(m_def)
+
+                if "sandbox_mode" in m_policy:
+                    self.sandbox_mode = m_policy["sandbox_mode"]
+
+                if "deny_network" in m_policy:
+                    self.deny_network = bool(m_policy["deny_network"])
+
+                # Managed rules take precedence ahead of user rules
+                if "rules" in m_data and isinstance(m_data["rules"], list):
+                    self.rules = m_data["rules"] + self.rules
+
+                m_fs = m_data.get("filesystem", {})
+                if "writable_paths" in m_fs:
+                    self.writable_paths = m_fs["writable_paths"]
+                if "hidden_paths" in m_fs:
+                    self.hidden_paths = list(set(self.hidden_paths + m_fs["hidden_paths"]))
+            except Exception:
+                pass
 
     def _extract_subcommands(self, cmd: str) -> List[str]:
         """Extracts subcommands from compound constructs (operators, $(), backticks, sh -c)."""

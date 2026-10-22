@@ -233,6 +233,61 @@ class TestSafetyChecks(unittest.TestCase):
         self.assertTrue(os.path.exists(session.worktree_dir))
         default_worktree_manager.discard(self.tmp_dir)
 
+    def test_4d_managed_policy_overrides(self):
+        """Enterprise managed policy strictly overrides user settings and cannot be weakened."""
+        from lmms_sandbox.policy import ExecPolicy, PolicyAction
+        from lmms.backend.security.permission_manager import PermissionManager
+        from lmms.backend.security.models import ToolRequest
+
+        managed_file = os.path.join(self.tmp_dir, "managed_policy.toml")
+        with open(managed_file, "w") as f:
+            f.write("""[policy]
+default_action = "deny"
+sandbox_mode = "always"
+
+[[rules]]
+name = "custom_denied_tool"
+action = "deny"
+patterns = ["^pip\\\\s+install(\\\\s|$)"]
+""")
+
+        policy = ExecPolicy(config_path=os.path.join(self.tmp_dir, "user_policy.toml"), managed_path=managed_file)
+        self.assertTrue(policy.is_managed)
+        self.assertEqual(policy.default_action, PolicyAction.DENY)
+        self.assertEqual(policy.sandbox_mode, "always")
+
+        # Command matching managed rule is denied
+        res = policy.evaluate("pip install requests")
+        self.assertEqual(res.action, PolicyAction.DENY)
+
+        # PermissionManager honors managed policy even on permission_level="full"
+        from lmms_sandbox.runner import default_runner
+        orig_policy = default_runner.policy
+        try:
+            default_runner.policy = policy
+            pm = PermissionManager()
+            req = ToolRequest(
+                tool_name="terminal.run",
+                command_line="pip install requests",
+                arguments=[],
+                kwargs={"command": "pip install requests"},
+                workspace=self.tmp_dir,
+                permission_level="full"
+            )
+            perm_res = pm.check_permission(req)
+            self.assertFalse(perm_res.allowed, "Managed deny rule must block execution even under full permission level")
+        finally:
+            default_runner.policy = orig_policy
+
+    def test_4e_fail_closed_boundary_protection(self):
+        """Files outside the workspace boundary fail closed with PermissionError."""
+        from lmms.backend.tools.boundaries import require_workspace_path
+        with self.assertRaises(PermissionError):
+            require_workspace_path("/etc/passwd", self.tmp_dir)
+
+        with self.assertRaises(PermissionError):
+            require_workspace_path("../outside.py", self.tmp_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
