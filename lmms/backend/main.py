@@ -2275,6 +2275,7 @@ def run_cli():
                     n_ctx = budget.context_limit
                     reserve = budget.output_reserve
                     available_for_input = budget.usable_context
+                    messages = list(assembled_ctx.messages)
 
                     turn_start_time = time.time()
                     # RuleRouter Deterministic Execution Graph & Event Bus
@@ -2296,14 +2297,6 @@ def run_cli():
                                 messages[0]["content"] += "\n\n" + graph_block
                             else:
                                 messages.insert(0, {"role": "system", "content": graph_block})
-
-                        workspace_rules = load_workspace_rules(current_workspace, current_dir=current_workspace)
-                        if workspace_rules:
-                            rules_block = "## Workspace Rules\n" + workspace_rules
-                            if messages and messages[0].get("role") == "system":
-                                messages[0]["content"] += "\n\n" + rules_block
-                            else:
-                                messages.insert(0, {"role": "system", "content": rules_block})
                     except Exception:
                         pass
 
@@ -2331,8 +2324,6 @@ def run_cli():
                             except Exception:
                                 pass
 
-                    # Assembled context contains minimal base instructions + selected tools + history + user query
-                    messages = list(assembled_ctx.messages)
                     if valid_img_paths and messages and messages[-1]["role"] == "user":
                         messages[-1]["content"] = user_content
 
@@ -2368,26 +2359,17 @@ def run_cli():
                     
                     if True:
                         try:
-                            # Clean history before sending to engine and truncate old large observations to save context
-                            clean_messages = []
-                            obs_count = sum(1 for m in messages if isinstance(m.get("content"), str) and "<observation>" in m["content"])
-                            obs_seen = 0
-                            max_single_obs_tokens = max(2000, int(available_for_input * 0.50))
-                            max_single_obs_chars = max_single_obs_tokens * 3
-                            for m in messages:
-                                content = m["content"]
-                                if isinstance(content, str) and "<observation>" in content:
-                                    obs_seen += 1
-                                    if obs_seen < obs_count and len(content) > max_single_obs_chars:
-                                        head_len = int(max_single_obs_chars * 0.8)
-                                        tail_len = int(max_single_obs_chars * 0.2)
-                                        content = content[:head_len] + "\n...[Observation truncated to save memory]...\n" + content[-tail_len:]
-                                clean_messages.append({"role": m["role"], "content": content})
-
-                            # Prune context if exceeded
-                            tok_count = sum(count_tokens(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in clean_messages)
-                            clean_messages = context_manager.check_and_prune(tok_count, clean_messages, count_tokens, current_model, max_allowed=available_for_input)
-                            messages = list(clean_messages)
+                            # Context compaction & prompt budget enforcement across multi-turn tool observations
+                            tok_count = sum(orchestration_pipeline.budget_manager.count_tokens(m["content"] if isinstance(m["content"], str) else str(m["content"]), current_model) for m in messages)
+                            if tok_count > available_for_input:
+                                compacted_msgs, _ = orchestration_pipeline.compactor.compact(
+                                    messages=messages,
+                                    usable_budget=available_for_input,
+                                    current_prompt_tokens=tok_count,
+                                    model_name=current_model
+                                )
+                                messages = list(compacted_msgs)
+                            clean_messages = messages
 
                             # Apply AI Mode settings
                             req_temp = 0.5
