@@ -2276,6 +2276,7 @@ def run_cli():
                     reserve = budget.output_reserve
                     available_for_input = budget.usable_context
 
+                    turn_start_time = time.time()
                     # RuleRouter Deterministic Execution Graph & Event Bus
                     try:
                         from lmms.backend.router.rule_router import RuleRouter
@@ -2283,10 +2284,26 @@ def run_cli():
                         eb = get_event_bus()
                         rule_router = RuleRouter()
                         exec_graph = rule_router.route(cmd)
+                        graph_summary = rule_router.execute_graph(exec_graph)
                         eb.emit("execution_graph_planned", {
                             "intent": intent_res.intent.value,
-                            "steps": [{"agent": s.agent_name, "action": s.action_type} for s in exec_graph.steps]
+                            "steps": [{"agent": s.agent_name, "action": s.action_type} for s in exec_graph.steps],
+                            "execution_summary": graph_summary,
                         })
+                        if graph_summary:
+                            graph_block = "## Execution Graph\n" + "\n".join(f"- {line}" for line in graph_summary)
+                            if messages and messages[0].get("role") == "system":
+                                messages[0]["content"] += "\n\n" + graph_block
+                            else:
+                                messages.insert(0, {"role": "system", "content": graph_block})
+
+                        workspace_rules = load_workspace_rules(current_workspace, current_dir=current_workspace)
+                        if workspace_rules:
+                            rules_block = "## Workspace Rules\n" + workspace_rules
+                            if messages and messages[0].get("role") == "system":
+                                messages[0]["content"] += "\n\n" + rules_block
+                            else:
+                                messages.insert(0, {"role": "system", "content": rules_block})
                     except Exception:
                         pass
 
@@ -2841,7 +2858,13 @@ def run_cli():
                                 try:
                                     from lmms.backend.events.bus import get_event_bus
                                     eb = get_event_bus()
-                                    eb.tool_end(t_name, success=("failed" not in str(observation).lower() and "error" not in str(observation).lower()[:20]), output=str(observation))
+                                    is_tool_ok = ("failed" not in str(observation).lower() and "error" not in str(observation).lower()[:20])
+                                    eb.tool_end(t_name, success=is_tool_ok, output=str(observation))
+                                    try:
+                                        from lmms.backend.telemetry.metrics import get_metrics_tracker
+                                        get_metrics_tracker().record_tool_call(t_name, duration_s=0.05, success=is_tool_ok)
+                                    except Exception:
+                                        pass
                                     if t_name in ("patch.apply", "apply_patch"):
                                         eb.patch_applied([t_kwargs.get("path", "")], [], diff=str(observation))
                                     elif t_name == "terminal.run":
@@ -2985,6 +3008,16 @@ def run_cli():
                 try:
                     if turn_mgr is not None:
                         turn_mgr.end_turn()
+                except Exception:
+                    pass
+
+                # Live Telemetry & Metrics recording
+                try:
+                    from lmms.backend.telemetry.metrics import get_metrics_tracker
+                    p_toks = len(str(messages)) // 4
+                    c_toks = len(full_reply) // 4
+                    turn_dur = round(time.time() - turn_start_time, 3)
+                    get_metrics_tracker().record_tokens(p_toks, c_toks, duration_s=turn_dur)
                 except Exception:
                     pass
                     

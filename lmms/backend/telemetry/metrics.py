@@ -127,3 +127,6 @@ class MetricsTracker:
 
 
 default_metrics = MetricsTracker()
+
+def get_metrics_tracker() -> MetricsTracker:
+    return default_metrics
