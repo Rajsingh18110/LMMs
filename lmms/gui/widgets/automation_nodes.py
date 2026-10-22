@@ -242,6 +242,67 @@ class HTTPRequestNode(N8nBaseNode):
         self.create_property("headers", "{}")
 
 
+class SandboxedCommandNode(N8nBaseNode):
+    __identifier__ = "lmms.actions"
+    NODE_NAME = "Sandboxed Command"
+    CATEGORY = "action"
+    NODE_ICON = "💻"
+
+    def __init__(self):
+        super().__init__()
+        self.set_color(59, 130, 246)
+        self.add_input("Input", display_name=False)
+        self.add_output("Output", display_name=False)
+        self.create_property("command", "pytest -q --maxfail=1")
+        self.create_property("sandboxed", True)
+        self.create_property("cwd", "./")
+
+
+class ApprovalGateNode(N8nBaseNode):
+    __identifier__ = "lmms.logic"
+    NODE_NAME = "Approval Gate"
+    CATEGORY = "gate"
+    NODE_ICON = "🛑"
+
+    def __init__(self):
+        super().__init__()
+        self.set_color(234, 179, 8)  # Yellow
+        self.add_input("Input", display_name=False)
+        self.add_output("Output", display_name=False)
+        self.create_property("message", "Review changes before executing downstream actions.")
+
+
+class ValidationGateNode(N8nBaseNode):
+    __identifier__ = "lmms.actions"
+    NODE_NAME = "Validation & Test Gate"
+    CATEGORY = "action"
+    NODE_ICON = "🛡"
+
+    def __init__(self):
+        super().__init__()
+        self.set_color(16, 185, 129)  # Green
+        self.add_input("Input", display_name=False)
+        self.add_output("Output", display_name=False)
+        self.create_property("test_command", "pytest -q --maxfail=1")
+        self.create_property("verify_ast", True)
+
+
+class FilePatchNode(N8nBaseNode):
+    __identifier__ = "lmms.actions"
+    NODE_NAME = "File & Patch Op"
+    CATEGORY = "action"
+    NODE_ICON = "📝"
+
+    def __init__(self):
+        super().__init__()
+        self.set_color(59, 130, 246)
+        self.add_input("Input", display_name=False)
+        self.add_output("Output", display_name=False)
+        self.create_property("action", "read")
+        self.create_property("path", "")
+        self.create_property("content", "")
+
+
 # ---------------------------------------------------------
 # Logic (Cyan #06b6d4)
 # ---------------------------------------------------------
@@ -277,6 +338,10 @@ ALL_AUTOMATION_NODES = [
     MCPToolNode,
     PythonCodeNode,
     HTTPRequestNode,
+    SandboxedCommandNode,
+    ApprovalGateNode,
+    ValidationGateNode,
+    FilePatchNode,
     IfElseNode,
 ]
 

@@ -124,7 +124,6 @@ class WorkflowExecutionEngine:
             prompt = self.resolve_expressions(str(prompt), context)
             model_name = props.get("model_name", "qwen2.5-coder")
 
-            # Attempt local engine query with quick fallback
             ai_result = None
             try:
                 req_data = json.dumps({
@@ -138,12 +137,19 @@ class WorkflowExecutionEngine:
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=1.5) as resp:
+                with urllib.request.urlopen(req, timeout=10.0) as resp:
                     resp_json = json.loads(resp.read().decode("utf-8"))
                     ai_result = resp_json["choices"][0]["message"]["content"]
-            except Exception:
-                # Local engine offline / fast simulated response
-                ai_result = f"AI Agent ({model_name}) completed reasoning step for: '{prompt[:40]}...'"
+            except Exception as e:
+                fallback_msg = props.get("fallback_response")
+                if fallback_msg:
+                    ai_result = str(fallback_msg)
+                else:
+                    return {
+                        "status": "error",
+                        "model": model_name,
+                        "error": f"LLM execution failed: {e}. Ensure local engine is online at localhost:11435",
+                    }
 
             return {
                 "status": "success",
@@ -157,7 +163,6 @@ class WorkflowExecutionEngine:
             script = props.get("script", "return items")
             local_scope = {"items": input_data, "context": context, "json": json}
             try:
-                # Wrap script in a callable function
                 code_wrapped = f"def _user_script(items, context):\n" + "\n".join(f"    {line}" for line in script.splitlines())
                 exec(code_wrapped, local_scope)
                 result = local_scope["_user_script"](input_data, context)
@@ -171,7 +176,7 @@ class WorkflowExecutionEngine:
             url = self.resolve_expressions(props.get("url", "https://api.github.com"), context)
             try:
                 req = urllib.request.Request(url, method=method)
-                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
                     data = resp.read().decode("utf-8")
                     try:
                         parsed = json.loads(data)
@@ -181,7 +186,7 @@ class WorkflowExecutionEngine:
             except Exception as e:
                 return {"status": "error", "error": str(e), "url": url}
 
-        # 5. Actions - MCP Tool
+        # 5. Actions - MCP Tool (Real Client Invocation)
         elif "MCPTool" in type(node).__name__:
             tool_name = props.get("tool_name", "read_file")
             server_name = props.get("server_name", "filesystem")
@@ -190,12 +195,119 @@ class WorkflowExecutionEngine:
                 args = json.loads(args_raw)
             except Exception:
                 args = {}
+
+            try:
+                from lmms_mcp.client import MCPClient
+                client = MCPClient(server_name)
+                mcp_res = await client.call_tool(tool_name, args)
+                return {
+                    "status": "success",
+                    "tool": tool_name,
+                    "server": server_name,
+                    "arguments": args,
+                    "output": mcp_res,
+                }
+            except Exception as err:
+                return {
+                    "status": "error",
+                    "tool": tool_name,
+                    "server": server_name,
+                    "error": f"MCP execution error: {err}",
+                }
+
+        # 6. Actions - Sandboxed Shell Command
+        elif "SandboxedCommand" in type(node).__name__:
+            raw_cmd = props.get("command", "")
+            cmd = self.resolve_expressions(raw_cmd, context)
+            ws = props.get("cwd", os.getcwd())
+            enforce_sb = bool(props.get("sandboxed", True))
+
+            from lmms_sandbox.runner import default_runner
+            res = default_runner.run(
+                cmd,
+                workspace_dir=ws,
+                enforce_sandbox=enforce_sb,
+                confirm_callback=lambda c, r: True,
+            )
+            if res.exit_code != 0:
+                return {
+                    "status": "error",
+                    "command": cmd,
+                    "exit_code": res.exit_code,
+                    "error": res.stderr or res.output,
+                }
             return {
                 "status": "success",
-                "tool": tool_name,
-                "server": server_name,
-                "arguments": args,
-                "output": f"MCP tool '{tool_name}' executed via {server_name}.",
+                "command": cmd,
+                "exit_code": res.exit_code,
+                "output": res.output,
+                "stdout": res.stdout,
+            }
+
+        # 7. Actions - Validation & Test Gate
+        elif "ValidationGate" in type(node).__name__:
+            test_cmd = props.get("test_command", "pytest -q --maxfail=1")
+            ws = props.get("workspace", os.getcwd())
+
+            from lmms.backend.cli.review import verify_workspace_state
+            from lmms.backend.agents.specialized.tester import TesterAgent
+
+            ws_state = verify_workspace_state(ws)
+            tester = TesterAgent()
+            test_res = tester.verify(workspace=ws, test_command=test_cmd)
+
+            passed = ws_state.get("passed", True) and test_res.get("passed", True)
+            if not passed:
+                return {
+                    "status": "error",
+                    "passed": False,
+                    "syntax_clean": ws_state.get("syntax_clean", True),
+                    "test_output": test_res.get("output", "")[:400],
+                    "error": f"Validation gate failed! Test output: {test_res.get('output', '')[:200]}",
+                }
+            return {
+                "status": "success",
+                "passed": True,
+                "git_clean": ws_state.get("git", {}).get("clean", True),
+                "syntax_clean": ws_state.get("syntax_clean", True),
+                "test_output": test_res.get("output", "All tests passed"),
+            }
+
+        # 8. Actions - File & Patch Operation
+        elif "FilePatch" in type(node).__name__:
+            action = props.get("action", "read")
+            target_path = self.resolve_expressions(props.get("path", ""), context)
+
+            from lmms.backend.tools.files import canonical_file_read, canonical_file_write
+            from lmms.backend.tools.patch import canonical_apply_patch
+
+            if action == "read":
+                read_res = canonical_file_read(target_path)
+                if "error" in read_res:
+                    return {"status": "error", "error": read_res["error"]}
+                return {"status": "success", "content": read_res.get("content", "")}
+            elif action == "write":
+                content = self.resolve_expressions(props.get("content", ""), context)
+                write_res = canonical_file_write(target_path, content)
+                if write_res.get("status") == "error":
+                    return {"status": "error", "error": write_res.get("error", "Write failed")}
+                return {"status": "success", "file": target_path}
+            elif action == "patch":
+                patch_str = self.resolve_expressions(props.get("content", ""), context)
+                apply_res = canonical_apply_patch(patch_str)
+                if "Failed" in apply_res:
+                    return {"status": "error", "error": apply_res}
+                return {"status": "success", "result": apply_res}
+            else:
+                return {"status": "error", "error": f"Unknown file action: {action}"}
+
+        # 9. Gate - Approval Gate (Pause Execution)
+        elif cat == "gate" or "ApprovalGate" in type(node).__name__:
+            msg = props.get("message", "Awaiting human approval")
+            return {
+                "status": "waiting_approval",
+                "message": msg,
+                "paused_at": time.time(),
             }
 
         # 6. Logic - If / Else
@@ -251,6 +363,8 @@ class WorkflowExecutionEngine:
                 step_status = output.get("status", "success")
                 if step_status == "error":
                     overall_status = "error"
+                elif step_status == "waiting_approval":
+                    overall_status = "waiting_approval"
             except Exception as err:
                 output = {"status": "error", "error": str(err)}
                 overall_status = "error"
@@ -281,6 +395,18 @@ class WorkflowExecutionEngine:
             # Notify UI: step finished
             if on_step_update:
                 on_step_update(node, step_status, output)
+
+            if step_status == "waiting_approval":
+                try:
+                    from lmms.backend.events.bus import get_event_bus
+                    get_event_bus().emit("workflow_paused", {
+                        "execution_id": exec_id,
+                        "workflow_name": workflow_name,
+                        "node_name": node.name(),
+                    })
+                except Exception:
+                    pass
+                break
 
             # Brief pause for visual pulse and event loop yield
             await asyncio.sleep(0.08)
