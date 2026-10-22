@@ -8,7 +8,12 @@ def is_within_workspace(path: str, workspace: str) -> bool:
     if not path or not workspace:
         return False
 
-    resolved_path = os.path.realpath(os.path.abspath(path))
+    if not os.path.isabs(path):
+        target = os.path.join(workspace, path)
+    else:
+        target = path
+
+    resolved_path = os.path.realpath(os.path.abspath(target))
     resolved_workspace = os.path.realpath(os.path.abspath(workspace))
     try:
         return os.path.commonpath([resolved_path, resolved_workspace]) == resolved_workspace
@@ -17,6 +22,11 @@ def is_within_workspace(path: str, workspace: str) -> bool:
 
 
 def require_workspace_path(path: str, workspace: str) -> str:
-    if not is_within_workspace(path, workspace):
+    if not os.path.isabs(path):
+        target = os.path.join(workspace, path)
+    else:
+        target = path
+
+    if not is_within_workspace(target, workspace):
         raise PermissionError(f"Path {path} is outside the allowed workspace boundary.")
-    return os.path.realpath(os.path.abspath(path))
+    return os.path.realpath(os.path.abspath(target))

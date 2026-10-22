@@ -27,27 +27,27 @@ def _record_pre_state(path: str):
         pass
 
 def canonical_file_read(path: str) -> Dict[str, Any]:
-    enforce_boundary(path)
-    if not os.path.exists(path):
+    resolved_path = enforce_boundary(path)
+    if not os.path.exists(resolved_path):
         return {"error": f"File not found: {path}", "path": path}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(resolved_path, "r", encoding="utf-8") as f:
         content = f.read()
     return {"content": content, "path": path}
 
 def canonical_file_write(path: str, content: str) -> Dict[str, Any]:
-    enforce_boundary(path)
+    resolved_path = enforce_boundary(path)
     if path.endswith(".py"):
         try:
-            ast.parse(content, filename=path)
+            ast.parse(content, filename=resolved_path)
         except SyntaxError as e:
             return {
                 "status": "error",
                 "error": f"SyntaxError on line {e.lineno}: {e.msg}. File was NOT saved.",
                 "path": path
             }
-    _record_pre_state(path)
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    _record_pre_state(resolved_path)
+    os.makedirs(os.path.dirname(os.path.abspath(resolved_path)), exist_ok=True)
+    with open(resolved_path, "w", encoding="utf-8") as f:
         f.write(content)
     return {"status": "success", "path": path}
 
@@ -125,7 +125,7 @@ class FileTool:
 
     def read(self, path: str) -> str:
         try:
-            enforce_boundary(path)
+            path = enforce_boundary(path)
             if not os.path.exists(path):
                 return f"Error: File not found: {path}"
             with open(path, "r", encoding="utf-8") as f:
@@ -139,7 +139,7 @@ class FileTool:
         For Python files, uses AST. For other files, uses pattern matching.
         """
         try:
-            enforce_boundary(path)
+            path = enforce_boundary(path)
             if not os.path.exists(path):
                 return f"Error: File not found: {path}"
 
@@ -193,7 +193,7 @@ class FileTool:
         Reads a specific slice of lines with 1-indexed line numbers prefixed.
         """
         try:
-            enforce_boundary(path)
+            path = enforce_boundary(path)
             if not os.path.exists(path):
                 return f"Error: File not found: {path}"
 
@@ -222,7 +222,7 @@ class FileTool:
         Prevents corrupting files with indentation or syntax errors.
         """
         try:
-            enforce_boundary(path)
+            path = enforce_boundary(path)
         except Exception as e:
             return f"Error: {str(e)}"
 
@@ -291,7 +291,7 @@ class FileTool:
 
     def write(self, path: str, content: str) -> str:
         try:
-            enforce_boundary(path)
+            path = enforce_boundary(path)
         except Exception as e:
             return f"Error: {str(e)}"
 

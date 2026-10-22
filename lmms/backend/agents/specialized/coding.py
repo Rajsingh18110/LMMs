@@ -105,8 +105,13 @@ class CodingAgent(BaseAgent):
             if default_worktree_manager.is_git_repo(ws):
                 wt_session = default_worktree_manager.enable(ws)
                 yield f"[Worktree] Isolated ephemeral workspace active: {wt_session.worktree_path}\n"
-        except Exception:
+        except Exception as wt_err:
             wt_session = None
+
+        effective_ws = wt_session.worktree_dir if wt_session else ws
+        from lmms.backend.tools.files import config as files_config
+        orig_files_ws = files_config.get("workspace_dir")
+        files_config.set("workspace_dir", effective_ws)
 
         files_to_read = set(context.files if context.files else [])
         if context.task:
@@ -230,6 +235,7 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
             if patch_str:
                 yield f"Applying Codex-grade patch...\n"
                 from lmms.backend.tools.patch import default_patch_engine
+                default_patch_engine.workspace_root = effective_ws
                 patch_res = default_patch_engine.apply_patch(patch_str)
                 if patch_res.get("success"):
                     files_mod = patch_res.get('files_modified', [])
@@ -281,7 +287,7 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
                 yield f"Running validation command in sandbox: `{cmd}`...\n"
                 try:
                     from lmms.backend.tools.terminal import canonical_terminal_callback
-                    t_res = canonical_terminal_callback(command=cmd, cwd=os.getcwd(), sandboxed=True)
+                    t_res = canonical_terminal_callback(command=cmd, cwd=effective_ws, sandboxed=True)
                     out = t_res.get("output", "")
                     exit_code = t_res.get("exit_code", 0)
                     yield f"  Sandbox Terminal Output (exit code {exit_code}):\n{out}\n"
@@ -334,6 +340,11 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
             yield f"Error: Failed to parse LLM response as JSON. {e}\nResponse was:\n{llm_text}\n"
         except Exception as e:
             yield f"Error during execution: {e}\n"
+        finally:
+            try:
+                files_config.set("workspace_dir", orig_files_ws)
+            except Exception:
+                pass
 
     def write_code(self, task_description: str, files: Optional[List[str]] = None) -> str:
         """Convenience method to run coding agent synchronously on a task."""

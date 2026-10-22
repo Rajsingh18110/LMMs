@@ -37,6 +37,10 @@ class WorktreeSession:
     session_id: str
     is_detached: bool = False
 
+    @property
+    def worktree_path(self) -> str:
+        return self.worktree_dir
+
 
 @dataclass
 class WorktreeStatus:
