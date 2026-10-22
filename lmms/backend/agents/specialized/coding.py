@@ -109,9 +109,8 @@ class CodingAgent(BaseAgent):
             wt_session = None
 
         effective_ws = wt_session.worktree_dir if wt_session else ws
-        from lmms.backend.tools.files import config as files_config
-        orig_files_ws = files_config.get("workspace_dir")
-        files_config.set("workspace_dir", effective_ws)
+        orig_active_ws = os.environ.get("LMMS_ACTIVE_WORKSPACE")
+        os.environ["LMMS_ACTIVE_WORKSPACE"] = effective_ws
 
         files_to_read = set(context.files if context.files else [])
         if context.task:
@@ -347,10 +346,10 @@ Return ONLY valid JSON in this exact format. You can specify code changes using 
         except Exception as e:
             yield f"Error during execution: {e}\n"
         finally:
-            try:
-                files_config.set("workspace_dir", orig_files_ws)
-            except Exception:
-                pass
+            if orig_active_ws is not None:
+                os.environ["LMMS_ACTIVE_WORKSPACE"] = orig_active_ws
+            elif "LMMS_ACTIVE_WORKSPACE" in os.environ:
+                del os.environ["LMMS_ACTIVE_WORKSPACE"]
 
     def write_code(self, task_description: str, files: Optional[List[str]] = None) -> str:
         """Convenience method to run coding agent synchronously on a task."""

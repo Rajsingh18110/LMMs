@@ -21,8 +21,11 @@ config = ConfigManager()
 
 def get_workspace_dir() -> str:
     # Resolve the workspace from the existing LMMs config architecture
+    env_ws = os.environ.get("LMMS_ACTIVE_WORKSPACE")
+    if env_ws and os.path.isdir(env_ws):
+        return env_ws
     ws = config.get("workspace_dir", os.getcwd())
-    base_ws = str(ws) if ws else os.getcwd()
+    base_ws = str(ws) if ws and os.path.isdir(str(ws)) else os.getcwd()
     try:
         from lmms_worktree.manager import default_worktree_manager
         return default_worktree_manager.get_active_workspace(base_ws)
