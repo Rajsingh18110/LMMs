@@ -20,7 +20,7 @@ from lmms_mcp.config import CURATED_TEMPLATES, MCPConfig
 from lmms_mcp.manager import default_mcp_manager
 from lmms_sandbox.policy import PolicyAction
 from lmms_sandbox.runner import default_runner
-from lmms_server.audit import default_audit_logger, redact_secrets
+from lmms_server.audit import default_audit_logger, redact_secrets, AuditLogger
 from lmms_server.protocol import (
     INTERNAL_ERROR,
     INVALID_PARAMS,
@@ -74,10 +74,12 @@ class MethodDispatcher:
         store: Optional[SessionStore] = None,
         compactor: Optional[SessionCompactor] = None,
         mcp_config: Optional[MCPConfig] = None,
+        audit_logger: Optional[AuditLogger] = None,
     ):
         self.store = store or SessionStore()
         self.compactor = compactor or SessionCompactor()
         self.mcp_config = mcp_config or MCPConfig()
+        self.audit_logger = audit_logger or default_audit_logger
         self.pending_permissions: Dict[str, asyncio.Future[bool]] = {}
         self.active_tasks: Dict[str, asyncio.Task[Any]] = {}
         self.session_locks: Dict[str, asyncio.Lock] = {}
@@ -621,7 +623,7 @@ class MethodDispatcher:
             summary = str(res) if status == "success" else err_msg
 
             # Append to cryptographic hash-chained audit log
-            default_audit_logger.log_call(
+            self.audit_logger.log_call(
                 server=server_name,
                 tool=tool_name,
                 arguments=arguments,
@@ -903,7 +905,7 @@ class MethodDispatcher:
         limit = int(params.get("limit", 200))
         offset = int(params.get("offset", 0))
         server = params.get("server")
-        return default_audit_logger.view(limit=limit, offset=offset, server=server)
+        return self.audit_logger.view(limit=limit, offset=offset, server=server)
 
     async def handle_sandbox_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Returns detailed isolation and security status of sandbox backends."""
