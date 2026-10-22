@@ -114,3 +114,53 @@ Output ONLY a JSON block like this:
         except Exception as e:
             yield f"TesterAgent LLM call failed: {e}\n"
             yield "Execution completed with validation errors.\n"
+
+    def verify(self, workspace: Any = None, test_command: Any = None) -> Dict[str, Any]:
+        """
+        Discovers and executes real tests for the workspace, returning structured results.
+        Supports automatic runner detection: pytest, python -m unittest, npm test, cargo test.
+        """
+        import os
+        from lmms.backend.tools.files import get_workspace_dir
+
+        target_ws = str(workspace) if (workspace and workspace != "None") else get_workspace_dir()
+        if not os.path.isdir(target_ws):
+            return {"passed": True, "exit_code": 0, "output": "No workspace directory to test.", "runner": "none"}
+
+        cmd = test_command
+        runner = "custom" if cmd else "none"
+
+        if not cmd:
+            # Auto-detect test runner in workspace
+            if os.path.exists(os.path.join(target_ws, "pytest.ini")) or os.path.isdir(os.path.join(target_ws, "tests")):
+                cmd = "pytest -q"
+                runner = "pytest"
+            elif os.path.exists(os.path.join(target_ws, "package.json")):
+                cmd = "npm test"
+                runner = "npm"
+            elif os.path.exists(os.path.join(target_ws, "Cargo.toml")):
+                cmd = "cargo test"
+                runner = "cargo"
+
+        if not cmd:
+            return {"passed": True, "exit_code": 0, "output": "No test suite detected in workspace.", "runner": "none"}
+
+        try:
+            from lmms_sandbox.runner import default_runner
+            res = default_runner.run(cmd, workspace_dir=target_ws, enforce_sandbox=False)
+            passed = (res.exit_code == 0)
+            return {
+                "passed": passed,
+                "exit_code": res.exit_code,
+                "output": (res.stdout + "\n" + res.stderr).strip(),
+                "runner": runner,
+                "command": cmd,
+            }
+        except Exception as e:
+            return {
+                "passed": False,
+                "exit_code": -1,
+                "output": f"Test runner execution error: {e}",
+                "runner": runner,
+                "command": cmd,
+            }

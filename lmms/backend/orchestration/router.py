@@ -118,7 +118,7 @@ class IntentRouter:
         # Browser automation action patterns
         self._browser_patterns = [
             r"\b(open|navigate\s+to|browse\s+to|visit)\s+(https?://|www\.|this\s+website|the\s+website|webpage|[a-zA-Z0-9.-]+\.(org|com|net|io|edu|gov))\b",
-            r"\b(click\s+(on\s+)?(button|link|element|tab|id|selector))\b",
+            r"\b(click\s+(on\s+)?(the\s+)?([a-zA-Z0-9_-]+\s+)?(button|link|element|tab|id|selector))\b",
             r"\b(fill\s+(in\s+)?(the\s+)?(form|input|field|login|password|email|username))\b",
             r"\b(take\s+(a\s+)?screenshot\b.*)",
             r"\b(scrape|extract\s+data\s+from)\s+(the\s+)?(live\s+)?(website|webpage|page|url|dom)\b",
@@ -126,13 +126,13 @@ class IntentRouter:
             r"https?://[^\s]+",
             # Hinglish & Typos
             r"\b(website|webpage|page)\s+(kholo|open\s+karo)\b.*?\b(browser|dekho)\b",
-            r"\b(browser|brower)\s+me\s+(open|kholo)\b",
+            r"\b(browser|brower)\s+me\s+.*?\b(open|kholo)\b",
             r"\b(opn\s+.*?\s+in\s+brower|brower\s+me)\b",
         ]
 
         # Coding keywords & concepts
         self._coding_patterns = [
-            r"\b(explain|understand|how|write|create|implement|refactor|debug|fix|optimize)\s+.*?\b(python|javascript|typescript|c\+\+|rust|bash|sql|function|class|decorator|decorators|script|algorithm|regex)\b",
+            r"\b(explain|understand|how|write|create|implement|refactor|debug|fix|optimize|check)\s+.*?\b(python|javascript|typescript|c\+\+|rust|bash|sql|function|class|decorator|decorators|script|algorithm|regex|code|router|handler|module|component|endpoint|api|feature)\b",
             r"\b(python|javascript|typescript|c\+\+|rust|bash|sql)\s+(decorator|decorators|generator|concurrency|asyncio|closure|pointer|memory|thread|mro)\b",
             r"\b(quicksort|binary\s+search|singleton\s+pattern|synchronous\s+and\s+asynchronous|interface\s+vs\s+type)\b",
             r"\bdef\s+[a-zA-Z_]\w*\(",
@@ -253,6 +253,28 @@ class IntentRouter:
                     reason="Matched multi-step research or workflow pattern"
                 )
 
+        # 4. Check for discussion of capabilities vs execution
+        # "What is browser automation?" or "Explain how web search works"
+        is_discussion = any(re.search(pat, norm_query) for pat in self._discussion_prefixes)
+        
+        # Check if discussion has an explicit execution clause (e.g. "why my script fails and fix it")
+        has_execution_clause = any(k in norm_query for k in ["fix it", "fix karo", "and fix", "check why and fix", "solve it"])
+        if has_execution_clause:
+            is_discussion = False
+
+        # 5. Check Browser Automation (Action) - Prioritized before current-fact search
+        if not is_discussion:
+            for pattern in self._browser_patterns:
+                if re.search(pattern, norm_query, re.IGNORECASE):
+                    return IntentResult(
+                        intent=IntentType.BROWSER_AUTOMATION,
+                        confidence=0.92,
+                        requires_tools=True,
+                        suggested_categories=["browser"],
+                        task_instructions="The user requested browser navigation or interaction. Inspect the live DOM and interact cleanly.",
+                        reason="Matched browser navigation/automation action"
+                    )
+
         # 3b. Current-fact queries (who is, latest, today, price, weather, news, "currently")
         # Always pre-load web_search to ensure timely real-world accuracy
         current_fact_keywords = [
@@ -268,28 +290,6 @@ class IntentRouter:
                 task_instructions="Search online for current information, latest news, weather, or pricing data.",
                 reason="Matched current-fact query (real-time information request)"
             )
-
-        # 4. Check for discussion of capabilities vs execution
-        # "What is browser automation?" or "Explain how web search works"
-        is_discussion = any(re.search(pat, norm_query) for pat in self._discussion_prefixes)
-        
-        # Check if discussion has an explicit execution clause (e.g. "why my script fails and fix it")
-        has_execution_clause = any(k in norm_query for k in ["fix it", "fix karo", "and fix", "check why and fix", "solve it"])
-        if has_execution_clause:
-            is_discussion = False
-
-        # 5. Check Browser Automation (Action)
-        if not is_discussion:
-            for pattern in self._browser_patterns:
-                if re.search(pattern, norm_query, re.IGNORECASE):
-                    return IntentResult(
-                        intent=IntentType.BROWSER_AUTOMATION,
-                        confidence=0.92,
-                        requires_tools=True,
-                        suggested_categories=["browser"],
-                        task_instructions="The user requested browser navigation or interaction. Inspect the live DOM and interact cleanly.",
-                        reason="Matched browser navigation/automation action"
-                    )
 
         # 6. Check Web Search (Action)
         if not is_discussion:
@@ -327,6 +327,25 @@ class IntentRouter:
                     task_instructions="Retrieve security vulnerability or tool reference documentation.",
                     reason="Matched security/tool lookup pattern"
                 )
+
+        # Check for explicit code modification actions that must route to CODING rather than generic file ops
+        is_explicit_code_action = any(k in norm_query for k in [
+            "debug", "refactor", "unit test", "syntax error", "fix the bug", "optimize the code",
+            "optimize it", "check the code", "syntax error in", "implement error handling",
+            "error handling", "write unit tests", "fix syntax"
+        ])
+
+        if is_explicit_code_action and not is_discussion:
+            for pattern in self._coding_patterns:
+                if re.search(pattern, norm_query, re.IGNORECASE):
+                    return IntentResult(
+                        intent=IntentType.CODING,
+                        confidence=0.92,
+                        requires_tools=True,
+                        suggested_categories=["files", "terminal"],
+                        task_instructions="Inspect code in workspace, diagnose the issue, and apply tested fixes.",
+                        reason="Matched explicit coding modification action"
+                    )
 
         # 9. Check Workspace / File Operations
         if not is_discussion:

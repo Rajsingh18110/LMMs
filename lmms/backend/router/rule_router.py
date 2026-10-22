@@ -73,6 +73,7 @@ class RuleRouter:
         }
 
         outputs = []
+        last_test_res = None
         for index, step in enumerate(graph.steps, start=1):
             step_name = step.agent_name
             action_type = step.action_type or step_map.get(step_name, "Execute")
@@ -86,10 +87,13 @@ class RuleRouter:
 
                     if isinstance(context, dict):
                         task_desc = context.get("task", "")
+                        ws_path = context.get("workspace")
                     elif getattr(context, "task", None):
                         task_desc = context.task.description
+                        ws_path = getattr(context, "workspace_id", None)
                     else:
                         task_desc = str(context)
+                        ws_path = None
 
                     if step_name == "OrchestratorAgent":
                         status = "planned"
@@ -101,11 +105,12 @@ class RuleRouter:
                     elif step_name == "TesterAgent":
                         from lmms.backend.agents.specialized.tester import TesterAgent
                         tester = TesterAgent()
-                        status = "verified"
+                        last_test_res = tester.verify(workspace=ws_path)
+                        status = "verified: " + ("PASS" if last_test_res.get("passed", True) else f"FAIL (exit {last_test_res.get('exit_code')})")
                     elif step_name == "ReviewerAgent":
                         from lmms.backend.agents.specialized.reviewer import ReviewerAgent
                         reviewer = ReviewerAgent()
-                        rev = reviewer.review(task_description=task_desc)
+                        rev = reviewer.review(task_description=task_desc, test_results=last_test_res, workspace=ws_path)
                         status = "reviewed: " + rev.get("status", "PASS")
                     elif step_name == "GitAgent":
                         from lmms.backend.agents.specialized.git import GitAgent

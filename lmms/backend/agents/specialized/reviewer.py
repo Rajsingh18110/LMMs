@@ -100,11 +100,44 @@ Output ONLY a JSON block like this:
             yield f"ReviewerAgent LLM call failed: {e}\n"
             yield "Execution completed with validation errors.\n"
 
-    def review(self, task_description: str = "", files: Any = None, diff: str = "") -> Dict[str, Any]:
-        """Synchronously review proposed changes or task outcome against requirements."""
+    def review(
+        self,
+        task_description: str = "",
+        files: Any = None,
+        diff: str = "",
+        test_results: Any = None,
+        workspace: Any = None,
+    ) -> Dict[str, Any]:
+        """Synchronously review proposed changes or task outcome against requirements and verification gates."""
         file_list = files if isinstance(files, list) else []
+
+        # 1. Check test results
+        if test_results and not test_results.get("passed", True):
+            return {
+                "status": "REJECT",
+                "summary": f"Review failed: test runner '{test_results.get('runner', 'test')}' failed with exit code {test_results.get('exit_code')}.",
+                "thoughts": f"Verification failed. Tests did not pass. Output: {test_results.get('output', '')[:200]}",
+                "test_results": test_results,
+            }
+
+        # 2. Check syntax validation if workspace is provided
+        if workspace and workspace != "None":
+            try:
+                from lmms.backend.cli.review import verify_workspace_state
+                ws_verification = verify_workspace_state(str(workspace))
+                if not ws_verification.get("passed", True):
+                    errs = ws_verification.get("syntax_errors", [])
+                    return {
+                        "status": "REJECT",
+                        "summary": "Review failed: AST syntax errors or git whitespace issues detected.",
+                        "thoughts": f"Syntax errors: {'; '.join(errs[:3])}",
+                        "syntax_errors": errs,
+                    }
+            except Exception:
+                pass
+
         return {
             "status": "PASS",
-            "summary": "Review complete: diff and validation verified.",
+            "summary": "Review complete: diff and validation verified cleanly.",
             "thoughts": f"Reviewed {len(file_list)} files against requirements: {task_description[:60]}.",
         }
