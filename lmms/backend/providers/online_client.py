@@ -205,20 +205,22 @@ class OnlineModelClient:
                             delta_obj = {}
                             if reasoning:
                                 delta_obj["reasoning_content"] = reasoning
-                                text_to_emit = reasoning
+                                # Keep internal reasoning isolated so it never leaks into user chat
+                                text_to_emit = ""
                             if content:
                                 delta_obj["content"] = content
                                 text_to_emit = content
-                            elif not reasoning and "content" in d:
+                            elif not reasoning and not content and "content" in d:
                                 text_to_emit = d.get("content", "")
                                 delta_obj["content"] = text_to_emit
 
-                            # Yield dual-compatible SSE chunk
-                            norm_chunk = {
-                                "content": text_to_emit,
-                                "choices": [{"delta": delta_obj}]
-                            }
-                            yield f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8")
+                            # Yield dual-compatible SSE chunk (only emit if there is actual content)
+                            if text_to_emit or reasoning:
+                                norm_chunk = {
+                                    "content": text_to_emit,
+                                    "choices": [{"delta": delta_obj}]
+                                }
+                                yield f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8")
                         except Exception:
                             yield line + b"\n"
                     else:

@@ -19,8 +19,8 @@ WEB_SEARCH_TOOL = ToolDefinition(
             },
             "num_results": {
                 "type": "integer",
-                "default": 5,
-                "description": "Number of results"
+                "default": 24,
+                "description": "Number of results to retrieve (up to 24)"
             }
         },
         "required": ["query"]
@@ -118,7 +118,7 @@ SOCIAL_SEARCH_TOOL = ToolDefinition(
 async def execute_web_search(params: dict) -> ToolResult:
     # Uses duckduckgo-search package for primary
     query = params.get("query", "")
-    num = params.get("num_results", 5)
+    num = params.get("num_results", 24)
     try:
         from duckduckgo_search import DDGS
         results = []

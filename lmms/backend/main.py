@@ -233,6 +233,34 @@ def auto_start_engine() -> bool:
 
     return check_engine_health()
 
+def stop_local_engine():
+    """Stops the local inference engine daemon to free 100% RAM & GPU VRAM."""
+    try:
+        requests.post("http://127.0.0.1:11435/v1/internal/shutdown", timeout=1.5)
+    except Exception:
+        pass
+    try:
+        import subprocess
+        subprocess.run(["pkill", "-f", "llama-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "lmms-engine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+def get_clean_model_display_name(model_key_or_name: str) -> str:
+    """Returns a readable model name (e.g. 'nvidia/nemotron-3.5-super-vl-120b-a12b') instead of internal registry key."""
+    if not model_key_or_name or model_key_or_name == "None":
+        return "None"
+    try:
+        from lmms.backend.core.registry.online_models import OnlineModelRegistry
+        m = OnlineModelRegistry.get_model(model_key_or_name)
+        if m:
+            return m.get("id") or m.get("name") or model_key_or_name
+    except Exception:
+        pass
+    return model_key_or_name
+
+
 async def ipc_handshake():
     token = os.environ.get("LMMS_INTERNAL_TOKEN")
     if not token:
@@ -668,15 +696,22 @@ def run_cli():
             time.sleep(5)
             
 
-    engine_started = auto_start_engine()
-    if engine_started and os.environ.get("LMMS_INTERNAL_TOKEN"):
-        asyncio.run(ipc_handshake())
-        
-    status = "[bold green]ONLINE[/bold green]" if check_engine_health() else "[bold red]OFFLINE[/bold red]"
-    
-    if check_engine_health():
-        t = threading.Thread(target=cli_heartbeat, daemon=True)
-        t.start()
+    from lmms.backend.core.registry.online_models import OnlineModelRegistry
+    is_online_active = (OnlineModelRegistry.get_active_type() == "online" and OnlineModelRegistry.get_active_model() is not None)
+
+    if is_online_active:
+        active_online = OnlineModelRegistry.get_active_model()
+        current_model = active_online.get("key")
+        status = "[bold cyan]ONLINE (CLOUD)[/bold cyan]"
+        stop_local_engine()
+    else:
+        engine_started = auto_start_engine()
+        if engine_started and os.environ.get("LMMS_INTERNAL_TOKEN"):
+            asyncio.run(ipc_handshake())
+        status = "[bold green]ONLINE[/bold green]" if check_engine_health() else "[bold red]OFFLINE[/bold red]"
+        if check_engine_health():
+            t = threading.Thread(target=cli_heartbeat, daemon=True)
+            t.start()
 
     
     # State tracking
@@ -771,7 +806,7 @@ def run_cli():
     orchestration_pipeline = OrchestrationPipeline(engine_url=ENGINE_URL)
     orchestration_pipeline.executor.register_handler(
         "web_search",
-        lambda **kwargs: web_search(kwargs.get("query", ""), kwargs.get("max_results", 5))
+        lambda **kwargs: web_search(kwargs.get("query", ""), kwargs.get("max_results", 24))
     )
     orchestration_pipeline.executor.register_handler(
         "browser.open_url",
@@ -1249,13 +1284,20 @@ def run_cli():
     _cached_engine_health = [check_engine_health()]
 
     def get_bottom_toolbar():
-        is_online = _cached_engine_health[0]
-        status_color = "ansigreen" if is_online else "ansired"
-        status_text = "ONLINE" if is_online else "OFFLINE"
+        from lmms.backend.core.registry.online_models import OnlineModelRegistry
+        is_cloud_active = (OnlineModelRegistry.get_active_type() == "online")
+        if is_cloud_active:
+            status_color = "ansicyan"
+            status_text = "ONLINE (CLOUD)"
+        else:
+            is_online = _cached_engine_health[0]
+            status_color = "ansigreen" if is_online else "ansired"
+            status_text = "ONLINE" if is_online else "OFFLINE"
         
+        display_m = get_clean_model_display_name(current_model)
         return HTML(
             f' <ansigray>Engine:</ansigray> <{status_color}>{status_text}</{status_color}> │ '
-            f'<ansigray>Model:</ansigray> <ansigreen>{current_model}</ansigreen> │ '
+            f'<ansigray>Model:</ansigray> <ansigreen>{display_m}</ansigreen> │ '
             f'<ansigray>Mode:</ansigray> <ansicyan>{current_mode}</ansicyan> │ '
             f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
             f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> │ '
@@ -2021,6 +2063,9 @@ def run_cli():
                     if sel:
                         selected_offline = offline_models[int(sel)-1]
                         try:
+                            if not check_engine_health():
+                                console.print("[dim cyan]⚡ Starting local offline engine daemon...[/dim cyan]")
+                                auto_start_engine()
                             with console.status(f"[bold cyan]Loading {selected_offline}... (Press Ctrl+C to cancel)[/bold cyan]", spinner="dots"):
                                 r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_offline}, timeout=180)
                             if r.status_code == 200:
@@ -2048,6 +2093,8 @@ def run_cli():
                         OnlineModelRegistry.set_active_model(chosen_online.get("key"), "online")
                         current_model = chosen_online.get("key")
                         console.print(f"[bold green]✓ Active model switched to: [Online] {chosen_online.get('name')}[/bold green]")
+                        stop_local_engine()
+                        console.print("[dim green]⚡ Local offline engine stopped to free 100% RAM & GPU VRAM.[/dim green]")
 
                 elif cat_choice == "3":
                     if bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
@@ -2427,11 +2474,11 @@ def run_cli():
                     # Calculate iteration limits based on verified token budget
                     avg_iter_cost = 600
                     max_possible = max(1, budget.remaining_tokens // avg_iter_cost)
-                    MIN_ITERATIONS = 5
+                    MIN_ITERATIONS = 24
                     if current_mode == "/fast":
-                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 10))
+                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 24))
                     else:
-                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 30))
+                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 40))
 
                     iter_count = 0
                 except Exception as e:
@@ -2693,7 +2740,7 @@ def run_cli():
                                                 first_token = True
                                                 if not voice_mode_active:
                                                     spin_status.stop()
-                                                    console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                                                    console.print(f"\n[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
                                                     live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
                                                     live_view.start()
                                                 
@@ -2863,7 +2910,7 @@ def run_cli():
                                 })
                                 continue
 
-                            if t_name in ("web_search", "browser.open_url") and search_tool_count > 5:
+                            if t_name in ("web_search", "browser.open_url") and search_tool_count > 24:
                                 console.print(f"\n[dim green]✓ Sufficient web information gathered. Proceeding to answer...[/dim green]")
                                 final_ans = clean_text_before_tool if len(clean_text_before_tool) > 50 else full_reply
                                 final_ans = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", final_ans, flags=re.DOTALL).strip()
@@ -3229,7 +3276,7 @@ def run_cli():
                         vsession.stop_animation()
                         
                         # Print the final reply natively so the user can read it (clean, no think tags)
-                        console.print(f"\n[bold cyan]Model : {current_model}[/bold cyan]")
+                        console.print(f"\n[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
                         console.print(Markdown(final_text_to_print))
                     except Exception:
                         pass

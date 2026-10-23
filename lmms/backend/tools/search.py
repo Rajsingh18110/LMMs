@@ -3,13 +3,13 @@ from lmms.backend.tools.core import default_registry, default_executor, ToolDefi
 from lmms.backend.tools.search_provider import DDGSSearchProvider
 
 # Register the structured canonical tool
-def canonical_search_callback(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+def canonical_search_callback(query: str, max_results: int = 24) -> List[Dict[str, Any]]:
     provider = DDGSSearchProvider()
     return provider.search(query, max_results=max_results)
 
 default_registry.register(ToolDefinition(
     name="web.search",
-    description="Search the web using a search provider.",
+    description="Search the web using a search provider (supports deep scraping up to 24 results).",
     category="web",
     parameters={"query": "str", "max_results": "int"},
     permissions=[Permission.WEB_SEARCH],
@@ -19,7 +19,7 @@ default_registry.register(ToolDefinition(
 ))
 
 # Legacy backward-compatibility adapter
-def web_search(query: str, max_results: int = 5) -> str:
+def web_search(query: str, max_results: int = 24) -> str:
     """
     Legacy search interface that returns formatted strings.
     This delegates execution to the canonical ToolExecutor to enforce permissions and structure.
@@ -35,7 +35,7 @@ def web_search(query: str, max_results: int = 5) -> str:
         return "No results found."
         
     formatted = []
-    for r in data:
-        formatted.append(f"Title: {r.get('title', '')}\nURL: {r.get('url', '')}\nSummary: {r.get('snippet', '')}\n")
+    for idx, r in enumerate(data, 1):
+        formatted.append(f"[{idx}] Title: {r.get('title', '')}\nURL: {r.get('url', '')}\nSummary: {r.get('snippet', '')}\n")
         
     return "\n---\n".join(formatted)

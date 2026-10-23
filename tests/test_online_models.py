@@ -95,3 +95,43 @@ def test_nvidia_nim_preset():
     assert "nvidia" in PROVIDER_PRESETS
     assert PROVIDER_PRESETS["nvidia"]["base_url"] == "https://integrate.api.nvidia.com/v1"
     assert "nvidia/nemotron-3.5-super-vl-120b-a12b" in PROVIDER_PRESETS["nvidia"]["models"]
+
+
+def test_clean_model_display_name(tmp_path, monkeypatch):
+    test_cfg = str(tmp_path / "online_models.json")
+    monkeypatch.setattr("lmms.backend.core.registry.online_models.ONLINE_MODELS_FILE", test_cfg)
+
+    from lmms.backend.main import get_clean_model_display_name
+
+    # Unregistered key returns itself
+    assert get_clean_model_display_name("unknown:key") == "unknown:key"
+    assert get_clean_model_display_name(None) == "None"
+
+    # Add a model and check clean name
+    key = OnlineModelRegistry.add_model(
+        name="NVIDIA Nemotron 3.5 Super VL",
+        provider_id="nvidia",
+        provider_name="NVIDIA NIM",
+        model_id="nvidia/nemotron-3.5-super-vl-120b-a12b",
+        p_type="openai_compatible",
+        base_url="https://integrate.api.nvidia.com/v1",
+        api_key="nvapi-test",
+        category="global",
+        set_active=True
+    )
+
+    clean_name = get_clean_model_display_name(key)
+    assert clean_name == "nvidia/nemotron-3.5-super-vl-120b-a12b"
+
+
+def test_search_provider_depth():
+    from lmms.backend.tools.search_provider import DDGSSearchProvider
+    provider = DDGSSearchProvider()
+    results = provider.search("Linux operating system", max_results=24)
+    assert isinstance(results, list)
+    assert len(results) > 0
+    assert len(results) <= 24
+    for r in results:
+        assert "title" in r
+        assert "url" in r
+        assert "snippet" in r

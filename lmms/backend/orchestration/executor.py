@@ -89,7 +89,7 @@ class UnifiedToolExecutor:
         # 3. Web search
         try:
             from lmms.backend.tools.search import canonical_search_callback
-            self.register_handler("web_search", lambda query, max_results=5: canonical_search_callback(query, max_results))
+            self.register_handler("web_search", lambda query, max_results=24: canonical_search_callback(query, max_results))
         except Exception:
             pass
 
