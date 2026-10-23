@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Desktop Studio を標準起動モードに設定 |
 | `lmms set --cli` | Terminal Studio を標準起動モードに設定 |
 | `lmms set --engine` | Engine デーモンを標準起動モードに設定 |
-| `lmms stop` | バックグラウンドで動作中のエンジンを正常終了 |
-| `lmms -check` | ハードウェア プロファイルと動作要件を検証 |
-| `lmms update` | 現在のブランチからスマート アップデート |
-| `lmms update --all` | GitHub から全コンポーネントを強制同期 |
+| `lmms stop` | バックグラウンドで動作中の LMMs エンジン デーモンを正常終了 |
 | `lmms --help` | ランチャーのヘルプ メッセージを表示 |
 
 ---
 
-### Engine Runtime & Air Engine
+### エンジン ランタイムとモデル管理 (Engine Runtime & Model Management)
 
 | コマンド | 説明 |
 |---|---|
 | `lmms run <model>` | モデルを対話形式または単発プロンプトで実行 |
+| `lmms stop <model>` | 実行中のアクティブなモデル インスタンスを停止 |
 | `lmms list` | ローカルにダウンロード済みのモデル一覧を表示 |
 | `lmms ps` | 実行中のアクティブ モデルと VRAM 使用状況を表示 |
 | `lmms pull <model>` | Hugging Face や公式ハブからモデルを取得 |
 | `lmms info <model>` | モデルのメタデータ、コンテキスト長、量子化を確認 |
+| `lmms rm <model>` | ローカルに保存されているモデルを削除 |
 | `lmms search <query>` | 利用可能な公開モデル リポジトリを検索 |
 | `lmms benchmark <model>` | 生成速度（トークン/秒）と応答遅延を計測 |
-| `lmms doctor` | エンジン状態と CUDA/GPU ドライバの整合性を診断 |
+| `lmms doctor [--fix]` | エンジンの健全性診断と軽微な問題の自動修復、CUDA/ドライバ検証 |
 | `lmms create <model> -f <file>` | GGUF またはマニフェストからカスタム モデルを登録 |
+
+---
+
+### Air Engine (インテリジェントな RAM/VRAM スワップ機構)
+
+GPU、CPU、ディスク間の動的多層オフロードにより、物理 VRAM を超える巨大モデルを実行。
+
+| コマンド | 説明 |
+|---|---|
 | `lmms -air run <model> [prompt]` | AirEngine による多層オフロードで超巨大モデルを実行 |
 | `lmms --air run <m1> <m2>` | Air スケジューラを通じて複数モデルを同時実行 |
 | `lmms air ps` | Air セッション中のモデル層配置と GPU/CPU 状況を表示 |

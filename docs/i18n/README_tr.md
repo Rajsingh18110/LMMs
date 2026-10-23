@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Masaüstü Stüdyosunu varsayılan başlatma modu yap |
 | `lmms set --cli` | Terminal Stüdyosunu varsayılan başlatma modu yap |
 | `lmms set --engine` | Motor Daemon'ını varsayılan başlatma modu yap |
-| `lmms stop` | Arka planda çalışan LMMs motorunu güvenle durdur |
-| `lmms -check` | Donanım profilini ve çalışma gereksinimlerini doğrula |
-| `lmms update` | Mevcut Git dalından akıllı güncelleme yap |
-| `lmms update --all` | GitHub'dan tüm bileşenleri zorunlu güncelle |
+| `lmms stop` | Arka planda çalışan LMMs motoru arka plan hizmetini güvenle durdur |
 | `lmms --help` | Kapsamlı başlatıcı yardım kılavuzunu görüntüle |
 
 ---
 
-### Engine Runtime & Air Engine
+### Motor Çalışma Zamanı ve Model Yönetimi
 
 | Komut | Açıklama |
 |---|---|
 | `lmms run <model>` | Modeli etkileşimli sohbette veya tekli istemde çalıştır |
+| `lmms stop <model>` | Çalışan aktif bir model örneğini durdur |
 | `lmms list` | Yerel olarak indirilmiş modelleri listele |
 | `lmms ps` | Çalışan modelleri, bellek dağılımını ve VRAM durumunu göster |
 | `lmms pull <model>` | Hugging Face veya resmi Model Hub'dan model indir |
 | `lmms info <model>` | Model meta verilerini, bağlam penceresini ve kuantizasyonu incele |
+| `lmms rm <model>` | Yerel olarak depolanan bir modeli sil |
 | `lmms search <query>` | İndirilebilir açık kaynaklı model depolarında arama yap |
 | `lmms benchmark <model>` | Belirteç üretim hızını (token/s) ve yanıt gecikmesini ölç |
-| `lmms doctor` | Motor sağlığını denetle ve CUDA sürücü durumunu teşhis et |
+| `lmms doctor [--fix]` | Sağlık denetimi, küçük sorunları otomatik onarma ve CUDA/sürücü doğrulama |
 | `lmms create <model> -f <file>` | GGUF veya Safetensors dosyasından özel model kaydı oluştur |
+
+---
+
+### Air Engine (Akıllı RAM/VRAM Takası)
+
+Dinamik katmanlı hibrit GPU/CPU/Disk tensör aktarımı kullanarak fiziksel VRAM'i aşan dev modelleri çalıştırın.
+
+| Komut | Açıklama |
+|---|---|
 | `lmms -air run <model> [prompt]` | Air hibrit bellek aktarımıyla devasa modelleri çalıştır |
 | `lmms --air run <m1> <m2>` | Air zamanlayıcı ile birden fazla modeli aynı anda çalıştır |
 | `lmms air ps` | Aktif Air oturumlarını ve GPU/CPU katman dağılımını izle |

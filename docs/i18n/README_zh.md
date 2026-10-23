@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | 将桌面 GUI 设置为系统默认启动模式 |
 | `lmms set --cli` | 将终端 CLI 设置为系统默认启动模式 |
 | `lmms set --engine` | 将推理引擎设置为系统默认启动模式 |
-| `lmms stop` | 优雅停止在后台运行的 LMMs 引擎服务 |
-| `lmms -check` | 执行硬件配置配置文件及运行依赖校验 |
-| `lmms update` | 从当前 Git 分支智能拉取代码更新 |
-| `lmms update --all` | 从 GitHub 强制拉取并更新所有子分支 |
+| `lmms stop` | 优雅停止正在后台运行的 LMMs 引擎守护进程 |
 | `lmms --help` | 打印启动器的完整帮助文档 |
 
 ---
 
-### Engine Runtime & Air Engine
+### 引擎运行时与模型管理 (Engine Runtime & Model Management)
 
 | 命令 | 描述 |
 |---|---|
 | `lmms run <model>` | 在交互式会话或单次评估中运行指定模型 |
+| `lmms stop <model>` | 停止指定正在运行的模型实例 |
 | `lmms list` | 查看本地已下载的大语言模型清单 |
 | `lmms ps` | 展示当前活跃模型、显存占用与资源分配 |
 | `lmms pull <model>` | 从 Hugging Face 或官方模型库高速下载模型 |
 | `lmms info <model>` | 查看模型的元数据、上下文长度与量化规格 |
+| `lmms rm <model>` | 删除本地已下载存储的模型文件 |
 | `lmms search <query>` | 搜索云端可下载的开源模型仓库 |
 | `lmms benchmark <model>` | 基准测试推理速度 (token/秒) 与首字延迟 |
-| `lmms doctor` | 诊断推理引擎健康状态与 CUDA 驱动环境 |
+| `lmms doctor [--fix]` | 诊断引擎健康状态并自动修复微小问题，验证 CUDA 与显卡驱动 |
 | `lmms create <model> -f <file>` | 根据 GGUF、Safetensors 或清单文件注册新模型 |
+
+---
+
+### Air Engine (智能内存 / 显存分层交换调度)
+
+借助智能内存交换和动态多级 GPU/CPU/磁盘张量卸载，运行远超物理显存的大型模型。
+
+| 命令 | 描述 |
+|---|---|
 | `lmms -air run <model> [prompt]` | 借助 AirEngine 内存分层技术运行超大规模模型 |
 | `lmms --air run <m1> <m2>` | 通过 Air 调度器并行加载并运行多个大模型 |
 | `lmms air ps` | 监控 Air 会话的模型层分配及 GPU/CPU 调度 |

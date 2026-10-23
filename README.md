@@ -284,33 +284,41 @@ When running `lmms install`, LMMs launches an interactive, terminal-guided archi
 | `lmms set --gui` | Set Desktop Studio as the default launch mode |
 | `lmms set --cli` | Set Terminal Studio as the default launch mode |
 | `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
+| `lmms stop` | Gracefully stop active background LMMs engine daemon |
 | `lmms --help` | Show comprehensive launcher help |
 
 ---
 
-### Engine Runtime & Air Engine
+### Engine Runtime & Model Management
 
 | Command | Description |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
+| `lmms run <model>` | Start / inference a model in interactive chat or single-shot evaluation |
+| `lmms stop <model>` | Stop an active running model instance |
+| `lmms list` | List all locally installed models |
+| `lmms ps` | List currently running models, allocation state, and VRAM |
+| `lmms pull <model>` | Download a model from Hugging Face / Model Hub |
+| `lmms info <model>` | Show detailed metadata for a model, context window, and quantization |
+| `lmms rm <model>` | Delete a locally stored model |
+| `lmms search <query>` | Search Hugging Face and available model repositories |
+| `lmms benchmark <model>` | Test speed (t/s), load time, latency, and VRAM/RAM usage |
+| `lmms doctor [--fix]` | Health check and auto-fix minor issues, verify CUDA & drivers |
 | `lmms create <model> -f <file>` | Create custom model entry from GGUF, Safetensors, or manifest |
-| `lmms -air run <model> [prompt]` | Run ultra-large models with Air dynamic hybrid GPU/CPU/Disk offloading |
+
+---
+
+### Air Engine (Intelligent RAM/VRAM Swapping)
+
+Run massive models that exceed physical VRAM using dynamic layer-wise hybrid GPU/CPU/Disk tensor offloading.
+
+| Command | Description |
+|---|---|
+| `lmms -air run <model> [prompt]` | Run a single heavy model in Air dynamic offloading mode |
 | `lmms --air run <m1> <m2>` | Run multiple concurrent models through the Air scheduler |
-| `lmms air ps` | Display active Air session models and GPU/CPU layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air cache` | View Air disk cache directory size and storage utilization |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms air ps` | Show which models are active in the Air session and layer allocation |
+| `lmms air stats` | View real-time swapping, RAM, VRAM, and load telemetry metrics |
+| `lmms air cache` | View Air disk cache status and storage utilization |
+| `lmms air unload` | Unload all models from Air Engine and immediately flush VRAM/RAM cache |
 | `lmms air benchmark <model>` | Benchmark execution throughput under the Air offload scheduler |
 
 ---

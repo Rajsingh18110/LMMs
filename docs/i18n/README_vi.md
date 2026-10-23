@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Thiết lập Desktop Studio làm chế độ khởi động mặc định |
 | `lmms set --cli` | Thiết lập Terminal Studio làm chế độ khởi động mặc định |
 | `lmms set --engine` | Thiết lập Engine Daemon làm chế độ khởi động mặc định |
-| `lmms stop` | Dừng an toàn dịch vụ động cơ LMMs đang chạy ngầm |
-| `lmms -check` | Kiểm tra hồ sơ phần cứng và các thư viện phụ thuộc |
-| `lmms update` | Cập nhật thông minh từ nhánh Git hiện tại |
-| `lmms update --all` | Bắt buộc cập nhật toàn bộ từ kho GitHub |
+| `lmms stop` | Dừng an toàn dịch vụ daemon động cơ LMMs đang chạy ngầm |
 | `lmms --help` | Hiển thị trợ giúp chi tiết về trình khởi chạy |
 
 ---
 
-### Engine Runtime & Air Engine
+### Môi Trường Thực Thi và Quản Lý Mô Hình
 
 | Lệnh | Mô tả |
 |---|---|
 | `lmms run <model>` | Chạy mô hình trong phiên trò chuyện hoặc câu lệnh đơn |
+| `lmms stop <model>` | Dừng một phiên bản mô hình đang hoạt động |
 | `lmms list` | Liệt kê danh sách các mô hình đã tải về máy |
 | `lmms ps` | Xem các mô hình đang hoạt động và dung lượng VRAM chiếm dụng |
 | `lmms pull <model>` | Tải mô hình từ Hugging Face hoặc Model Hub chính thức |
 | `lmms info <model>` | Xem thông số siêu dữ liệu, độ dài ngữ cảnh và mức lượng tử |
+| `lmms rm <model>` | Xóa một mô hình được lưu trữ cục bộ |
 | `lmms search <query>` | Tìm kiếm các kho lưu trữ mô hình mã nguồn mở |
 | `lmms benchmark <model>` | Đo tốc độ tạo token (t/s) và độ trễ phản hồi |
-| `lmms doctor` | Chẩn đoán tình trạng động cơ và trình điều khiển CUDA/GPU |
+| `lmms doctor [--fix]` | Kiểm tra sức khỏe động cơ, tự động sửa lỗi nhỏ và xác minh CUDA |
 | `lmms create <model> -f <file>` | Đăng ký mô hình tùy chỉnh từ tệp GGUF hoặc Safetensors |
+
+---
+
+### Air Engine (Chuyển Đổi Thông Minh RAM/VRAM)
+
+Chạy các mô hình siêu lớn vượt quá dung lượng VRAM vật lý nhờ công nghệ luân chuyển dữ liệu động giữa GPU/CPU/Ổ đĩa.
+
+| Lệnh | Mô tả |
+|---|---|
 | `lmms -air run <model> [prompt]` | Chạy mô hình siêu lớn nhờ cơ chế chia tầng bộ nhớ AirEngine |
 | `lmms --air run <m1> <m2>` | Chạy đồng thời nhiều mô hình qua bộ lập lịch Air |
 | `lmms air ps` | Theo dõi phiên Air và sự phân bổ các tầng mô hình trên GPU/CPU |

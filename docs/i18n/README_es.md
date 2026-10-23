@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Establecer Desktop Studio como modo de inicio por defecto |
 | `lmms set --cli` | Establecer Terminal Studio como modo de inicio por defecto |
 | `lmms set --engine` | Establecer Engine Daemon como modo de inicio por defecto |
-| `lmms stop` | Detener de forma segura el motor LMMs en ejecución |
-| `lmms -check` | Comprobar el perfil de hardware y dependencias del sistema |
-| `lmms update` | Actualización inteligente desde la rama Git activa |
-| `lmms update --all` | Forzar la actualización completa desde GitHub |
+| `lmms stop` | Detener de forma segura el demonio del motor LMMs en segundo plano |
 | `lmms --help` | Mostrar la ayuda completa del lanzador |
 
 ---
 
-### Engine Runtime & Air Engine
+### Runtime del Motor y Gestión de Modelos
 
 | Comando | Descripción |
 |---|---|
 | `lmms run <model>` | Ejecutar modelo en chat interactivo o evaluación directa |
+| `lmms stop <model>` | Detener una instancia activa del modelo en ejecución |
 | `lmms list` | Listar los modelos descargados localmente |
 | `lmms ps` | Mostrar modelos en ejecución, asignación y estado de VRAM |
 | `lmms pull <model>` | Descargar modelo desde Hugging Face o el Model Hub oficial |
 | `lmms info <model>` | Inspeccionar metadatos del modelo, ventana de contexto y cuantización |
+| `lmms rm <model>` | Eliminar un modelo almacenado localmente |
 | `lmms search <query>` | Buscar en los repositorios de modelos disponibles |
 | `lmms benchmark <model>` | Medir velocidad de generación (tokens/s) y latencia |
-| `lmms doctor` | Comprobar el estado del motor y diagnosticar drivers CUDA/GPU |
+| `lmms doctor [--fix]` | Diagnóstico de salud, autorreparación de fallos menores y verificación de CUDA |
 | `lmms create <model> -f <file>` | Registrar modelo personalizado desde GGUF, Safetensors o manifiesto |
+
+---
+
+### Air Engine (Intercambio Inteligente de RAM/VRAM)
+
+Ejecute modelos masivos que superan la VRAM física mediante descarga dinámica híbrida de GPU/CPU/Disco.
+
+| Comando | Descripción |
+|---|---|
 | `lmms -air run <model> [prompt]` | Ejecutar modelos gigantes mediante descarga dinámica AirEngine |
 | `lmms --air run <m1> <m2>` | Ejecutar varios modelos simultáneamente con el planificador Air |
 | `lmms air ps` | Ver sesiones Air activas y distribución de capas en GPU/CPU |

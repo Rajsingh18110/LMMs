@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Menetapkan Desktop Studio sebagai mode luncur default |
 | `lmms set --cli` | Menetapkan Terminal Studio sebagai mode luncur default |
 | `lmms set --engine` | Menetapkan Engine Daemon sebagai mode luncur default |
-| `lmms stop` | Menghentikan mesin LMMs yang berjalan di latar belakang |
-| `lmms -check` | Memverifikasi profil perangkat keras dan dependensi |
-| `lmms update` | Pembaruan cerdas dari cabang Git saat ini |
-| `lmms update --all` | Memaksa pembaruan menyeluruh dari GitHub |
+| `lmms stop` | Menghentikan daemon mesin LMMs yang berjalan di latar belakang |
 | `lmms --help` | Menampilkan panduan bantuan peluncur lengkap |
 
 ---
 
-### Engine Runtime & Air Engine
+### Runtime Mesin dan Manajemen Model
 
 | Perintah | Deskripsi |
 |---|---|
 | `lmms run <model>` | Menjalankan model dalam obrolan interaktif atau prompt tunggal |
+| `lmms stop <model>` | Menghentikan instans model aktif yang sedang berjalan |
 | `lmms list` | Melihat daftar model yang telah diunduh secara lokal |
 | `lmms ps` | Menampilkan model aktif yang berjalan dan status VRAM |
 | `lmms pull <model>` | Mengunduh model dari Hugging Face atau Hub resmi |
 | `lmms info <model>` | Memeriksa metadata model, jendela konteks, dan kuantisasi |
+| `lmms rm <model>` | Menghapus model yang disimpan secara lokal |
 | `lmms search <query>` | Mencari repositori model sumber terbuka yang tersedia |
 | `lmms benchmark <model>` | Mengukur kecepatan pembuatan token (t/s) dan latensi |
-| `lmms doctor` | Memeriksa kesehatan mesin dan mendiagnosis driver CUDA/GPU |
+| `lmms doctor [--fix]` | Pemeriksaan kesehatan, perbaikan otomatis masalah kecil, dan verifikasi CUDA |
 | `lmms create <model> -f <file>` | Mendaftarkan model kustom dari file GGUF atau Safetensors |
+
+---
+
+### Air Engine (Pertukaran Cerdas RAM/VRAM)
+
+Jalankan model raksasa yang melampaui kapasitas VRAM fisik menggunakan offloading hibrida dinamis GPU/CPU/Disk.
+
+| Perintah | Deskripsi |
+|---|---|
 | `lmms -air run <model> [prompt]` | Menjalankan model raksasa dengan offloading dinamis AirEngine |
 | `lmms --air run <m1> <m2>` | Menjalankan beberapa model bersamaan via penjadwal Air |
 | `lmms air ps` | Melihat sesi Air aktif dan distribusi lapisan pada GPU/CPU |

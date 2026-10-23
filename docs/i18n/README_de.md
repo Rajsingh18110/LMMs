@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Desktop Studio als Standard-Startmodus festlegen |
 | `lmms set --cli` | Terminal Studio als Standard-Startmodus festlegen |
 | `lmms set --engine` | Engine Daemon als Standard-Startmodus festlegen |
-| `lmms stop` | Laufende LMMs-Hintergrund-Engine sauber stoppen |
-| `lmms -check` | Hardwareprofil und Systemvoraussetzungen prüfen |
-| `lmms update` | Intelligente Aktualisierung aus aktuellem Zweig |
-| `lmms update --all` | Vollständiges Update von GitHub erzwingen |
+| `lmms stop` | Laufenden LMMs-Hintergrund-Engine-Daemon sauber stoppen |
 | `lmms --help` | Ausführliche Hilfe des Launchers anzeigen |
 
 ---
 
-### Engine Runtime & Air Engine
+### Engine-Laufzeit und Modellverwaltung
 
 | Befehl | Beschreibung |
 |---|---|
 | `lmms run <model>` | Modell im Chat oder für Einzelanfragen ausführen |
+| `lmms stop <model>` | Eine aktive laufende Modellinstanz stoppen |
 | `lmms list` | Lokal heruntergeladene Modelle auflisten |
 | `lmms ps` | Aktive Modelle, Speicherbelegung und VRAM anzeigen |
 | `lmms pull <model>` | Modell von Hugging Face oder dem Modell-Hub laden |
 | `lmms info <model>` | Metadaten, Kontextfenster und Quantisierung prüfen |
+| `lmms rm <model>` | Ein lokal gespeichertes Modell löschen |
 | `lmms search <query>` | Verfügbare Modell-Repositories durchsuchen |
 | `lmms benchmark <model>` | Generierungsgeschwindigkeit (t/s) und Latenz messen |
-| `lmms doctor` | Engine-Zustand prüfen und CUDA/Treiberprobleme diagnostizieren |
+| `lmms doctor [--fix]` | Zustandsprüfung, Autokorrektur kleinerer Probleme und Überprüfung von CUDA |
 | `lmms create <model> -f <file>` | Eigenes Modell aus GGUF, Safetensors oder Manifest registrieren |
+
+---
+
+### Air Engine (Intelligentes RAM/VRAM-Swapping)
+
+Führen Sie riesige Modelle aus, die den physischen VRAM überschreiten, mittels dynamischem Hybrid-Offloading auf GPU/CPU/Festplatte.
+
+| Befehl | Beschreibung |
+|---|---|
 | `lmms -air run <model> [prompt]` | Riesige Modelle mit dynamischem AirEngine-Offloading ausführen |
 | `lmms --air run <m1> <m2>` | Mehrere Modelle gleichzeitig über den Air-Scheduler betreiben |
 | `lmms air ps` | Aktive Air-Modelle und Schichtenverteilung anzeigen |

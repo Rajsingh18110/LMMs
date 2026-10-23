@@ -253,27 +253,35 @@ lmms            # Launch configured interface
 | `lmms set --gui` | Desktop Studio를 기본 실행 모드로 설정 |
 | `lmms set --cli` | Terminal Studio를 기본 실행 모드로 설정 |
 | `lmms set --engine` | Engine Daemon을 기본 실행 모드로 설정 |
-| `lmms stop` | 백그라운드에서 실행 중인 엔진 안전하게 종료 |
-| `lmms -check` | 하드웨어 프로필 및 사전 요구사항 검증 |
-| `lmms update` | 현재 브랜치에서 스마트 업데이트 |
-| `lmms update --all` | GitHub에서 전체 강제 업데이트 |
+| `lmms stop` | 백그라운드에서 실행 중인 LMMs 엔진 데몬을 안전하게 종료 |
 | `lmms --help` | 상세 실행 도움말 표시 |
 
 ---
 
-### Engine Runtime & Air Engine
+### 엔진 런타임 및 모델 관리 (Engine Runtime & Model Management)
 
 | 명령어 | 설명 |
 |---|---|
 | `lmms run <model>` | 대화형 채팅 또는 단일 프롬프트로 모델 실행 |
+| `lmms stop <model>` | 실행 중인 활성 모델 인스턴스 중지 |
 | `lmms list` | 로컬에 다운로드된 모델 목록 표시 |
 | `lmms ps` | 현재 실행 중인 모델 및 VRAM 할당 상태 확인 |
 | `lmms pull <model>` | Hugging Face 또는 공식 허브에서 모델 다운로드 |
 | `lmms info <model>` | 모델 메타데이터, 컨텍스트 길이, 양자화 사양 검사 |
+| `lmms rm <model>` | 로컬에 저장된 모델 파일 삭제 |
 | `lmms search <query>` | 다운로드 가능한 오픈소스 모델 저장소 검색 |
 | `lmms benchmark <model>` | 토큰 생성 속도(t/s) 및 초기 응답 지연 시간 벤치마크 |
-| `lmms doctor` | 엔진 상태 및 CUDA/GPU 드라이버 무결성 진단 |
+| `lmms doctor [--fix]` | 엔진 상태 진단 및 경미한 문제 자동 복구, CUDA 및 드라이버 검증 |
 | `lmms create <model> -f <file>` | GGUF 또는 매니페스트로부터 커스텀 모델 등록 |
+
+---
+
+### Air Engine (지능형 RAM/VRAM 스와핑)
+
+동적 계층별 GPU/CPU/디스크 텐서 오프로딩을 통해 물리적 VRAM을 초과하는 대규모 모델 구동.
+
+| 명령어 | 설명 |
+|---|---|
 | `lmms -air run <model> [prompt]` | AirEngine 메모리 계층화를 통한 초대형 모델 실행 |
 | `lmms --air run <m1> <m2>` | Air 스케줄러를 통한 다중 모델 병렬 실행 |
 | `lmms air ps` | Air 세션의 모델 레이어 배치 및 GPU/CPU 할당 모니터링 |
