@@ -80,10 +80,12 @@ class ContextBuilder:
         # 2b. Web search & information retrieval guidelines
         if "web_search" in instruction_modules or intent_result.intent in (IntentType.WEB_SEARCH, IntentType.TOOL_RESEARCH):
             sections.append(
-                "## Search Rules\n"
+                "## Search & Domain Research Rules\n"
                 "1. Keep search queries specific and focused.\n"
                 "2. Execute at most 1-2 searches. Once observation results are returned, immediately synthesize them into a clear, direct answer for the user.\n"
-                "3. DO NOT repeatedly call web search with slightly different variations if you already have relevant information."
+                "3. DO NOT repeatedly call web search with slightly different variations if you already have relevant information.\n"
+                "4. For domain records, subdomains, or DNS lookups, ALWAYS use `dns.enumerate`. NEVER guess or invent speculative subdomains (e.g. api., docs., mail., app.) with `browser.open_url`.\n"
+                "5. Never present an unverified hypothesis as an observed fact. Only cite confirmed DNS records and verified URLs."
             )
 
         # 3. Multi-step progress rules (only for multi-step workflows)

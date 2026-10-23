@@ -230,6 +230,32 @@ class ToolRegistry:
             aliases=["web.search", "search_web", "google_search"]
         )
 
+        # 1b. DNS Enumeration & Domain Intelligence
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="dns.enumerate",
+                    name="DNS Enumeration",
+                    category="network",
+                    summary="Discover and verify DNS records (A, AAAA, MX, NS, TXT, SOA) and validate active subdomains using authoritative DNS resolvers. Avoids blind HTTP probing.",
+                    tags=["dns", "network", "domain", "subdomain", "records"],
+                    risk_level="low",
+                    estimated_tokens=50
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string", "description": "Target domain name (e.g. 'example.com')"},
+                        "query_type": {"type": "string", "description": "Query scope: 'records', 'subdomains', or 'all'", "default": "all"},
+                        "candidates": {"type": "array", "items": {"type": "string"}, "description": "Optional custom subdomain prefix candidates to validate"}
+                    },
+                    "required": ["domain"]
+                },
+                instruction_module="dns"
+            ),
+            aliases=["dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"]
+        )
+
         # 2. Browser Navigation
         self.register(
             DynamicToolDefinition(

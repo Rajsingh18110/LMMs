@@ -109,6 +109,7 @@ class IntentRouter:
             r"\b(search\s+for\s+the\s+latest\s+.*(documentation|news|feature))\b",
             r"\b(latest\s+(release|version|announcement|docs|news)\s+of)\b",
             r"\b(latest\s+news\s+on|release\s+notes)\b",
+            r"\b(dns|subdomain|subdomains|mx\s+record|nameserver|whois|ns\s+record|txt\s+record)\b",
             # Hinglish & Typos
             r"\b(google|net|online)\s+(pe|par)\s+(dhundo|search|khojo)\b",
             r"\b(serach|sreach)\s+(the\s+web|online|latest|for)\b",

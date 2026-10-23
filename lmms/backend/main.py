@@ -266,9 +266,12 @@ def get_clean_model_display_name(model_key_or_name: str) -> str:
 def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int = 0, max_steps: int = 0):
     """
     Renders sleek, modern, Gemini-inspired timeline tree nodes for tool executions.
-    Pure professional CLI styling without cartoon stickers or bulky boxes.
+    Features connected vertical branches (│ ├──) without cartoon stickers or bulky boxes.
     """
     clean_kwargs = dict(t_kwargs or {})
+
+    # Connected vertical timeline trunk
+    console.print("[dim]  │[/dim]")
 
     if t_name in ("files.write", "file.write", "write_file"):
         path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
@@ -277,44 +280,51 @@ def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int
         line_count = len(lines)
         byte_count = len(content.encode("utf-8")) if content else 0
 
-        console.print(f"  [bold green]●[/bold green] [bold white]Wrote[/bold white] [cyan]{path}[/cyan] [dim]({line_count} lines · {byte_count:,} bytes)[/dim]")
-
-        # Subtle preview of first 3-4 key lines
+        console.print(f"[dim]  ├──[/dim] [bold green]✍️ Writing[/bold green] [cyan]{path}[/cyan] [dim]({line_count} lines · {byte_count:,} bytes)[/dim]")
         if lines:
-            preview = [f"    [dim]│   {l}[/dim]" for l in lines[:3]]
+            preview = [f"[dim]  │   │  {l}[/dim]" for l in lines[:3]]
             if len(lines) > 3:
-                preview.append(f"    [dim]│   ... +{len(lines) - 3} more lines[/dim]")
+                preview.append(f"[dim]  │   │  ... +{len(lines) - 3} more lines[/dim]")
             console.print("\n".join(preview))
 
     elif t_name in ("files.read", "file.read", "read_file"):
         path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
-        console.print(f"  [bold blue]●[/bold blue] [bold white]Read[/bold white] [cyan]{path}[/cyan]")
+        console.print(f"[dim]  ├──[/dim] [bold blue]📄 Reading[/bold blue] [cyan]{path}[/cyan]")
 
     elif t_name in ("files.list", "list_folder"):
         path = clean_kwargs.get("path") or "."
-        console.print(f"  [bold yellow]●[/bold yellow] [bold white]Scanned[/bold white] [cyan]{path}[/cyan]")
+        console.print(f"[dim]  ├──[/dim] [bold yellow]📂 Scanning[/bold yellow] [cyan]{path}[/cyan]")
 
     elif t_name == "terminal.run":
         cmd_str = clean_kwargs.get("command") or clean_kwargs.get("cmd") or ""
-        console.print(f"  [bold magenta]●[/bold magenta] [bold white]Terminal[/bold white] [dim white]$ {cmd_str}[/dim white]")
+        console.print(f"[dim]  ├──[/dim] [bold magenta]💻 Terminal[/bold magenta] [dim white]$ {cmd_str}[/dim white]")
 
     elif t_name in ("patch.apply", "apply_patch"):
         path = clean_kwargs.get("path") or ""
-        console.print(f"  [bold cyan]●[/bold cyan] [bold white]Patched[/bold white] [cyan]{path}[/cyan]")
+        console.print(f"[dim]  ├──[/dim] [bold cyan]⚡ Patching[/bold cyan] [cyan]{path}[/cyan]")
 
-    elif t_name in ("web_search", "browser.open_url"):
-        query = clean_kwargs.get("query") or clean_kwargs.get("url") or ""
-        console.print(f"  [bold cyan]●[/bold cyan] [bold white]Searching[/bold white] [dim]\"{query}\"...[/dim]")
+    elif t_name in ("web_search", "web.search"):
+        query = clean_kwargs.get("query") or clean_kwargs.get("q") or ""
+        console.print(f"[dim]  ├──[/dim] [bold cyan]🔍 Searching[/bold cyan] [white]\"{query}\"[/white]")
+
+    elif t_name in ("browser.open_url", "open_url"):
+        url = clean_kwargs.get("url") or ""
+        console.print(f"[dim]  ├──[/dim] [bold cyan]🌐 Opening URL[/bold cyan] [dim cyan]{url}[/dim cyan]")
+
+    elif t_name in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
+        domain = clean_kwargs.get("domain") or clean_kwargs.get("target") or clean_kwargs.get("host") or ""
+        qtype = clean_kwargs.get("query_type", "all")
+        console.print(f"[dim]  ├──[/dim] [bold cyan]🌐 Resolving DNS[/bold cyan] [white]{domain}[/white] [dim]({qtype})[/dim]")
 
     else:
         filtered = {k: v for k, v in clean_kwargs.items() if k not in ("content", "patch")}
         arg_str = f" [dim]{json.dumps(filtered)}[/dim]" if filtered else ""
-        console.print(f"  [bold cyan]●[/bold cyan] [bold white]{t_name}[/bold white]{arg_str}")
+        console.print(f"[dim]  ├──[/dim] [bold cyan]⚙️ {t_name}[/bold cyan]{arg_str}")
 
 
 def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, max_steps: int = 0):
     """
-    Renders Gemini-style source pills for web searches and clean tree leaves for tool results.
+    Renders Gemini-style connected branches with source pills for web searches and clean tree leaves for tool results.
     Prevents scroll lock and terminal flooding.
     """
     import re
@@ -324,8 +334,8 @@ def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, 
     if not obs_str:
         return
 
-    # Special handling for Web Search: Render Domain Pill Badges (Exactly like Gemini screenshot)
-    if t_name in ("web_search", "browser.open_url"):
+    # Special handling for Web Search / Browser: Render Domain Pill Badges connected to the tree
+    if t_name in ("web_search", "web.search", "browser.open_url", "open_url"):
         urls = re.findall(r'https?://[^\s)\]\'"]+', obs_str)
         domains = []
         for u in urls:
@@ -338,11 +348,22 @@ def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, 
 
         if domains:
             # Rounded pill style in dark slate background: [domain.com]
-            pills = "    " + "  ".join(f"[bold white on #262626]  {d}  [/]" for d in domains[:5])
+            pills = "[dim]  │   [/dim]  " + "  ".join(f"[bold white on #262626]  {d}  [/]" for d in domains[:5])
             console.print(pills)
         else:
-            first_line = obs_str.splitlines()[0][:80]
-            console.print(f"    [dim]└── {first_line}[/dim]")
+            first_line = obs_str.splitlines()[0][:85]
+            console.print(f"[dim]  │   └── {first_line}[/dim]")
+        return
+
+    # DNS tool observation: render verified records / discovered subdomains
+    if t_name in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
+        verified_lines = [l.strip() for l in obs_str.splitlines() if "[VERIFIED]" in l or "• A" in l or "• MX" in l or "• NS" in l or "• TXT" in l]
+        if verified_lines:
+            for vl in verified_lines[:5]:
+                console.print(f"[dim]  │   ├──[/dim] [green]{vl}[/green]")
+        else:
+            first_line = obs_str.splitlines()[0][:85]
+            console.print(f"[dim]  │   └── {first_line}[/dim]")
         return
 
     # For Terminal Run: Show clean 1-2 line summary of output
@@ -352,27 +373,29 @@ def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, 
             summary = lines[0] if len(lines) == 1 else lines[-1]
             if len(summary) > 90:
                 summary = summary[:88] + "..."
-            console.print(f"    [dim green]└── ✓ {summary}[/dim green]")
+            console.print(f"[dim]  │   └── ✓ {summary}[/dim]")
         return
 
     # For File Write:
     if t_name in ("files.write", "file.write", "write_file"):
-        console.print(f"    [dim green]└── ✓ Saved successfully[/dim green]")
+        console.print(f"[dim]  │   └── ✓ Saved successfully[/dim]")
         return
 
     # For File Read / List:
     if t_name in ("files.read", "file.read", "read_file"):
         line_count = len(obs_str.splitlines())
-        console.print(f"    [dim]└── {line_count} lines loaded[/dim]")
+        console.print(f"[dim]  │   └── {line_count} lines loaded[/dim]")
         return
 
     if t_name in ("files.list", "list_folder"):
         items = len(obs_str.splitlines())
-        console.print(f"    [dim]└── Found {items} items[/dim]")
+        console.print(f"[dim]  │   └── Found {items} items[/dim]")
         return
 
     # Generic tool output
     lines = obs_str.splitlines()
+    first_line = lines[0][:85] if lines else obs_str[:85]
+    console.print(f"[dim]  │   └── {first_line}[/dim]")
     first = lines[0][:80] if lines else "Done."
     console.print(f"    [dim]└── {first}[/dim]")
 
@@ -2930,14 +2953,17 @@ def run_cli():
                             )
 
                             # Universal Substantive Answer Delivery Guard (Offline & Online):
-                            # If a duplicate tool is emitted but the model ALREADY synthesized a complete response,
-                            # deliver the completed answer immediately instead of looping into silent failure!
-                            if is_duplicate:
-                                if has_substantive_answer:
+                            # If the model has ALREADY synthesized a comprehensive, structured response
+                            # for an informational search or research query, and attempts further search or
+                            # speculative browsing, deliver the completed answer immediately to prevent
+                            # duplicate outputs and 100s+ timeout delays!
+                            if has_substantive_answer and is_informational_intent:
+                                if is_duplicate or t_name in ("web_search", "web.search", "browser.open_url", "open_url", "dns.enumerate", "dns_enumerate") or not is_action_prompt:
                                     console.print(f"\n[dim green]✓ Substantive response synthesized. Delivering completed answer...[/dim green]")
                                     reply = clean_text_before_tool
                                     break
 
+                            if is_duplicate:
                                 if iter_count >= 2:
                                     console.print(f"\n[dim yellow]⚠️ Model repeated tool call: {t_name}. Providing feedback to advance reasoning...[/dim yellow]")
                                     messages.append({"role": "assistant", "content": full_reply})

@@ -93,6 +93,14 @@ class UnifiedToolExecutor:
         except Exception:
             pass
 
+        # 3b. DNS Enumeration & Domain Intelligence
+        try:
+            from lmms.backend.tools.dns_tool import dns_enumerate
+            for k in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
+                self.register_handler(k, lambda domain, query_type="all", candidates=None: dns_enumerate(domain, query_type=query_type, candidates=candidates))
+        except Exception:
+            pass
+
         # 4. App launcher
         try:
             from lmms.backend.tools.app_launcher import AppLauncherTool
@@ -194,6 +202,17 @@ class UnifiedToolExecutor:
             for k in ["q", "search_query", "keywords", "terms"]:
                 if k in clean_kwargs and "query" not in clean_kwargs:
                     clean_kwargs["query"] = clean_kwargs.pop(k)
+        if normalized_name in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
+            for k in ["target", "host", "hostname", "site", "url"]:
+                if k in clean_kwargs and "domain" not in clean_kwargs:
+                    raw_val = str(clean_kwargs.pop(k)).replace("http://", "").replace("https://", "").split("/")[0].split(":")[0]
+                    clean_kwargs["domain"] = raw_val
+            for k in ["scope", "type", "mode"]:
+                if k in clean_kwargs and "query_type" not in clean_kwargs:
+                    clean_kwargs["query_type"] = clean_kwargs.pop(k)
+            for k in ["subdomains", "wordlist", "candidate_list"]:
+                if k in clean_kwargs and "candidates" not in clean_kwargs:
+                    clean_kwargs["candidates"] = clean_kwargs.pop(k)
         if normalized_name == "app.launch":
             for k in ["application", "app", "app_name", "target"]:
                 if k in clean_kwargs and "app_name_or_target" not in clean_kwargs:

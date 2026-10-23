@@ -35,11 +35,11 @@ class ToolSelector:
             IntentType.GENERAL_KNOWLEDGE: [],
             IntentType.CODING: [],  # By default, coding reasoning needs no tools
             IntentType.WORKSPACE_FILE_OPS: ["files", "terminal"],
-            IntentType.WEB_SEARCH: ["search"],
+            IntentType.WEB_SEARCH: ["search", "network"],
             IntentType.BROWSER_AUTOMATION: ["browser"],
             IntentType.DATA_ANALYSIS: ["terminal"],
-            IntentType.MULTI_STEP_WORKFLOW: ["search", "analysis", "report"],
-            IntentType.TOOL_RESEARCH: ["security", "search"],
+            IntentType.MULTI_STEP_WORKFLOW: ["search", "network", "analysis", "report"],
+            IntentType.TOOL_RESEARCH: ["security", "search", "network"],
         }
 
     def select(

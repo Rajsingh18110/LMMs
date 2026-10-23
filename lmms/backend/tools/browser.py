@@ -2,6 +2,7 @@ import os
 import glob
 import platform
 import re
+from typing import Optional, Dict, Any, List, Tuple
 from playwright.sync_api import sync_playwright
 import time
 import random
@@ -152,18 +153,40 @@ class BrowserTool:
             except Exception as e:
                 print(f"Warning: Failed to save cookies: {e}")
 
+    def _fast_dns_check(self, url: str) -> Optional[str]:
+        """Fast 1.5s DNS pre-validation to avoid blocking Playwright for 30s on non-existent hosts."""
+        try:
+            import urllib.parse
+            import socket
+            parsed = urllib.parse.urlparse(url)
+            host = parsed.hostname
+            if not host or host in ("localhost", "127.0.0.1") or host.endswith(".local"):
+                return None
+            socket.getaddrinfo(host, None)
+            return None
+        except socket.gaierror:
+            return f"DNS resolution failed: Host '{host}' does not exist (NXDOMAIN)."
+        except Exception:
+            return None
+
     def _goto_if_needed(self, url: str):
         if not url: return
+        dns_err = self._fast_dns_check(url)
+        if dns_err:
+            raise RuntimeError(dns_err)
         # Check current URL, ignoring trailing slashes or hash
         current_url = self.page.url.split("#")[0].rstrip("/")
         target_url = url.split("#")[0].rstrip("/")
         if current_url != target_url and current_url != "about:blank":
             try:
-                self.page.goto(url, timeout=30000)
-            except:
-                pass
+                self.page.goto(url, timeout=7000, wait_until="domcontentloaded")
+            except Exception as e:
+                raise RuntimeError(f"Navigation to {url} failed: {e}")
         elif current_url == "about:blank":
-            self.page.goto(url, timeout=30000)
+            try:
+                self.page.goto(url, timeout=7000, wait_until="domcontentloaded")
+            except Exception as e:
+                raise RuntimeError(f"Navigation to {url} failed: {e}")
 
     def close(self):
         self.save_cookies()
@@ -406,6 +429,7 @@ class BrowserTool:
             if url:
                 self._goto_if_needed(url)
             
+            url_before = self.page.url
             sel = str(id if id is not None else selector).strip()
             # If selector is ID number like "1" or "[ID 1]" or 1
             id_match = re.search(r'\b(\d+)\b', sel)
@@ -430,9 +454,11 @@ class BrowserTool:
             else:
                 self.page.click(sel, timeout=7000)
                 
-            self.page.wait_for_timeout(2500)
+            self.page.wait_for_timeout(1500)
             self.save_cookies()
-            return f"[CLICK_SUCCESS] Clicked '{sel}'.\n" + self.get_interactive_dom()
+            url_after = self.page.url
+            nav_status = f" [NAVIGATED -> {url_after}]" if url_after != url_before else ""
+            return f"[CLICK_SUCCESS] Clicked '{sel}'.{nav_status}\n" + self.get_interactive_dom()
         except Exception as e:
             return f"Failed to click element '{selector}': {str(e)}"
 
