@@ -1,20 +1,20 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
 <p align="center">
-  <strong>Bangun dengan model. Kirim dengan agen.</strong><br>
-  <em>Sistem operasi AI lokal berbasis Python oleh Raj Singh (MarkanM)</em>
+  <strong>Bangun dengan model. Rilis dengan agen.</strong><br>
+  <em>Sistem operasi AI lokal berbasis Python murni oleh pendiri Raj Singh (MarkanM)</em>
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -49,12 +49,13 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">Situs Resmi</a> ·
+  <a href="#system-architecture">Arsitektur Sistem</a> ·
+  <a href="#deep-technical-capabilities">Kemampuan Utama</a> ·
   <a href="#quick-start">Mulai Cepat</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">Panduan Arsitektur</a> ·
-  <a href="#enterprise-infrastructure--super-host">Infrastruktur Perusahaan</a> ·
-  <a href="#core-command-reference">Panduan Perintah</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">Panduan Instalasi</a> ·
+  <a href="#enterprise-infrastructure--super-host">Perusahaan</a> ·
+  <a href="#core-command-reference">Referensi Perintah</a> ·
   <a href="#cli-slash-commands">Perintah Slash</a> ·
-  <a href="#product-philosophy">Filosofi</a> ·
   <a href="#license">Lisensi</a>
 </p>
 
@@ -62,17 +63,65 @@
 
 ## Apa itu LMMs OS?
 
-LMMs adalah lapisan operasi AI lokal dan jarak jauh berbasis Python. Diciptakan oleh Raj Singh (MarkanM), sistem ini menggabungkan studio GUI desktop, CLI pintar untuk developer, dan mesin runtime yang andal tanpa telemetri maupun ketergantungan cloud.
+LMMs adalah lapisan operasi AI berbasis Python murni untuk menjalankan model secara lokal dan jarak jauh. Dibuat oleh pendiri Raj Singh (MarkanM), sistem ini memadukan studio GUI desktop nyata, CLI pengembang cerdas, dan mesin inferensi matang agar pengembang dan tim dapat menjalankan model multimodal besar tanpa telemetri dan tanpa ketergantungan cloud.
 
-* 🧠 **Inti Mesin Ganda**: Inferensi cepat GGUF berbasis llama.cpp dan eksekusi presisi safetensors PyTorch.
-* ⚡ **Skalabilitas Tanpa Batas dengan AirEngine**: Offloading dinamis antara GPU, CPU, dan penyimpanan untuk menjalankan model 70B+ di laptop standar.
-* 🖥️ **Studio Desktop (GUI)**: Editor kode Monaco, penampil diff visual, integrasi Git, dan manajemen alat.
-* ⌨️ **Studio Terminal (CLI)**: Shell interaktif dengan lebih dari 30 perintah slash, pair-programming, dan eksekusi sandboxed.
-* 🏢 **Siap untuk Perusahaan**: Kluster server-klien di jaringan pribadi LAN/VPC dengan penemuan host otomatis.
+* **Inti Mesin Ganda Asli**: Inferensi kuantisasi GGUF berkecepatan tinggi via llama.cpp dan eksekusi safetensors asli PyTorch.
+* **Skala Tanpa Batas dengan AirEngine**: Offloading tensor dinamis antara GPU, CPU, dan disk memungkinkan eksekusi model 70B+ di laptop standar.
+* **Studio Desktop (GUI)**: Editor kode Monaco, peninjau diff visual, integrasi Git, dan manajemen alat bawaan.
+* **Studio Terminal (CLI)**: Shell interaktif dengan lebih dari 30 perintah slash, pair programming, orkestrasi sub-agen, dan sandbox aman.
+* **Siap untuk Skala Enterprise**: Kluster klien-server terdistribusi melalui jaringan privat LAN/VPC dengan penemuan host otomatis.
 
 ---
 
-## Mulai Cepat
+## Arsitektur Sistem
+
+Diagram berikut mengilustrasikan arsitektur menyeluruh LMMs OS yang mencakup antarmuka, layanan backend, inferensi model, dan kemampuan agen:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **Antarmuka Pengguna**: `GUI workspace [main_window.py]` (IDE Monaco dan review diff) dan `CLI [commands.py]` (terminal interaktif pengembang).
+2. **API & Lapisan Backend**: `HTTP API [server.py]` (daemon FastAPI di port 11435), `Backend session [main.py]` (koordinator sesi), dan `Backend services [manager.py]`.
+3. **Subsistem Inferensi Model**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (offloading GPU/CPU/Disk), `Model registry [registry.py]`, `mesin llama.cpp` dan `mesin PyTorch`.
+4. **Subsistem Kemampuan Agen**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]` dan `Workspace & Git [manager.py]`.
+
+---
+
+## Kemampuan Teknis Mendalam (Deep Technical Capabilities)
+
+### 1. Mesin Visi Multimodal (`/vision`, `/image`)
+LMMs menyertakan pemrosesan multimodal bawaan langsung di dalam mesin lokal:
+* **Analisis UI dan Tata Letak**: Memeriksa tangkapan layar web atau aplikasi desktop untuk mendeteksi bug visual dan kesalahan perenderan CSS.
+* **Ekstraksi Diagram dan Arsitektur**: Menganalisis diagram alir, skema ER, dan sekuens UML, lalu menerjemahkannya langsung menjadi kode Mermaid.
+* **OCR Dokumen Lokal**: Mengekstrak teks dan tabel dari gambar dan PDF secara lokal tanpa mengirimkan data ke luar.
+
+### 2. Audio dan Suara Offline (`/mic`)
+* **Transkripsi Suara Lokal**: Konversi ucapan ke teks berkecepatan tinggi tanpa internet menggunakan model Whisper kuantisasi lokal.
+* **Prompt Suara Bebas Genggam**: Rekam instruksi pengembangan langsung ke dalam sesi CLI aktif tanpa latensi jaringan.
+
+### 3. Integrasi Git dan Isolasi Worktree (`/git`, `/scope`)
+* **Penjaga Keamanan Hanya Baca**: Membatasi aksi agen ke perintah baca yang aman (`cat`, `git diff`, `grep`) kecuali disetujui secara eksplisit.
+* **Git Worktree Sementara**: Perubahan kode dijalankan pada klon worktree terisolasi dan hanya digabungkan setelah semua pengujian otomatis lulus.
+* **Pratinjau Diff Berwarna**: Setiap perubahan menghasilkan tampilan diff berwarna sebelum ditulis ke media penyimpanan.
+
+### 4. Titik Pemulihan Deterministik dan Rollback Instan (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **Snapshot Berbasis Langkah**: Cadangan permanen file dibuat sebelum operasi modifikasi kode dilakukan.
+* **Rollback dalam Hitungan Milidetik**: Jika patch menimbulkan galat, `/rollback` atau `/undo` mengembalikan proyek ke kondisi semula seketika.
+
+### 5. Sub-Agen Otonom dan Orkestrasi Multi-Agen (`/agent`, `/orchestrate`)
+* **Tugas Latar Belakang Mandiri**: Menjalankan sub-agen dengan alokasi token terpisah dan izin file terbatas untuk eksekusi paralel.
+* **Koordinasi Hierarkis**: Agen utama mendelegasikan tugas khusus (pengujian, dokumentasi, linting) kepada sub-agen lalu menggabungkan hasilnya.
+
+### 6. Riset Lokal dan RAG Vektor (`/research`)
+* **Pengindeksan Semantik Kode**: Mengindeks file proyek ke basis data vektor lokal untuk pencarian semantik kelas dan fungsi.
+* **Dokumentasi Bebas Halusinasi**: Membaca dokumentasi API teknis secara lokal dan web untuk mencegah jawaban rekayasa model.
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -100,9 +149,7 @@ lmms            # Launch configured interface
 
 ---
 
-## Panduan Instalasi Arsitektur (`lmms install`)
-
-Menjalankan `lmms install` akan membuka panduan interaktif di terminal:
+## Panduan Pemasangan Arsitektur (`lmms install`)
 
 ```text
   LMMs Installer · Architecture Setup Wizard
@@ -122,9 +169,7 @@ Menjalankan `lmms install` akan membuka panduan interaktif di terminal:
 
 ---
 
-### [1] Konfigurasi Workstation Pribadi
-
-6 pilihan komponen untuk eksekusi mandiri secara lokal:
+### [1] Konfigurasi Workstation Tunggal
 
 ```text
   ? Select Component Configuration:
@@ -155,8 +200,6 @@ Menjalankan `lmms install` akan membuka panduan interaktif di terminal:
 
 ### [2] Infrastruktur Perusahaan & Super Host
 
-Kluster terdistribusi untuk perusahaan dan tim rekayasa:
-
 ```text
   ? Select Enterprise Infrastructure Role:
 
@@ -168,110 +211,138 @@ Kluster terdistribusi untuk perusahaan dan tim rekayasa:
   ──────────────────────────────────────────────────────────────────────
 ```
 
-* **Komputasi Terpusat**: Server daemon berjalan pada `0.0.0.0:11435` di rak server GPU perusahaan untuk melatih dan menyajikan model kustom.
-* **Klien Jarak Jauh**: Karyawan dapat terhubung langsung dari laptop masing-masing melalui deteksi otomatis di jaringan LAN.
-* **Kedaulatan Data Penuh**: Kode sumber dan data rahasia tidak pernah keluar dari jaringan tertutup perusahaan.
-* **AirEngine Tanpa Batas**: Menghilangkan batasan VRAM dengan streaming lapisan bobot model.
+* **Komputasi Terpusat**: Daemon server berjalan di server GPU perusahaan (`0.0.0.0:11435`) untuk melayani model privat.
+* **Studio Klien Jarak Jauh**: Anggota tim terhubung dari laptop masing-masing melalui penemuan otomatis jaringan LAN/VPC.
+* **Kedaulatan Data Penuh**: Tidak ada kode atau prompt yang keluar dari jaringan pribadi perusahaan.
+* **AirEngine Tanpa Batas RAM**: Aliran dinamis bobot model raksasa melintasi VRAM, RAM, dan penyimpanan NVMe.
 
 ---
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| Perintah | Tujuan | Komponen Sasaran |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | Membuka panduan interaktif pemilihan arsitektur | Menu konfigurasi interaktif |
+| `lmms install --all` | Memasang ekosistem lengkap | Studio Desktop, CLI, Modul Suara, Super Engine |
+| `lmms install --gui` | Memasang Desktop Studio (GUI) | Antarmuka PyQt6, Editor Monaco, Klien mesin |
+| `lmms install --cli` | Memasang Terminal Studio (CLI) | Shell interaktif, alat dev, Klien mesin |
+| `lmms install --engine` | Memasang runtime Super Engine | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | Memasang mesin ringan | llama.cpp + AirEngine (khusus GGUF) |
+| `lmms install --engine2` | Memasang mesin PyTorch asli | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | Memasang daemon server host enterprise | Server terpusat mendengarkan di 0.0.0.0:11435 |
+| `lmms install --client-gui` | Memasang klien GUI enterprise | GUI yang dikonfigurasi untuk terhubung ke host LAN |
+| `lmms install --client-cli` | Memasang klien CLI enterprise | CLI yang dikonfigurasi untuk terhubung ke host LAN |
+| `lmms update` | Mengunduh dan memperbarui kode sumber | Pembaruan cabang Git aktif saat ini |
+| `lmms update --all` | Pembaruan menyeluruh di semua cabang | Sinkronisasi penuh dengan repositori GitHub |
+| `lmms -check` | Diagnostik perangkat keras dan prasyarat | Telemetri CPU, GPU, VRAM, AVX, dan media simpan |
+| `lmms-uninstall -all` | Pencopotan kode sumber secara aman | Menghapus kode, mempertahankan paket pip dan model |
+| `lmms-uninstall -all --purge` | Reset pabrik dan pembersihan total | Menghapus permanen seluruh konfigurasi dan model |
 
 ---
 
-## Panduan Perintah Inti
+## Panduan Referensi Perintah Inti
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| Perintah | Deskripsi |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | Menjalankan antarmuka default yang telah dikonfigurasi |
+| `lmms --gui` | Menjalankan studio desktop GUI secara langsung |
+| `lmms --cli` | Menjalankan shell CLI pengembang secara langsung |
+| `lmms --engine` | Menjalankan daemon mesin inferensi secara langsung |
+| `lmms set --gui` | Menetapkan Desktop Studio sebagai mode luncur default |
+| `lmms set --cli` | Menetapkan Terminal Studio sebagai mode luncur default |
+| `lmms set --engine` | Menetapkan Engine Daemon sebagai mode luncur default |
+| `lmms stop` | Menghentikan mesin LMMs yang berjalan di latar belakang |
+| `lmms -check` | Memverifikasi profil perangkat keras dan dependensi |
+| `lmms update` | Pembaruan cerdas dari cabang Git saat ini |
+| `lmms update --all` | Memaksa pembaruan menyeluruh dari GitHub |
+| `lmms --help` | Menampilkan panduan bantuan peluncur lengkap |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| Perintah | Deskripsi |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | Menjalankan model dalam obrolan interaktif atau prompt tunggal |
+| `lmms list` | Melihat daftar model yang telah diunduh secara lokal |
+| `lmms ps` | Menampilkan model aktif yang berjalan dan status VRAM |
+| `lmms pull <model>` | Mengunduh model dari Hugging Face atau Hub resmi |
+| `lmms info <model>` | Memeriksa metadata model, jendela konteks, dan kuantisasi |
+| `lmms search <query>` | Mencari repositori model sumber terbuka yang tersedia |
+| `lmms benchmark <model>` | Mengukur kecepatan pembuatan token (t/s) dan latensi |
+| `lmms doctor` | Memeriksa kesehatan mesin dan mendiagnosis driver CUDA/GPU |
+| `lmms create <model> -f <file>` | Mendaftarkan model kustom dari file GGUF atau Safetensors |
+| `lmms -air run <model> [prompt]` | Menjalankan model raksasa dengan offloading dinamis AirEngine |
+| `lmms --air run <m1> <m2>` | Menjalankan beberapa model bersamaan via penjadwal Air |
+| `lmms air ps` | Melihat sesi Air aktif dan distribusi lapisan pada GPU/CPU |
+| `lmms air stats` | Memantau telemetri perangkat keras dan metrik offload real-time |
+| `lmms air cache` | Memeriksa kapasitas dan penggunaan cache disk Air |
+| `lmms air unload` | Menurunkan semua model Air dan langsung mengosongkan cache VRAM |
+| `lmms air benchmark <model>` | Mengukur hasil throughput di bawah penjadwal Air |
 
 ---
 
-## Daftar Perintah Slash Interaktif CLI
+### Server / Daemon
 
-| Command | Description |
+| Perintah | Deskripsi |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `lmms server` | Menjalankan daemon server API / Web |
+| `lmms server status` | Memeriksa status server, port, uptime, dan kesehatan |
+| `lmms engine status` | Melihat mode mesin aktif dan penggunaan memori |
+| `lmms engine unload [model]` | Menghapus model dari memori dan membebaskan VRAM |
+| `lmms server start [--port 11435]` | Menjalankan daemon FastAPI di latar belakang pada port pilihan |
+| `lmms server stop` | Menghentikan server yang berjalan di latar belakang |
+
+---
+
+## Perintah Interaktif Slash CLI
+
+| Perintah | Deskripsi |
+|---|---|
+| `/fast` | Beralih ke mode FAST untuk respons cepat dan alat ringan |
+| `/deep` | Beralih ke mode DEEP dengan penalaran mendalam dan alat penuh |
+| `/model <name>` | Mengganti model untuk sesi percakapan aktif saat ini |
+| `/ml -l` | Melihat daftar semua model lokal yang diunduh langsung di obrolan |
+| `/ml -s <name>` | Mengganti model seketika tanpa menghapus riwayat obrolan |
+| `/folder <path>` | Menautkan direktori ke konteks kerja agen |
+| `/code` | Masuk ke mode khusus pembuatan dan pengeditan kode |
+| `/chat` | Melihat dan meninjau riwayat sesi obrolan sebelumnya |
+| `/newchat` | Memulai sesi obrolan baru yang bersih |
+| `/chat -r <id> <name>` | Mengganti nama sesi obrolan tertentu |
+| `/chat -d <id>` | Menghapus permanen sesi obrolan tertentu |
+| `/undo` | Membatalkan perubahan file terakhir yang dilakukan oleh AI secara aman |
+| `/redo` | Mengulangi kembali tindakan file yang baru dibatalkan |
+| `/exit` | Keluar dari sesi terminal interaktif |
+| `/reboot` | Memulai ulang mesin backend dan menyambungkan kembali sesi |
+| `/mic` | Merekam suara dari mikrofon dan mentranskripsikannya ke prompt |
+| `/vision atau /image` | Beralih ke mode visi multimodal untuk analisis gambar dan antarmuka |
+| `/research` | Beralih ke mode riset untuk penjelajahan web dan dokumentasi teknis |
+| `/read <file>` | Membaca file proyek apa pun langsung ke dalam konteks obrolan |
+| `/task` | Mengelola tugas otonom latar belakang dan tujuan sub-agen |
+| `/git` | Menjalankan operasi Git yang aman dan diaudit melalui agen |
+| `/scope` | Memeriksa dan menyesuaikan batas hak akses alat |
+| `/tools list` | Melihat semua alat bawaan dan server MCP yang aktif |
+| `/report` | Menghasilkan laporan audit keamanan dan tindakan bertanda tangan digital |
+| `/checkpoint` | Membuat titik pemulihan permanen dari kondisi proyek saat ini |
+| `/checkpoints` | Melihat daftar semua titik pemulihan yang tersimpan |
+| `/rollback` | Mengembalikan repositori dan file ke titik pemulihan sebelumnya |
+| `/status` | Memeriksa kesehatan mesin dan perangkat keras secara real-time |
+| `/doctor` | Menjalankan diagnostik sistem lengkap dan pengujian mandiri |
+| `/pair` | Mengaktifkan mode pemrograman berpasangan interaktif |
+| `/perm <level>` | Mengatur tingkat izin eksekusi sandbox (`strict`, `ask`, `full`) |
+| `/agent` | Membuat dan mengelola sub-agen mandiri untuk tugas paralel |
+| `/orchestrate` | Mengkoordinasikan alur kerja kolaboratif multi-agen |
 
 ---
 
 ## Filosofi Produk
 
-1. **Mengutamakan Fungsi Nyata**: Patching kode nyata, verifikasi AST, dan eksekusi aman.
-1. **Kejujuran Total**: Tanpa pelacakan telemetri dan tanpa biaya tersembunyi.
-1. **Lokal Utama**: Semua data dan model tetap berada di perangkat Anda sendiri.
-1. **Arsitektur Ramping**: Kode Python murni tanpa dependensi yang berlebihan.
+1. **Utamakan Manfaat Nyata**: Penambalan kode nyata, validasi sintaks AST, dan sandbox aman.
+2. **Kejujuran dan Transparansi**: Tanpa telemetri, tanpa biaya tersembunyi atau langganan wajib.
+3. **Sepenuhnya Lokal (Local-First)**: Seluruh model, bobot, dan data Anda tetap di perangkat Anda.
+4. **Arsitektur Bersih**: Dibangun menggunakan Python murni tanpa ketergantungan berlebih.
 
 ---
 

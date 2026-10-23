@@ -1,20 +1,20 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
 <p align="center">
-  <strong>Xây dựng bằng mô hình. Vận hành bằng tác tử.</strong><br>
-  <em>Hệ điều hành AI cục bộ thuần Python được phát triển bởi Raj Singh (MarkanM)</em>
+  <strong>Xây dựng với các mô hình. Phát hành với các tác tử.</strong><br>
+  <em>Hệ điều hành AI cục bộ nguyên bản bằng Python được phát triển bởi nhà sáng lập Raj Singh (MarkanM)</em>
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -49,30 +49,79 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">Trang Chủ</a> ·
+  <a href="#system-architecture">Kiến Trúc</a> ·
+  <a href="#deep-technical-capabilities">Khả Năng Cốt Lõi</a> ·
   <a href="#quick-start">Khởi Động Nhanh</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">Trình Hướng Dẫn Cài Đặt</a> ·
-  <a href="#enterprise-infrastructure--super-host">Hạ Tầng Doanh Nghiệp</a> ·
-  <a href="#core-command-reference">Bảng Lệnh</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">Trình Cài Đặt</a> ·
+  <a href="#enterprise-infrastructure--super-host">Doanh Nghiệp</a> ·
+  <a href="#core-command-reference">Lệnh Cốt Lõi</a> ·
   <a href="#cli-slash-commands">Lệnh Slash</a> ·
-  <a href="#product-philosophy">Triết Lý</a> ·
   <a href="#license">Giấy Phép</a>
 </p>
 
 ---
 
-## LMMs OS là gì?
+## LMMs OS Là Gì?
 
-LMMs là lớp điều hành AI thuần Python dùng để thực thi mô hình cả cục bộ và từ xa. Được xây dựng bởi nhà sáng lập Raj Singh (MarkanM), hệ thống kết hợp giao diện đồ họa desktop, dòng lệnh CLI thông minh và engine hoàn thiện mà không cần gửi dữ liệu lên đám mây.
+LMMs là tầng vận hành AI nguyên bản bằng Python phục vụ thực thi mô hình cục bộ và từ xa. Được xây dựng bởi nhà sáng lập Raj Singh (MarkanM), nó kết hợp giao diện đồ họa máy tính để bàn (GUI), giao diện dòng lệnh thông minh (CLI) và bộ động cơ suy luận hoàn thiện để giúp lập trình viên và doanh nghiệp triển khai các mô hình đa phương thức mà không cần gửi dữ liệu lên đám mây hay chịu ràng buộc dịch vụ.
 
-* 🧠 **Lõi Động Cơ Kép**: Hỗ trợ suy luận lượng tử hóa GGUF tốc độ cao qua llama.cpp và PyTorch safetensors nguyên bản.
-* ⚡ **Mở Rộng Không Giới Hạn với AirEngine**: Phân tải linh hoạt giữa GPU, CPU và ổ đĩa giúp máy tính xách tay bình thường chạy được mô hình 70B+.
-* 🖥️ **Desktop Studio (GUI)**: Trình chỉnh sửa code Monaco, so sánh thay đổi trực quan, tích hợp Git và quản lý công cụ.
-* ⌨️ **Terminal Studio (CLI)**: Shell tương tác với hơn 30 lệnh slash, lập trình cặp và hộp cát an toàn.
-* 🏢 **Sẵn Sàng Cho Doanh Nghiệp**: Mô hình máy chủ - máy khách trên mạng LAN/VPC nội bộ với tính năng tự động dò tìm máy chủ.
+* **Lõi động cơ kép nguyên bản**: Suy luận GGUF lượng tử hóa hiệu năng cao với llama.cpp cùng môi trường chạy safetensors thuần PyTorch.
+* **Mở rộng không giới hạn với AirEngine**: Phân tầng và chuyển tải tensor động giữa GPU, CPU và ổ đĩa cho phép chạy các mô hình 70B+ ngay trên máy tính xách tay thông thường.
+* **Desktop Studio (GUI)**: Trình biên tập mã nguồn Monaco, công cụ so sánh diff trực quan, tích hợp Git và quản lý công cụ.
+* **Terminal Studio (CLI)**: Shell tương tác với hơn 30 lệnh slash, lập trình cặp đôi (pair-programming), điều phối tác tử con và hộp cát an toàn.
+* **Sẵn sàng cho Doanh nghiệp**: Mô hình cụm máy khách - máy chủ phân tán trên mạng nội bộ LAN/VPC với cơ chế tự động dò tìm máy chủ trung tâm.
 
 ---
 
-## Khởi Động Nhanh
+## Kiến Trúc Hệ Thống
+
+Sơ đồ dưới đây minh họa kiến trúc toàn diện của LMMs OS qua 4 phân hệ chính: Giao diện người dùng, Tầng dịch vụ backend, Động cơ suy luận và Khả năng tác tử:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **Giao diện Người dùng**: `GUI workspace [main_window.py]` (IDE Monaco và đánh giá diff) và `CLI [commands.py]` (terminal tương tác cho lập trình viên).
+2. **Tầng API và Backend**: `HTTP API [server.py]` (FastAPI daemon trên cổng 11435), `Backend session [main.py]` (điều phối phiên làm việc), và `Backend services [manager.py]`.
+3. **Phân hệ Suy luận Mô hình**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (chuyển tải tensor GPU/CPU/Ổ đĩa), `Model registry [registry.py]`, `động cơ llama.cpp` và `động cơ PyTorch`.
+4. **Phân hệ Năng lực Tác tử**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]` và `Workspace & Git [manager.py]`.
+
+---
+
+## Năng Lực Kỹ Thuật Chuyên Sâu (Deep Technical Capabilities)
+
+### 1. Động cơ Thị giác Đa phương thức (`/vision`, `/image`)
+LMMs tích hợp sẵn đường ống xử lý thị giác máy tính trực tiếp trong động cơ cục bộ:
+* **Phân tích giao diện và bố cục**: Kiểm tra ảnh chụp màn hình ứng dụng web hoặc desktop để phát hiện lỗi hiển thị, lệch căn chỉnh và sai lệch CSS.
+* **Trích xuất lưu đồ và kiến trúc hệ thống**: Đọc các biểu đồ luồng, sơ đồ quan hệ ER và chuỗi UML để chuyển đổi trực tiếp thành mã Mermaid hoặc cấu trúc dữ liệu.
+* **Nhận dạng ký tự quang học (OCR) nội bộ**: Trích xuất văn bản và bảng biểu từ hình ảnh và PDF mà không gửi dữ liệu ra bên ngoài.
+
+### 2. Âm thanh và Nhận dạng Giọng nói Ngoại tuyến (`/mic`)
+* **Chuyển đổi giọng nói thành văn bản cục bộ**: Phiên âm ngoại tuyến tốc độ cao nhờ mô hình Whisper lượng tử hóa chạy ngay trên máy tính của bạn.
+* **Nhập lệnh rảnh tay**: Thu âm trực tiếp các chỉ dẫn lập trình vào cửa sổ dòng lệnh với độ trễ bằng không.
+
+### 3. Tương thích Git và Cô lập Cây làm việc Worktree (`/git`, `/scope`)
+* **Khóa an toàn chỉ đọc**: Tự động giới hạn hành vi tác tử ở các thao tác đọc an toàn (`cat`, `git diff`, `grep`) trừ khi được cấp quyền rõ ràng.
+* **Git Worktree tạm thời**: Các chỉnh sửa mã được thực hiện trên bản sao worktree riêng biệt và chỉ được gộp vào nhánh chính sau khi vượt qua toàn bộ bài kiểm thử tự động.
+* **Xem trước Diff có màu**: Mọi thay đổi tệp tin đều được hiển thị dưới dạng diff trực quan trước khi ghi xuống đĩa.
+
+### 4. Điểm kiểm soát Xác định và Khôi phục Tức thì (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **Sao lưu từng bước thực thi**: Ảnh chụp bất biến của các tệp bị sửa đổi được tạo trước mỗi hành động can thiệp mã nguồn.
+* **Khôi phục trong vài mili giây**: Nếu bản vá gây lỗi kiểm thử hoặc cú pháp, `/rollback` hoặc `/undo` sẽ khôi phục kho mã về trạng thái ban đầu ngay lập tức.
+
+### 5. Tác tử con Tự trị và Điều phối Đa tác tử (`/agent`, `/orchestrate`)
+* **Tác vụ chạy ngầm độc lập**: Khởi tạo tác tử con với hạn mức token riêng biệt và phạm vi truy cập tệp an toàn để xử lý song song.
+* **Phân cấp nhiệm vụ**: Tác tử điều phối chính bàn giao các công việc chuyên biệt (kiểm thử, tài liệu hóa, dọn dẹp mã) cho tác tử con và tổng hợp kết quả.
+
+### 6. Nghiên cứu Nội bộ và RAG Vector (`/research`)
+* **Đánh chỉ mục mã nguồn ngữ nghĩa**: Lập chỉ mục không gian làm việc vào kho lưu trữ vector cục bộ để tìm kiếm hàm, lớp và cấu trúc một cách nhanh chóng.
+* **Tra cứu tài liệu không ảo giác**: Tải và đọc tài liệu API nội bộ để loại bỏ triệt để việc mô hình tạo ra mã nguồn sai lệch.
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -100,9 +149,7 @@ lmms            # Launch configured interface
 
 ---
 
-## Trình Hướng Dẫn Thiết Lập Kiến Trúc (`lmms install`)
-
-Chạy lệnh `lmms install` để mở bảng hướng dẫn cấu hình trực quan:
+## Trình Hướng Dẫn Cài Đặt Kiến Trúc (`lmms install`)
 
 ```text
   LMMs Installer · Architecture Setup Wizard
@@ -122,9 +169,7 @@ Chạy lệnh `lmms install` để mở bảng hướng dẫn cấu hình trực
 
 ---
 
-### [1] Cấu Hình Máy Trạm Cá Nhân
-
-6 thành phần chính phục vụ nhu cầu xử lý cục bộ:
+### [1] Cấu Hình Cho Trạm Làm Việc Đơn Lẻ
 
 ```text
   ? Select Component Configuration:
@@ -153,9 +198,7 @@ Chạy lệnh `lmms install` để mở bảng hướng dẫn cấu hình trực
 
 ---
 
-### [2] Hạ Tầng Doanh Nghiệp & Máy Chủ Siêu Cấp
-
-Hệ thống phân tán dành cho tổ chức và đội ngũ phát triển:
+### [2] Hạ Tầng Doanh Nghiệp Và Máy Chủ Siêu Cấp
 
 ```text
   ? Select Enterprise Infrastructure Role:
@@ -168,110 +211,138 @@ Hệ thống phân tán dành cho tổ chức và đội ngũ phát triển:
   ──────────────────────────────────────────────────────────────────────
 ```
 
-* **Tính Toán Tập Trung**: Máy chủ lắng nghe tại `0.0.0.0:11435` trên dàn GPU nội bộ để phục vụ và huấn luyện mô hình riêng.
-* **Máy Khách Tiện Lợi**: Nhân viên kết nối trực tiếp từ laptop thông qua tự động phát hiện trên mạng nội bộ LAN.
-* **Bảo Mật Tuyệt Đối**: Toàn bộ mã nguồn và dữ liệu không bao giờ rời khỏi hệ thống mạng riêng của công ty.
-* **AirEngine Không Giới Hạn**: Vượt qua rào cản VRAM để chạy các mô hình AI khổng lồ.
+* **Tính toán tập trung hiệu năng cao**: Máy chủ daemon chạy trên hệ thống GPU trung tâm (`0.0.0.0:11435`) để phục vụ và huấn luyện mô hình nội bộ.
+* **Studio máy khách từ xa**: Nhân viên kết nối từ máy tính xách tay cá nhân qua mạng nội bộ LAN/VPC với tính năng tự động phát hiện máy chủ.
+* **Bảo mật dữ liệu tuyệt đối**: Không có bất kỳ dòng mã hay câu lệnh prompt nào bị lọt ra ngoài mạng riêng của doanh nghiệp.
+* **AirEngine không giới hạn phần cứng**: Tự động luân chuyển trọng số mô hình lớn qua VRAM, RAM và bộ nhớ NVMe tốc độ cao.
 
 ---
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| Lệnh | Mục đích | Thành phần mục tiêu |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | Khởi động trình hướng dẫn cài đặt kiến trúc tương tác | Menu cấu hình tương tác |
+| `lmms install --all` | Cài đặt toàn bộ hệ sinh thái | Desktop Studio, CLI, Giọng nói, Super Engine |
+| `lmms install --gui` | Cài đặt Desktop Studio (GUI) | Giao diện PyQt6, Trình soạn thảo Monaco, Client |
+| `lmms install --cli` | Cài đặt Terminal Studio (CLI) | Shell tương tác, bộ công cụ dev, Client |
+| `lmms install --engine` | Cài đặt bộ động cơ hỗn hợp Super Engine | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | Cài đặt động cơ nhẹ (Lightweight) | llama.cpp + AirEngine (dành riêng GGUF) |
+| `lmms install --engine2` | Cài đặt động cơ PyTorch gốc | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | Cài đặt máy chủ doanh nghiệp trung tâm | Daemon lắng nghe trên địa chỉ 0.0.0.0:11435 |
+| `lmms install --client-gui` | Cài đặt máy khách GUI doanh nghiệp | GUI kết nối với máy chủ từ xa qua mạng LAN |
+| `lmms install --client-cli` | Cài đặt máy khách CLI doanh nghiệp | CLI kết nối với máy chủ từ xa qua mạng LAN |
+| `lmms update` | Cập nhật mã nguồn mới nhất của ứng dụng | Cập nhật nhánh đang hoạt động |
+| `lmms update --all` | Cập nhật bắt buộc đồng bộ tất cả các nhánh | Đồng bộ hóa toàn diện từ kho GitHub |
+| `lmms -check` | Chẩn đoán phần cứng và kiểm tra điều kiện hệ thống | Đo lường CPU, GPU, VRAM, AVX và ổ đĩa |
+| `lmms-uninstall -all` | Gỡ bỏ mã nguồn an toàn | Xóa mã, giữ nguyên gói pip và bộ nhớ đệm mô hình |
+| `lmms-uninstall -all --purge` | Khôi phục cài đặt gốc và xóa hoàn toàn | Xóa vĩnh viễn toàn bộ cấu hình, mô hình và dữ liệu |
 
 ---
 
-## Bảng Tra Cứu Lệnh Cốt Lõi
+## Tài Liệu Hướng Dẫn Lệnh Cốt Lõi
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| Lệnh | Mô tả |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | Khởi chạy giao diện mặc định đã được cấu hình |
+| `lmms --gui` | Khởi chạy trực tiếp giao diện máy tính để bàn (GUI) |
+| `lmms --cli` | Khởi chạy trực tiếp giao diện dòng lệnh (CLI) |
+| `lmms --engine` | Khởi chạy trực tiếp dịch vụ động cơ suy luận |
+| `lmms set --gui` | Thiết lập Desktop Studio làm chế độ khởi động mặc định |
+| `lmms set --cli` | Thiết lập Terminal Studio làm chế độ khởi động mặc định |
+| `lmms set --engine` | Thiết lập Engine Daemon làm chế độ khởi động mặc định |
+| `lmms stop` | Dừng an toàn dịch vụ động cơ LMMs đang chạy ngầm |
+| `lmms -check` | Kiểm tra hồ sơ phần cứng và các thư viện phụ thuộc |
+| `lmms update` | Cập nhật thông minh từ nhánh Git hiện tại |
+| `lmms update --all` | Bắt buộc cập nhật toàn bộ từ kho GitHub |
+| `lmms --help` | Hiển thị trợ giúp chi tiết về trình khởi chạy |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| Lệnh | Mô tả |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | Chạy mô hình trong phiên trò chuyện hoặc câu lệnh đơn |
+| `lmms list` | Liệt kê danh sách các mô hình đã tải về máy |
+| `lmms ps` | Xem các mô hình đang hoạt động và dung lượng VRAM chiếm dụng |
+| `lmms pull <model>` | Tải mô hình từ Hugging Face hoặc Model Hub chính thức |
+| `lmms info <model>` | Xem thông số siêu dữ liệu, độ dài ngữ cảnh và mức lượng tử |
+| `lmms search <query>` | Tìm kiếm các kho lưu trữ mô hình mã nguồn mở |
+| `lmms benchmark <model>` | Đo tốc độ tạo token (t/s) và độ trễ phản hồi |
+| `lmms doctor` | Chẩn đoán tình trạng động cơ và trình điều khiển CUDA/GPU |
+| `lmms create <model> -f <file>` | Đăng ký mô hình tùy chỉnh từ tệp GGUF hoặc Safetensors |
+| `lmms -air run <model> [prompt]` | Chạy mô hình siêu lớn nhờ cơ chế chia tầng bộ nhớ AirEngine |
+| `lmms --air run <m1> <m2>` | Chạy đồng thời nhiều mô hình qua bộ lập lịch Air |
+| `lmms air ps` | Theo dõi phiên Air và sự phân bổ các tầng mô hình trên GPU/CPU |
+| `lmms air stats` | Xem thống kê thời gian thực về thông lượng và tốc độ chuyển tải |
+| `lmms air cache` | Kiểm tra kích thước và mức sử dụng bộ nhớ đệm ổ đĩa Air |
+| `lmms air unload` | Gỡ bỏ tất cả mô hình Air và làm sạch bộ nhớ VRAM ngay lập tức |
+| `lmms air benchmark <model>` | Đánh giá tốc độ xử lý dưới sự điều phối của Air |
 
 ---
 
-## Danh Sách Lệnh Slash Tương Tác Trong CLI
+### Server / Daemon
 
-| Command | Description |
+| Lệnh | Mô tả |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `lmms server` | Khởi động dịch vụ máy chủ API / Web |
+| `lmms server status` | Kiểm tra trạng thái máy chủ, cổng, thời gian hoạt động |
+| `lmms engine status` | Xem chế độ động cơ đang hoạt động và số liệu RAM |
+| `lmms engine unload [model]` | Gỡ mô hình khỏi bộ nhớ và giải phóng tài nguyên VRAM |
+| `lmms server start [--port 11435]` | Chạy máy chủ FastAPI dưới nền trên cổng chỉ định |
+| `lmms server stop` | Dừng máy chủ đang chạy ở chế độ nền |
+
+---
+
+## Lệnh Slash Tương Tác Trong CLI
+
+| Lệnh | Mô tả |
+|---|---|
+| `/fast` | Chuyển sang chế độ FAST để phản hồi nhanh và dùng công cụ nhẹ |
+| `/deep` | Chuyển sang chế độ DEEP với suy luận sâu nhiều bước và đủ quyền công cụ |
+| `/model <name>` | Đổi sang mô hình khác cho phiên trò chuyện hiện tại |
+| `/ml -l` | Xem danh sách toàn bộ mô hình cục bộ ngay trong cửa sổ chat |
+| `/ml -s <name>` | Đổi mô hình ngay tức thì mà không làm mất lịch sử hội thoại |
+| `/folder <path>` | Gắn một thư mục vào ngữ cảnh làm việc của tác tử |
+| `/code` | Vào chế độ chuyên sâu tạo mã và áp dụng bản vá tự động |
+| `/chat` | Liệt kê và xem lại lịch sử các phiên trò chuyện trước |
+| `/newchat` | Bắt đầu một phiên trò chuyện mới hoàn toàn sạch |
+| `/chat -r <id> <name>` | Đổi tên một phiên trò chuyện cụ thể |
+| `/chat -d <id>` | Xóa vĩnh viễn một phiên trò chuyện đã chọn |
+| `/undo` | Hủy bỏ an toàn thao tác chỉnh sửa tệp gần nhất của AI |
+| `/redo` | Làm lại thao tác tệp vừa được hủy bỏ |
+| `/exit` | Thoát khỏi phiên làm việc dòng lệnh tương tác |
+| `/reboot` | Khởi động lại động cơ backend và kết nối lại phiên |
+| `/mic` | Thu âm giọng nói và phiên âm trực tiếp vào câu lệnh nhắc |
+| `/vision hoặc /image` | Chuyển sang chế độ thị giác đa phương thức để phân tích ảnh và UI |
+| `/research` | Chuyển sang chế độ nghiên cứu tài liệu kỹ thuật và tra cứu web |
+| `/read <file>` | Đọc tệp tin bất kỳ trong dự án trực tiếp vào ngữ cảnh phiên |
+| `/task` | Quản lý các tác vụ tự trị ngầm và mục tiêu của tác tử con |
+| `/git` | Thực thi các lệnh Git an toàn và có nhật ký kiểm toán qua tác tử |
+| `/scope` | Kiểm tra và điều chỉnh phạm vi thực thi của các công cụ |
+| `/tools list` | Liệt kê toàn bộ công cụ tích hợp và máy chủ MCP đang hoạt động |
+| `/report` | Tạo báo cáo kiểm toán bảo mật và hành động có chữ ký số |
+| `/checkpoint` | Lưu điểm kiểm soát (checkpoint) bất biến cho không gian làm việc |
+| `/checkpoints` | Liệt kê tất cả các điểm kiểm soát đã lưu của dự án |
+| `/rollback` | Khôi phục kho mã và tệp tin về điểm kiểm soát đã lưu trước đó |
+| `/status` | Kiểm tra tình trạng sức khỏe thời gian thực của động cơ và phần cứng |
+| `/doctor` | Chạy chẩn đoán toàn diện hệ thống và kiểm thử tự phục hồi |
+| `/pair` | Bắt đầu chế độ lập trình đôi (pair-programming) tương tác |
+| `/perm <level>` | Điều chỉnh mức quyền hạn của hộp cát sandbox (`strict`, `ask`, `full`) |
+| `/agent` | Tạo và quản lý các tác tử con độc lập để xử lý song song |
+| `/orchestrate` | Quản lý và điều phối các luồng công việc phức tạp giữa nhiều tác tử |
 
 ---
 
 ## Triết Lý Sản Phẩm
 
-1. **Tập Trung Thực Tế**: Chỉnh sửa mã nguồn trực tiếp, kiểm tra cú pháp AST và môi trường an toàn.
-1. **Minh Bạch**: Không thu thập dữ liệu người dùng, không chi phí ẩn.
-1. **Ưu Tiên Cục Bộ**: Dữ liệu và trọng số mô hình luôn nằm trong máy của bạn.
-1. **Kiến Trúc Tối Giản**: Mã nguồn Python chuẩn xác, không dư thừa phụ thuộc.
+1. **Tính Thực Dụng Là Trên Hết**: Vá mã thực tế, kiểm tra cú pháp AST và chạy trong hộp cát.
+2. **Minh Bạch Và Tin Cậy**: Hoàn toàn không thu thập dữ liệu (zero-telemetry), không phí ngầm.
+3. **Ưu Tiên Cục Bộ Tuyệt Đối**: Toàn bộ mô hình, trọng số và dữ liệu luôn nằm trên máy của bạn.
+4. **Kiến Trúc Tối Giản**: Xây dựng thuần Python không mang vác phụ thuộc rườm rà.
 
 ---
 

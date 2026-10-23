@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -49,12 +49,13 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">공식 웹사이트</a> ·
+  <a href="#system-architecture">시스템 아키텍처</a> ·
+  <a href="#deep-technical-capabilities">핵심 기능</a> ·
   <a href="#quick-start">빠른 시작</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">아키텍처 설치 마법사</a> ·
-  <a href="#enterprise-infrastructure--super-host">엔터프라이즈 인프라</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">설치 마법사</a> ·
+  <a href="#enterprise-infrastructure--super-host">엔터프라이즈</a> ·
   <a href="#core-command-reference">명령어 레퍼런스</a> ·
   <a href="#cli-slash-commands">슬래시 명령어</a> ·
-  <a href="#product-philosophy">철학</a> ·
   <a href="#license">라이선스</a>
 </p>
 
@@ -64,15 +65,63 @@
 
 LMMs는 로컬 및 원격 모델 실행을 위한 Python 네이티브 AI 운영 레이어입니다. 창립자 Raj Singh (MarkanM)이 설계한 이 시스템은 실제 데스크톱 GUI 스튜디오, 스마트한 CLI, 성숙한 백엔드 엔진을 통합하여 텔레메트리와 클라우드 종속 없이 안전하게 대규모 모델을 실행할 수 있습니다.
 
-* 🧠 **네이티브 듀얼 엔진 코어**: llama.cpp 기반의 고속 양자화 GGUF 추론과 PyTorch safetensors 네이티브 런타임 제공.
-* ⚡ **AirEngine을 통한 무한 확장**: GPU, CPU, 디스크 간의 동적 텐서 오프로딩을 통해 일반 노트북에서도 70B 이상의 대규모 모델 구동.
-* 🖥️ **데스크톱 스튜디오 (GUI)**: Monaco 코드 에디터, 시각적 diff 비교, Git 연동 및 도구 관리자 내장.
-* ⌨️ **터미널 스튜디오 (CLI)**: 30개 이상의 대화형 슬래시 명령, 페어 프로그래밍, 서브에이전트 오케스트레이션 및 안전한 샌드박스.
-* 🏢 **엔터프라이즈 클러스터 지원**: 사설 LAN/VPC 네트워크에서 중앙 호스트 서버와 자동 검색 클라이언트 연동.
+* **네이티브 듀얼 엔진 코어**: llama.cpp 기반의 고속 양자화 GGUF 추론과 PyTorch safetensors 네이티브 런타임 제공.
+* **AirEngine을 통한 무한 확장**: GPU, CPU, 디스크 간의 동적 텐서 오프로딩을 통해 일반 노트북에서도 70B 이상의 대규모 모델 구동.
+* **데스크톱 스튜디오 (GUI)**: Monaco 코드 에디터, 시각적 diff 비교, Git 연동 및 도구 관리자 내장.
+* **터미널 스튜디오 (CLI)**: 30개 이상의 대화형 슬래시 명령, 페어 프로그래밍, 서브에이전트 오케스트레이션 및 안전한 샌드박스.
+* **엔터프라이즈 클러스터 지원**: 사설 LAN/VPC 네트워크에서 중앙 호스트 서버와 자동 검색 클라이언트 연동.
 
 ---
 
-## 빠른 시작
+## 시스템 아키텍처
+
+다음 다이어그램은 UI, 백엔드 서비스, 모델 추론 및 에이전트 능력 서브시스템에 걸친 LMMs OS의 엔드투엔드 아키텍처를 보여줍니다:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **사용자 인터페이스**: `GUI workspace [main_window.py]` (Monaco 기반 에디터 및 diff 뷰어) 및 `CLI [commands.py]` (대화형 개발자 터미널 셸).
+2. **API 및 백엔드 계층**: `HTTP API [server.py]` (포트 11435에서 대기하는 FastAPI 데몬), `Backend session [main.py]` (세션 조율자), `Backend services [manager.py]`.
+3. **모델 추론 서브시스템**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (GPU/CPU/디스크 오프로드), `Model registry [registry.py]`, `llama.cpp 런타임`, `PyTorch 런타임`.
+4. **에이전트 기능 서브시스템**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]`, `Workspace & Git [manager.py]`.
+
+---
+
+## 심층 기술 역량 (Deep Technical Capabilities)
+
+### 1. 멀티모달 비전 엔진 (`/vision`, `/image`)
+LMMs는 로컬 엔진 내부에 네이티브 비전 처리 파이프라인을 탑재하고 있습니다:
+* **UI 및 레이아웃 파싱**: 웹 또는 데스크톱 UI 스크린샷을 분석하여 시각적 버그, 정렬 오류 및 CSS 렌더링 결함을 자동 감지합니다.
+* **아키텍처 및 다이어그램 추출**: 플로우차트, ER 다이어그램, UML 시퀀스를 분석하여 유효한 Mermaid 코드 및 데이터 구조로 직접 변환합니다.
+* **로컬 문서 OCR**: 외부 클라우드로 이미지 데이터를 전송하지 않고 로컬 이미지 및 PDF에서 텍스트와 표를 안전하게 추출합니다.
+
+### 2. 오프라인 음성 인식 및 오디오 인터페이스 (`/mic`)
+* **로컬 음성-텍스트 변환**: 양자화된 로컬 Whisper 모델을 통해 지연 없는 오프라인 음성 전사를 제공합니다.
+* **핸즈프리 프롬프팅**: 개발 지시 및 음성 메모를 활성 CLI 세션에 직접 마이크로 입력할 수 있습니다.
+
+### 3. 저장소 인식 Git 엔진 및 Worktree 격리 (`/git`, `/scope`)
+* **읽기 전용 보호 가드**: 명시적 승인이 없는 한 에이전트의 작업을 읽기 전용 명령(`cat`, `git diff`, `grep`)으로 자동 제한합니다.
+* **격리된 임시 Git Worktree**: 코드 수정 작업은 격리된 worktree 복제본에서 실행되며, 자동화된 테스트가 통과된 후에만 작업 브랜치로 병합됩니다.
+* **통합 Diff 미리보기**: 디스크에 쓰기 전에 변경 사항을 컬러 diff로 시각적으로 사전 검토합니다.
+
+### 4. 결정론적 체크포인트 및 롤백 안전성 (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **턴 기반 안전 스냅샷**: 파일 수정 작업 직전에 변경 대상 파일의 불변 백업 스냅샷을 생성합니다.
+* **밀리초 단위 롤백**: 생성된 패치가 테스트에 실패하거나 문법 오류를 일으킬 경우, `/rollback` 또는 `/undo`를 통해 즉시 이전 상태로 복구합니다.
+
+### 5. 자율 서브에이전트 및 멀티에이전트 오케스트레이션 (`/agent`, `/orchestrate`)
+* **백그라운드 독립 태스크**: 전용 토큰 예산과 파일 권한이 격리된 서브에이전트를 백그라운드에서 실행합니다.
+* **계층적 업무 위임**: 주 오케스트레이터가 테스트, 문서화, 린팅 작업을 서브에이전트에 위임하고 검증된 결과를 통합합니다.
+
+### 6. 로컬 연구 및 벡터 메모리 RAG (`/research`)
+* **시맨틱 코드베이스 인덱싱**: 워크스페이스 코드를 로컬 벡터 스토어에 인덱싱하여 함수와 클래스를 빠르게 시맨틱 검색합니다.
+* **무할루시네이션 기술 문서 검색**: 로컬 API 문서를 캐싱 및 참조하여 모델의 허위 생성을 근본적으로 차단합니다.
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -102,8 +151,6 @@ lmms            # Launch configured interface
 
 ## 아키텍처 설치 마법사 (`lmms install`)
 
-`lmms install` 실행 시 터미널 기반 대화형 마법사가 실행됩니다:
-
 ```text
   LMMs Installer · Architecture Setup Wizard
   For more details, visit: https://lmms.markanm.com
@@ -123,8 +170,6 @@ lmms            # Launch configured interface
 ---
 
 ### [1] 개인 워크스테이션 배포 옵션
-
-로컬 실행을 위한 6가지 핵심 구성 요소:
 
 ```text
   ? Select Component Configuration:
@@ -155,8 +200,6 @@ lmms            # Launch configured interface
 
 ### [2] 엔터프라이즈 인프라 및 슈퍼 호스트
 
-기업 및 연구 조직을 위한 분산형 클라이언트-서버 환경:
-
 ```text
   ? Select Enterprise Infrastructure Role:
 
@@ -177,101 +220,129 @@ lmms            # Launch configured interface
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| 명령어 | 목적 | 대상 컴포넌트 |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | 대화형 아키텍처 설치 마법사 실행 | 대화형 설정 메뉴 |
+| `lmms install --all` | 전체 에코시스템 설치 | Desktop Studio, CLI, Voice, Super Engine |
+| `lmms install --gui` | Desktop Studio (GUI) 설치 | PyQt6 GUI, Monaco Editor, Engine 클라이언트 |
+| `lmms install --cli` | Terminal Studio (CLI) 설치 | 대화형 셸, 개발 도구, Engine 클라이언트 |
+| `lmms install --engine` | Super Engine 통합 런타임 설치 | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | 경량 추론 엔진 설치 | llama.cpp + AirEngine (GGUF 전용) |
+| `lmms install --engine2` | PyTorch 딥러닝 엔진 설치 | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | 엔터프라이즈 호스트 데몬 설치 | 중앙 서버 데몬 (0.0.0.0:11435) |
+| `lmms install --client-gui` | 엔터프라이즈 원격 GUI 클라이언트 설치 | LAN/VPC 원격 호스트 연결용 GUI |
+| `lmms install --client-cli` | 엔터프라이즈 원격 CLI 클라이언트 설치 | LAN/VPC 원격 호스트 연결용 CLI |
+| `lmms update` | 최신 코드 동기화 및 업데이트 | 현재 활성 브랜치 업데이트 |
+| `lmms update --all` | 모든 컴포넌트 완전 업데이트 | GitHub 원격 저장소와 전체 동기화 |
+| `lmms -check` | 하드웨어 및 환경 종합 진단 | CPU, GPU, VRAM, AVX, 디스크 텔레메트리 |
+| `lmms-uninstall -all` | 소스코드 안전 제거 | 코드만 삭제, pip 패키지 및 사용자 모델 캐시 유지 |
+| `lmms-uninstall -all --purge` | 공장 초기화 (완전 삭제) | 모든 설정, 모델 및 세션 데이터 완전 영구 삭제 |
 
 ---
 
-## 핵심 명령어 가이드
+## 핵심 명령어 레퍼런스
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| 명령어 | 설명 |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | 설정된 기본 인터페이스 시작 |
+| `lmms --gui` | Desktop Studio (GUI) 직접 시작 |
+| `lmms --cli` | 개발자 CLI 셸 직접 시작 |
+| `lmms --engine` | 추론 엔진 데몬 직접 시작 |
+| `lmms set --gui` | Desktop Studio를 기본 실행 모드로 설정 |
+| `lmms set --cli` | Terminal Studio를 기본 실행 모드로 설정 |
+| `lmms set --engine` | Engine Daemon을 기본 실행 모드로 설정 |
+| `lmms stop` | 백그라운드에서 실행 중인 엔진 안전하게 종료 |
+| `lmms -check` | 하드웨어 프로필 및 사전 요구사항 검증 |
+| `lmms update` | 현재 브랜치에서 스마트 업데이트 |
+| `lmms update --all` | GitHub에서 전체 강제 업데이트 |
+| `lmms --help` | 상세 실행 도움말 표시 |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| 명령어 | 설명 |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | 대화형 채팅 또는 단일 프롬프트로 모델 실행 |
+| `lmms list` | 로컬에 다운로드된 모델 목록 표시 |
+| `lmms ps` | 현재 실행 중인 모델 및 VRAM 할당 상태 확인 |
+| `lmms pull <model>` | Hugging Face 또는 공식 허브에서 모델 다운로드 |
+| `lmms info <model>` | 모델 메타데이터, 컨텍스트 길이, 양자화 사양 검사 |
+| `lmms search <query>` | 다운로드 가능한 오픈소스 모델 저장소 검색 |
+| `lmms benchmark <model>` | 토큰 생성 속도(t/s) 및 초기 응답 지연 시간 벤치마크 |
+| `lmms doctor` | 엔진 상태 및 CUDA/GPU 드라이버 무결성 진단 |
+| `lmms create <model> -f <file>` | GGUF 또는 매니페스트로부터 커스텀 모델 등록 |
+| `lmms -air run <model> [prompt]` | AirEngine 메모리 계층화를 통한 초대형 모델 실행 |
+| `lmms --air run <m1> <m2>` | Air 스케줄러를 통한 다중 모델 병렬 실행 |
+| `lmms air ps` | Air 세션의 모델 레이어 배치 및 GPU/CPU 할당 모니터링 |
+| `lmms air stats` | 실시간 하드웨어 텐서 오프로드 처리량 및 메모리 통계 |
+| `lmms air cache` | Air 디스크 캐시 용량 및 스토리지 사용률 확인 |
+| `lmms air unload` | 모든 Air 모델 언로드 및 VRAM 캐시 즉시 비우기 |
+| `lmms air benchmark <model>` | Air 동적 스케줄링 환경에서의 실행 처리량 벤치마크 |
+
+---
+
+### Server / Daemon
+
+| 명령어 | 설명 |
+|---|---|
+| `lmms server` | API / 웹 서버 데몬 시작 |
+| `lmms server status` | 서버 데몬 상태, 포트, 가동 시간 및 헬스체크 확인 |
+| `lmms engine status` | 현재 엔진 실행 모드 및 활성 메모리 점유율 확인 |
+| `lmms engine unload [model]` | 활성 모델을 메모리에서 해제하고 VRAM 반환 |
+| `lmms server start [--port 11435]` | 지정된 포트에서 FastAPI 백그라운드 데몬 시작 |
+| `lmms server stop` | 실행 중인 백그라운드 서버 데몬 종료 |
 
 ---
 
 ## CLI 대화형 슬래시 명령어
 
-| Command | Description |
+| 명령어 | 설명 |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `/fast` | 빠른 응답과 가벼운 도구 호출을 우선하는 FAST 모드로 전환 |
+| `/deep` | 다단계 심층 추론과 전체 도구 권한을 갖는 DEEP 모드로 전환 |
+| `/model <name>` | 현재 대화 세션에 사용할 다른 로컬 모델로 전환 |
+| `/ml -l` | 채팅 세션 내에서 다운로드된 모든 모델 목록 표시 |
+| `/ml -s <name>` | 대화 문맥을 유지한 채 실행 모델 핫 스왑 |
+| `/folder <path>` | 지정된 디렉터리를 에이전트 작업 컨텍스트에 연결 |
+| `/code` | 코드 생성 및 자동 패치 적용 전용 모드로 진입 |
+| `/chat` | 과거 대화 세션 기록 목록 확인 및 검토 |
+| `/newchat` | 새로운 빈 대화 세션 시작 |
+| `/chat -r <id> <name>` | 특정 세션 이름 바꾸기 |
+| `/chat -d <id>` | 특정 세션 기록 영구 삭제 |
+| `/undo` | 에이전트가 수행한 최근 파일 편집이나 패치 안전하게 취소 |
+| `/redo` | 방금 취소된 파일 작업 다시 실행 |
+| `/exit` | 대화형 CLI 세션 안전하게 종료 |
+| `/reboot` | 백엔드 엔진을 재부팅하고 세션 재연결 |
+| `/mic` | 마이크 입력을 녹음하여 프롬프트로 실시간 음성 전사 |
+| `/vision 또는 /image` | 이미지 분석 및 UI 검사를 위한 멀티모달 비전 모드로 전환 |
+| `/research` | 기술 문서 및 웹 정보를 탐색하는 리서치 모드로 전환 |
+| `/read <file>` | 지정된 로컬 파일을 대화 컨텍스트에 직접 로드 |
+| `/task` | 백그라운드에서 동작하는 자율 서브태스크 및 목표 관리 |
+| `/git` | 에이전트를 통해 검증 및 감사된 안전한 Git 작업 실행 |
+| `/scope` | 현재 도구 실행 권한의 범위 확인 및 변경 |
+| `/tools list` | 사용 가능한 모든 네이티브 도구 및 MCP 엔드포인트 목록 표시 |
+| `/report` | 암호화 서명된 보안 및 작업 감사 보고서 생성 |
+| `/checkpoint` | 현재 워크스페이스 상태의 불변 체크포인트 생성 |
+| `/checkpoints` | 저장된 모든 워크스페이스 체크포인트 목록 표시 |
+| `/rollback` | 저장소와 파일을 이전 체크포인트 상태로 복원 |
+| `/status` | 엔진 및 시스템 하드웨어의 실시간 상태 확인 |
+| `/doctor` | 종합 시스템 진단 및 자동 복구 도구 실행 |
+| `/pair` | 대화형 페어 프로그래밍 모드 시작 |
+| `/perm <level>` | 샌드박스 도구 실행 권한 수준 조정 (`strict`, `ask`, `full`) |
+| `/agent` | 동시 하위 작업을 수행하는 자율 서브에이전트 생성 및 관리 |
+| `/orchestrate` | 다중 에이전트 간의 협업 워크플로 및 작업 인계 관리 |
 
 ---
 
 ## 제품 철학
 
 1. **실용성 우선**: 코드 패치, AST 검증, 안전한 샌드박스 태스크 중심.
-1. **투명한 신뢰**: 제로 텔레메트리 및 숨겨진 비용 없음.
-1. **로컬 퍼스트**: 사용자의 모든 데이터와 모델 가중치는 로컬에 안전하게 보관.
-1. **간결한 스택**: 불필요한 의존성을 배제한 순수 Python 아키텍처.
+2. **투명한 신뢰**: 제로 텔레메트리 및 숨겨진 비용 없음.
+3. **로컬 퍼스트**: 사용자의 모든 데이터와 모델 가중치는 로컬에 안전하게 보관.
+4. **간결한 스택**: 불필요한 의존성을 배제한 순수 Python 아키텍처.
 
 ---
 

@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -30,7 +30,7 @@
 [![Français](https://img.shields.io/badge/Language-Fran%C3%A7ais-2563eb?style=flat-square)](docs/i18n/README_fr.md)
 [![Español](https://img.shields.io/badge/Language-Espa%C3%B1ol-ca8a04?style=flat-square)](docs/i18n/README_es.md)
 [![Deutsch](https://img.shields.io/badge/Language-Deutsch-475569?style=flat-square)](docs/i18n/README_de.md)
-[![日本語](https://img.shields.io/badge/Language-%E6%97%A5%E6%9C%AC%E8%AA%9E-0f172a?style=flat-square)](docs/i18n/README_ja.md)
+[![日本語](https://img.shields.io/badge/Language-%E6%97%A5%E6%9CAC%E8%AA%9E-0f172a?style=flat-square)](docs/i18n/README_ja.md)
 [![한국어](https://img.shields.io/badge/Language-%ED%95%9C%EA%B5%AD%EC%96%B4-16a34a?style=flat-square)](docs/i18n/README_ko.md)
 [![العربية](https://img.shields.io/badge/Language-%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-059669?style=flat-square)](docs/i18n/README_ar.md)
 [![Português](https://img.shields.io/badge/Language-Portugu%C3%AAs-15803d?style=flat-square)](docs/i18n/README_pt.md)
@@ -48,12 +48,13 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">Website</a> ·
+  <a href="#system-architecture">Architecture</a> ·
+  <a href="#deep-technical-capabilities">Core Capabilities</a> ·
   <a href="#quick-start">Quick Start</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">Architecture Setup Wizard</a> ·
-  <a href="#enterprise-infrastructure--super-host">Enterprise Infrastructure</a> ·
-  <a href="#core-command-reference">Command Reference</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">Setup Wizard</a> ·
+  <a href="#enterprise-infrastructure--super-host">Enterprise</a> ·
+  <a href="#core-command-reference">Commands</a> ·
   <a href="#cli-slash-commands">Slash Commands</a> ·
-  <a href="#product-philosophy">Philosophy</a> ·
   <a href="#license">License</a>
 </p>
 
@@ -63,12 +64,80 @@
 
 **LMMs** is a Python-native AI operating layer for local and remote model execution. Built by founder **Raj Singh (MarkanM)**, it combines a real desktop GUI studio, a smart developer CLI, and a mature engine runtime so developers and teams can run large multimodal models, manage sessions, and execute agentic toolchains with zero telemetry and zero cloud lock-in.
 
-Unlike bloated workflow mockups or fake extension marketplaces, LMMs delivers the **real product**:
-* 🧠 **Native Dual Engine Core**: High-throughput quantized GGUF inference (`llama.cpp`) alongside PyTorch native safetensors execution.
-* ⚡ **Infinite Scaling with AirEngine**: Dynamic layer-wise GPU, CPU, and Disk tensor offloading enables running models of arbitrary size—even 70B+ parameters on everyday developer workstations.
-* 🖥️ **Desktop Studio (GUI)**: Monaco code editor, visual diffs, workspace Git integration, and tool management.
-* ⌨️ **Terminal Studio (CLI)**: Interactive AI shell with 30+ interactive slash commands, pair programming, subagent orchestration, and sandboxed command validation.
-* 🏢 **Enterprise Ready**: Seamless client-server clustering across private LAN/VPC networks with central host inference and multi-client auto-discovery.
+Unlike bloated workflow mockups or superficial wrappers, LMMs delivers the **real product**:
+* **Native Dual Engine Core**: High-throughput quantized GGUF inference (`llama.cpp`) alongside PyTorch native safetensors execution.
+* **Infinite Scaling with AirEngine**: Dynamic layer-wise GPU, CPU, and Disk tensor offloading enables running models of arbitrary size—even 70B+ parameters on everyday developer workstations.
+* **Desktop Studio (GUI)**: Monaco code editor, visual diffs, workspace Git integration, and tool management.
+* **Terminal Studio (CLI)**: Interactive AI shell with 30+ interactive slash commands, pair programming, subagent orchestration, and sandboxed command validation.
+* **Enterprise Infrastructure**: Seamless client-server clustering across private LAN/VPC networks with central host inference and multi-client auto-discovery.
+
+---
+
+## System Architecture
+
+The following diagram illustrates the end-to-end architecture of LMMs OS across the User Interface, Backend Services, Model Inference, and Agent Capability subsystems:
+
+<div align="center">
+  <img src="assets/lmms-architecture.png" alt="LMMs OS End-to-End System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **User Interfaces**:
+   * **GUI Workspace (`main_window.py`)**: Monaco-based desktop IDE featuring interactive editors, visual diff review, and dockable tools.
+   * **Developer CLI (`commands.py`)**: High-performance interactive terminal shell for developer execution, pair programming, and automated scripting.
+
+2. **API & Backend Layer**:
+   * **HTTP API Daemon (`server.py`)**: Central FastAPI REST/SSE daemon listening on `0.0.0.0:11435` or local UNIX domain sockets.
+   * **Session Coordinator (`main.py`)**: Manages conversation history, token budgeting, and live context compaction.
+   * **Backend Services (`manager.py`)**: Handles process lifecycles, configuration stores, and background service execution.
+
+3. **Model Inference Subsystem**:
+   * **Runtime Selection (`manager.py`)**: Intelligently routes inference requests to the optimal engine backend based on model format.
+   * **AirEngine (`runtime.py`)**: Dynamic layer streaming scheduler that offloads weights across VRAM, RAM, and NVMe disk storage.
+   * **llama.cpp Runtime (`llama_cpp.py`)**: High-efficiency quantized GGUF execution with GPU layer acceleration.
+   * **PyTorch Native Runtime**: Full-precision Safetensors execution for unquantized weights and custom architectures.
+   * **Model Registry (`registry.py`)**: Manages model storage paths, manifests, and local download caches.
+
+4. **Agent Capabilities Subsystem**:
+   * **Request Orchestration (`pipeline.py`)**: Multi-turn planning, intent routing, and tool loop coordination.
+   * **Vector Retrieval (`rag.py`)**: Local semantic search and vector embeddings for repository context.
+   * **Agent Router (`manager.py`)**: Matches user tasks with specialized agent capabilities (Code, Research, Terminal).
+   * **Tool Execution Engine (`executor.py`)**: Sandboxed, policy-guarded tool dispatch with AST verification.
+   * **Session Memory (`core_memory.py`)**: Persistent SQLite and JSONL conversation retention across restarts.
+   * **Web Research (`engine.py`)**: Privacy-preserving web search and documentation fetching.
+   * **Workspace & Git Controller (`manager.py`)**: Repo inspection, diff previewing, worktree isolation, and rollback.
+
+---
+
+## Deep Technical Capabilities
+
+### 1. Multimodal Vision Engine (`/vision`, `/image`)
+LMMs includes native multimodal processing directly inside the local engine. When switched into vision mode:
+* **UI & Layout Parsing**: Inspects screenshots of frontend web applications or desktop UIs to detect visual bugs, misalignments, and CSS rendering issues.
+* **Code & Architecture Diagram Extraction**: Analyzes architecture flowcharts, ER diagrams, and UML sequences, transcribing them directly into valid Mermaid or code structures.
+* **Document OCR & Tokenization**: Extracts clean text, tables, and structured data from local images and PDF snapshots without sending image bytes to external cloud servers.
+
+### 2. Offline Voice & Audio (`/mic`)
+* **Local Speech-to-Text**: High-speed offline transcription powered by quantized local Whisper models.
+* **Hands-Free Prompting**: Record developer instructions and voice notes directly into the active CLI session with zero network latency.
+
+### 3. Repo-Aware Git Engine & Worktree Isolation (`/git`, `/scope`)
+* **Read-Only vs. Mutating Guard**: Automatically restricts agent operations to read-only commands (`cat`, `git diff`, `grep`) unless explicitly authorized.
+* **Ephemeral Git Worktrees**: Mutating code changes are executed in isolated Git worktree clones. Only after automated tests pass are changes merged back into the user's working branch.
+* **Unified Diff Previews**: Every file modification generates a unified color diff preview before touching disk.
+
+### 4. Deterministic Checkpoint & Rollback Safety (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **Turn-Based Checkpoints**: An immutable backup snapshot of modified files is recorded before every mutating action.
+* **Instant Rollback**: If a generated patch fails pytest or introduces syntax errors, `/rollback` or `/undo` restores the repository to its exact pre-execution state in milliseconds.
+
+### 5. Autonomous Subagents & Multi-Agent Orchestration (`/agent`, `/orchestrate`)
+* **Background Task Execution**: Spawns detached subagents with dedicated token budgets and scoped file permissions.
+* **Hierarchical Coordination**: The primary orchestrator delegates specialized tasks (testing, documentation, linting) to subagents and merges verified results back into the session.
+
+### 6. Local Research & Vector Memory RAG (`/research`)
+* **Semantic Codebase Indexing**: Indexes workspace files into a local vector store for fast semantic retrieval of functions, classes, and types.
+* **Documentation Scraper**: Fetches and parses API documentation into memory for zero-hallucination agent prompting.
 
 ---
 
@@ -125,8 +194,6 @@ When running `lmms install`, LMMs launches an interactive, terminal-guided archi
 
 ### [1] Individual Workstation Configurations
 
-Choosing **Individual Workstation** opens the component selection menu tailored for local execution:
-
 ```text
   ? Select Component Configuration:
 
@@ -163,8 +230,6 @@ Choosing **Individual Workstation** opens the component selection menu tailored 
 
 ### [2] Enterprise Infrastructure & Super Host
 
-Choosing **Enterprise Infrastructure** configures a distributed cluster for organizations, labs, and development teams:
-
 ```text
   ? Select Enterprise Infrastructure Role:
 
@@ -184,7 +249,7 @@ Choosing **Enterprise Infrastructure** configures a distributed cluster for orga
 
 ---
 
-### Complete Pip & Installer Command Matrix
+### Pip & Installer Command Matrix
 
 | Command | Purpose | Target Component |
 |---|---|---|
@@ -227,7 +292,7 @@ Choosing **Enterprise Infrastructure** configures a distributed cluster for orga
 
 ---
 
-### Engine Runtime
+### Engine Runtime & Air Engine
 
 | Command | Description |
 |---|---|
@@ -240,13 +305,6 @@ Choosing **Enterprise Infrastructure** configures a distributed cluster for orga
 | `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
 | `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
 | `lmms create <model> -f <file>` | Create custom model entry from GGUF, Safetensors, or manifest |
-
----
-
-### Air Engine (Infinite Tensor Offloading)
-
-| Command | Description |
-|---|---|
 | `lmms -air run <model> [prompt]` | Run ultra-large models with Air dynamic hybrid GPU/CPU/Disk offloading |
 | `lmms --air run <m1> <m2>` | Run multiple concurrent models through the Air scheduler |
 | `lmms air ps` | Display active Air session models and GPU/CPU layer allocation |

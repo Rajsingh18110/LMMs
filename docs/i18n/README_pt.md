@@ -1,20 +1,20 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
 <p align="center">
   <strong>Construa com modelos. Entregue com agentes.</strong><br>
-  <em>Sistema operacional de IA local nativo em Python por Raj Singh (MarkanM)</em>
+  <em>O sistema operacional de IA local nativo em Python pelo fundador Raj Singh (MarkanM)</em>
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -49,12 +49,13 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">Site Oficial</a> ·
+  <a href="#system-architecture">Arquitetura</a> ·
+  <a href="#deep-technical-capabilities">Recursos Principais</a> ·
   <a href="#quick-start">Início Rápido</a> ·
   <a href="#architecture-setup-wizard-lmms-install">Assistente de Instalação</a> ·
-  <a href="#enterprise-infrastructure--super-host">Infraestrutura Corporativa</a> ·
+  <a href="#enterprise-infrastructure--super-host">Empresarial</a> ·
   <a href="#core-command-reference">Referência de Comandos</a> ·
   <a href="#cli-slash-commands">Comandos Slash</a> ·
-  <a href="#product-philosophy">Filosofia</a> ·
   <a href="#license">Licença</a>
 </p>
 
@@ -62,17 +63,65 @@
 
 ## O que é o LMMs OS?
 
-O LMMs é uma camada operacional de inteligência artificial nativa em Python para execução local e remota de modelos. Criado pelo fundador Raj Singh (MarkanM), combina um estúdio GUI real para desktop, uma CLI inteligente para desenvolvedores e um motor de execução maduro sem telemetria.
+O LMMs é uma camada operacional de IA nativa em Python para execução local e remota de modelos. Criado pelo fundador Raj Singh (MarkanM), ele combina um estúdio GUI de desktop completo, uma CLI inteligente para desenvolvedores e um mecanismo de execução robusto para que desenvolvedores e empresas executem modelos multimodais com zero telemetria e sem dependência da nuvem.
 
-* 🧠 **Núcleo de Motor Duplo Nativo**: Inferência quantizada GGUF de alta velocidade (llama.cpp) e execução nativa em PyTorch safetensors.
-* ⚡ **Escala Infinita com AirEngine**: Descarregamento dinâmico de tensores em GPU, CPU e disco para rodar modelos de mais de 70B em notebooks comuns.
-* 🖥️ **Desktop Studio (GUI)**: Editor Monaco, visualizador de diffs, integração com Git e gerenciamento de ferramentas.
-* ⌨️ **Terminal Studio (CLI)**: Shell interativa com mais de 30 comandos slash, programação em par e ambiente sandbox seguro.
-* 🏢 **Pronto para Empresas**: Infraestrutura cliente-servidor distribuída em redes privadas LAN/VPC com descoberta automática.
+* **Núcleo de motor duplo nativo**: Inferência quantizada GGUF de alto desempenho com llama.cpp e execução nativa safetensors em PyTorch.
+* **Escala infinita com AirEngine**: O descarregamento dinâmico de tensores entre GPU, CPU e disco permite rodar modelos de 70B+ até mesmo em notebooks comuns.
+* **Estúdio de Desktop (GUI)**: Editor de código Monaco, comparações visuais diff, integração Git e gerenciador de ferramentas embutido.
+* **Estúdio de Terminal (CLI)**: Shell interativa com mais de 30 comandos slash, programação em par, orquestração de subagentes e sandbox segura.
+* **Pronto para Empresas**: Infraestrutura cliente-servidor distribuída em redes privadas LAN/VPC com descoberta automática do host central.
 
 ---
 
-## Início Rápido
+## Arquitetura do Sistema
+
+O diagrama a seguir ilustra a arquitetura completa do LMMs OS nos subsistemas de Interface, Backend, Inferência e Agentes:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **Interfaces de Usuário**: `GUI workspace [main_window.py]` (IDE Monaco e revisão diff) e `CLI [commands.py]` (terminal interativo para desenvolvedores).
+2. **API e Camada de Backend**: `HTTP API [server.py]` (daemon FastAPI na porta 11435), `Backend session [main.py]` (coordenador de sessão), e `Backend services [manager.py]`.
+3. **Subsistema de Inferência**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (descarregamento GPU/CPU/Disco), `Model registry [registry.py]`, `runtime llama.cpp` e `runtime PyTorch`.
+4. **Subsistema de Recursos de Agente**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]` e `Workspace & Git [manager.py]`.
+
+---
+
+## Recursos Técnicos Avançados (Deep Technical Capabilities)
+
+### 1. Motor de Visão Multimodal (`/vision`, `/image`)
+O LMMs integra processamento multimodal diretamente no motor local:
+* **Análise de UI e Layout**: Examina capturas de tela de aplicações web e desktop para detectar erros visuais, desalinhamentos e bugs CSS.
+* **Extração de Diagramas e Arquitetura**: Analisa fluxogramas, diagramas ER e sequências UML, transcrevendo-os em código Mermaid ou estruturas de dados.
+* **OCR Local de Documentos**: Extrai texto limpo e tabelas de imagens e PDFs sem enviar dados para a nuvem.
+
+### 2. Áudio e Voz Offline (`/mic`)
+* **Reconhecimento de Voz Local**: Transcrição rápida e offline alimentada por modelos Whisper quantizados locais.
+* **Comandos por Voz**: Grave instruções e notas diretamente na sessão CLI ativa com latência zero.
+
+### 3. Consciência Git e Isolamento por Worktree (`/git`, `/scope`)
+* **Proteção de Leitura**: Restringe operações a comandos seguros (`cat`, `git diff`, `grep`), exceto quando explicitamente autorizado.
+* **Worktrees Git Temporárias**: Alterações de código são executadas em clones de worktree isolados e só são mescladas após validação dos testes.
+* **Pré-visualização Diff**: Toda alteração gera uma visualização colorida antes de ser gravada em disco.
+
+### 4. Checkpoints Determinísticos e Reversão Instantânea (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **Instantâneos por Turno**: Backup imutável dos arquivos é salvo antes de qualquer alteração destrutiva.
+* **Reversão em Milissegundos**: Se um patch falhar nos testes, `/rollback` ou `/undo` restaura o projeto ao estado exato anterior.
+
+### 5. Subagentes Autônomos e Orquestração Multiagente (`/agent`, `/orchestrate`)
+* **Tarefas em Segundo Plano**: Inicia subagentes independentes com limites de tokens e permissões restritas.
+* **Coordenação Hierárquica**: O orquestrador principal delega tarefas especializadas (testes, documentação, refatoração) e consolida os resultados.
+
+### 6. Pesquisa Local e RAG Vetorial (`/research`)
+* **Indexação Semântica**: Indexa o repositório em um banco vetorial local para busca rápida de classes e métodos.
+* **Pesquisa Sem Alucinações**: Consulta documentação técnica local e da web eliminando respostas inventadas.
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -100,9 +149,7 @@ lmms            # Launch configured interface
 
 ---
 
-## Assistente de Configuração de Arquitetura (`lmms install`)
-
-Executar `lmms install` inicia o assistente interativo no terminal:
+## Assistente de Instalação de Arquitetura (`lmms install`)
 
 ```text
   LMMs Installer · Architecture Setup Wizard
@@ -122,9 +169,7 @@ Executar `lmms install` inicia o assistente interativo no terminal:
 
 ---
 
-### [1] Configurações de Estação de Trabalho Individual
-
-6 componentes voltados para a execução local autônoma:
+### [1] Configuração para Estação de Trabalho Individual
 
 ```text
   ? Select Component Configuration:
@@ -153,9 +198,7 @@ Executar `lmms install` inicia o assistente interativo no terminal:
 
 ---
 
-### [2] Infraestrutura Corporativa & Super Host
-
-Cluster distribuído projetado para times e empresas:
+### [2] Infraestrutura Corporativa e Super Host
 
 ```text
   ? Select Enterprise Infrastructure Role:
@@ -168,32 +211,32 @@ Cluster distribuído projetado para times e empresas:
   ──────────────────────────────────────────────────────────────────────
 ```
 
-* **Computação Centralizada de Alto Desempenho**: Servidor host rodando em `0.0.0.0:11435` em servidores com GPU dedicadas.
-* **Clientes Leves**: Colaboradores conectam seus notebooks via descoberta automática na rede local LAN.
-* **Soberania dos Dados**: Prompts e códigos confidenciais nunca saem da rede privada da empresa.
-* **AirEngine Sem Gargalos**: Suporte a modelos gigantes através de streaming dinâmico de memória.
+* **Computação Centralizada**: O daemon roda em servidores GPU dedicados (`0.0.0.0:11435`) para servir modelos da empresa.
+* **Clientes Remotos**: Funcionários conectam-se de seus notebooks com descoberta automática em rede LAN/VPC.
+* **Privacidade Total**: Todo o código e comandos permanecem na rede interna da empresa.
+* **AirEngine sem Limitações**: Streaming dinâmico de pesos de modelos em VRAM, RAM e NVMe.
 
 ---
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| Comando | Objetivo | Componente Alvo |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | Iniciar o assistente interativo de arquitetura | Menu de configuração interativo |
+| `lmms install --all` | Instalar todo o ecossistema | Estúdio Desktop, CLI, Voz, Super Engine |
+| `lmms install --gui` | Instalar o Estúdio Desktop (GUI) | Interface PyQt6, Editor Monaco, Cliente do motor |
+| `lmms install --cli` | Instalar o Estúdio Terminal (CLI) | Shell interativo, ferramentas dev, Cliente do motor |
+| `lmms install --engine` | Instalar o runtime Super Engine | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | Instalar motor leve | llama.cpp + AirEngine (exclusivo GGUF) |
+| `lmms install --engine2` | Instalar motor PyTorch | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | Instalar daemon do servidor corporativo | Servidor central escutando em 0.0.0.0:11435 |
+| `lmms install --client-gui` | Instalar cliente GUI corporativo | GUI configurada para conectar a host remoto na LAN |
+| `lmms install --client-cli` | Instalar cliente CLI corporativo | CLI configurada para conectar a host remoto na LAN |
+| `lmms update` | Atualizar código-fonte da aplicação | Atualização da branch ativa atual |
+| `lmms update --all` | Atualização forçada em todas as branches | Sincronização integral com o GitHub |
+| `lmms -check` | Diagnóstico de hardware e requisitos | Telemetria de CPU, GPU, VRAM, AVX e disco |
+| `lmms-uninstall -all` | Remoção segura do código-fonte | Remove o código, mantém pacotes pip e modelos |
+| `lmms-uninstall -all --purge` | Restauração de fábrica completa | Eliminação total de configurações, modelos e dados |
 
 ---
 
@@ -201,77 +244,105 @@ Cluster distribuído projetado para times e empresas:
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| Comando | Descrição |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | Iniciar a interface padrão configurada |
+| `lmms --gui` | Iniciar diretamente o estúdio desktop GUI |
+| `lmms --cli` | Iniciar diretamente a shell interativa CLI |
+| `lmms --engine` | Iniciar diretamente o daemon do motor de inferência |
+| `lmms set --gui` | Definir o Desktop Studio como modo padrão de inicialização |
+| `lmms set --cli` | Definir o Terminal Studio como modo padrão de inicialização |
+| `lmms set --engine` | Definir o Engine Daemon como modo padrão de inicialização |
+| `lmms stop` | Encerrar de forma segura o motor LMMs em segundo plano |
+| `lmms -check` | Verificar perfil de hardware e requisitos do sistema |
+| `lmms update` | Atualização inteligente da branch atual |
+| `lmms update --all` | Forçar atualização completa a partir do GitHub |
+| `lmms --help` | Exibir ajuda abrangente do inicializador |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| Comando | Descrição |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | Executar modelo em chat interativo ou prompt único |
+| `lmms list` | Listar modelos baixados localmente |
+| `lmms ps` | Exibir modelos em execução, alocação e estado da VRAM |
+| `lmms pull <model>` | Baixar modelo do Hugging Face ou Hub oficial |
+| `lmms info <model>` | Inspecionar metadados, janela de contexto e quantização |
+| `lmms search <query>` | Pesquisar nos repositórios de modelos disponíveis |
+| `lmms benchmark <model>` | Medir velocidade de geração (tokens/s) e latência |
+| `lmms doctor` | Verificar integridade do motor e drivers CUDA/GPU |
+| `lmms create <model> -f <file>` | Registrar modelo personalizado a partir de GGUF ou Safetensors |
+| `lmms -air run <model> [prompt]` | Executar modelos gigantes via descarregamento dinâmico AirEngine |
+| `lmms --air run <m1> <m2>` | Executar múltiplos modelos concorrentes com o escalonador Air |
+| `lmms air ps` | Visualizar sessões Air ativas e divisão de camadas em GPU/CPU |
+| `lmms air stats` | Acompanhar telemetria de hardware e estatísticas de offload |
+| `lmms air cache` | Verificar tamanho e uso do cache de disco do Air |
+| `lmms air unload` | Descarregar modelos Air e liberar cache de VRAM imediatamente |
+| `lmms air benchmark <model>` | Avaliar taxa de transferência sob o escalonador Air |
 
 ---
 
-## Comandos Slash Interativos da CLI
+### Server / Daemon
 
-| Command | Description |
+| Comando | Descrição |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `lmms server` | Iniciar daemon do servidor API / Web |
+| `lmms server status` | Verificar status do servidor, porta, uptime e saúde |
+| `lmms engine status` | Verificar modo ativo do motor e dados de memória |
+| `lmms engine unload [model]` | Liberar modelos ativos da memória e limpar VRAM |
+| `lmms server start [--port 11435]` | Iniciar daemon FastAPI em segundo plano na porta especificada |
+| `lmms server stop` | Parar daemon do servidor em segundo plano |
+
+---
+
+## Comandos Interactivos Slash CLI
+
+| Comando | Descrição |
+|---|---|
+| `/fast` | Mudar para modo FAST com respostas rápidas e ferramentas leves |
+| `/deep` | Mudar para modo DEEP com raciocínio profundo e acesso a ferramentas |
+| `/model <name>` | Trocar o modelo usado na conversa atual |
+| `/ml -l` | Listar todos os modelos baixados localmente dentro do chat |
+| `/ml -s <name>` | Trocar modelo a quente mantendo o histórico de mensagens |
+| `/folder <path>` | Vincular um diretório ao contexto de trabalho do agente |
+| `/code` | Entrar no modo focado em geração e edição de código |
+| `/chat` | Listar e revisar histórico de sessões anteriores |
+| `/newchat` | Iniciar uma nova sessão de conversa limpa |
+| `/chat -r <id> <name>` | Renomear uma sessão de conversa específica |
+| `/chat -d <id>` | Excluir permanentemente uma sessão de conversa |
+| `/undo` | Desfazer com segurança a última alteração de arquivo feita pela IA |
+| `/redo` | Refazer a última ação de arquivo desfeita |
+| `/exit` | Sair da sessão interativa do terminal |
+| `/reboot` | Reiniciar o motor backend e reconectar a sessão |
+| `/mic` | Gravar voz no microfone e transcrever direto no prompt |
+| `/vision ou /image` | Ativar modo de visão multimodal para inspeção de imagens e telas |
+| `/research` | Ativar modo de pesquisa para busca na web e documentação |
+| `/read <file>` | Carregar arquivo do projeto diretamente no contexto da sessão |
+| `/task` | Gerenciar tarefas autônomas e objetivos em segundo plano |
+| `/git` | Executar operações seguras e auditadas de Git pelo agente |
+| `/scope` | Inspecionar e ajustar limites de permissão das ferramentas |
+| `/tools list` | Listar todas as ferramentas nativas e servidores MCP ativos |
+| `/report` | Gerar relatório criptográfico de auditoria e segurança |
+| `/checkpoint` | Criar ponto de restauração imutável do espaço de trabalho |
+| `/checkpoints` | Listar todos os pontos de restauração salvos |
+| `/rollback` | Restaurar repositório e arquivos para um ponto anterior |
+| `/status` | Verificar saúde em tempo real do motor e do hardware |
+| `/doctor` | Executar diagnóstico do sistema e rotinas de autorrecuperação |
+| `/pair` | Ativar modo de programação em par interativo |
+| `/perm <level>` | Ajustar nível de permissões da sandbox (`strict`, `ask`, `full`) |
+| `/agent` | Criar e gerenciar subagentes para tarefas paralelas |
+| `/orchestrate` | Supervisionar fluxos coordenados de múltiplos agentes |
 
 ---
 
 ## Filosofia do Produto
 
-1. **Foco na Prática**: Modificação real de arquivos, validação AST e execução segura.
-1. **Transparência**: Zero telemetria e sem cobranças ocultas.
-1. **Local Primeiro**: Seus modelos e pesos permanecem nas suas máquinas.
-1. **Stack Limpa**: Código Python puro sem dependências pesadas externas.
+1. **Utilidade Real em Primeiro Lugar**: Aplicação direta de código, validação AST e execução em sandbox.
+2. **Honestidade e Transparência**: Zero telemetria, sem cobranças ocultas ou assinaturas forçadas.
+3. **Local-First Genuíno**: Todos os seus modelos e dados permanecem sob seu controle local.
+4. **Arquitetura Limpa**: Desenvolvido em Python puro sem dependências desnecessárias.
 
 ---
 

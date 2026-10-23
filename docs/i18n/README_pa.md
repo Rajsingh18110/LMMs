@@ -1,20 +1,20 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
 <p align="center">
-  <strong>ਮਾਡਲਾਂ ਨਾਲ ਬਣਾਓ। ਏਜੰਟਾਂ ਨਾਲ ਚਲਾਓ।</strong><br>
-  <em>ਰਾਜ ਸਿੰਘ (MarkanM) ਦੁਆਰਾ ਬਣਾਇਆ ਗਿਆ ਪਾਈਥਨ-ਨੇਟਿਵ ਲੋਕਲ AI ਓਪਰੇਟਿੰਗ ਸਿਸਟਮ</em>
+  <strong>ਮਾਡਲਾਂ ਨਾਲ ਬਣਾਓ। ਏਜੰਟਾਂ ਨਾਲ ਡਿਲੀਵਰ ਕਰੋ।</strong><br>
+  <em>ਸੰਸਥਾਪਕ ਰਾਜ ਸਿੰਘ (MarkanM) ਦੁਆਰਾ ਬਣਾਇਆ ਗਿਆ ਪਾਈਥਨ-ਨੇਟਿਵ ਲੋਕਲ AI ਆਪਰੇਟਿੰਗ ਸਿਸਟਮ</em>
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -48,13 +48,14 @@
 
 
 <p align="center">
-  <a href="https://lmms.markanm.com">ਵੈੱਬਸਾਈਟ</a> ·
-  <a href="#quick-start">ਤੁਰੰਤ ਸ਼ੁਰੂਆਤ</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">ਆਰਕੀਟੈਕਚਰ ਸੈੱਟਅੱਪ ਵਿਜ਼ਾਰਡ</a> ·
-  <a href="#enterprise-infrastructure--super-host">ਇੰਟਰਪ੍ਰਾਈਜ਼ ਬੁਨਿਆਦੀ ਢਾਂਚਾ</a> ·
+  <a href="https://lmms.markanm.com">ਅਧਿਕਾਰਤ ਵੈੱਬਸਾਈਟ</a> ·
+  <a href="#system-architecture">ਸਿਸਟਮ ਆਰਕੀਟੈਕਚਰ</a> ·
+  <a href="#deep-technical-capabilities">ਮੁੱਖ ਸਮਰੱਥਾਵਾਂ</a> ·
+  <a href="#quick-start">ਤੇਜ਼ ਸ਼ੁਰੂਆਤ</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">ਇੰਸਟਾਲੇਸ਼ਨ ਵਿਜ਼ਾਰਡ</a> ·
+  <a href="#enterprise-infrastructure--super-host">ਇੰਟਰਪ੍ਰਾਈਜ਼</a> ·
   <a href="#core-command-reference">ਕਮਾਂਡ ਰੈਫਰੈਂਸ</a> ·
   <a href="#cli-slash-commands">ਸਲੈਸ਼ ਕਮਾਂਡਾਂ</a> ·
-  <a href="#product-philosophy">ਸਾਡੀ ਸੋਚ</a> ·
   <a href="#license">ਲਾਇਸੈਂਸ</a>
 </p>
 
@@ -62,17 +63,65 @@
 
 ## LMMs OS ਕੀ ਹੈ?
 
-LMMs ਲੋਕਲ ਅਤੇ ਰਿਮੋਟ ਮਾਡਲ ਚਲਾਉਣ ਲਈ ਇੱਕ ਪਾਈਥਨ-ਨੇਟਿਵ AI ਓਪਰੇਟਿੰਗ ਸਿਸਟਮ ਹੈ। ਸੰਸਥਾਪਕ ਰਾਜ ਸਿੰਘ (MarkanM) ਦੁਆਰਾ ਤਿਆਰ ਕੀਤਾ ਗਿਆ, ਇਹ ਇੱਕ ਅਸਲ ਡੈਸਕਟਾਪ GUI, ਇੱਕ ਬੁੱਧੀਮਾਨ CLI, ਅਤੇ ਇੱਕ ਮਜ਼ਬੂਤ ਇੰਜਨ ਪ੍ਰਦਾਨ ਕਰਦਾ ਹੈ ਬਿਨਾਂ ਕਿਸੇ ਕਲਾਉਡ ਨਿਰਭਰਤਾ ਦੇ।
+LMMs ਲੋਕਲ ਅਤੇ ਰਿਮੋਟ ਮਾਡਲ ਚਲਾਉਣ ਲਈ ਇੱਕ ਪਾਈਥਨ-ਨੇਟਿਵ AI ਆਪਰੇਟਿੰਗ ਲੇਅਰ ਹੈ। ਸੰਸਥਾਪਕ ਰਾਜ ਸਿੰਘ (MarkanM) ਦੁਆਰਾ ਤਿਆਰ ਕੀਤਾ ਗਿਆ, ਇਹ ਇੱਕ ਅਸਲ ਡੈਸਕਟਾਪ GUI ਸਟੂਡੀਓ, ਸਮਾਰਟ ਡਿਵੈਲਪਰ CLI, ਅਤੇ ਇੱਕ ਪਰਿਪੱਕ ਇੰਜਨ ਰਨਟਾਈਮ ਨੂੰ ਜੋੜਦਾ ਹੈ ਤਾਂ ਜੋ ਬਿਨਾਂ ਕਿਸੇ ਟੈਲੀਮੈਟਰੀ ਜਾਂ ਕਲਾਉਡ ਨਿਰਭਰਤਾ ਦੇ ਵੱਡੇ ਮਾਡਲਾਂ ਨੂੰ ਚਲਾਇਆ ਜਾ ਸਕੇ।
 
-* 🧠 **ਨੇਟਿਵ ਡਿਊਲ ਇੰਜਨ ਕੋਰ**: llama.cpp ਨਾਲ ਤੇਜ਼ GGUF ਮਾਡਲ ਅਤੇ PyTorch safetensors ਦੀ ਪੂਰੀ ਸਮਰੱਥਾ।
-* ⚡ **AirEngine ਨਾਲ ਅਸੀਮਿਤ ਸਕੇਲਿੰਗ**: GPU, CPU ਅਤੇ ਡਿਸਕ ਦੇ ਤਾਲਮੇਲ ਨਾਲ ਆਮ ਲੈਪਟਾਪਾਂ ਉੱਤੇ ਵੀ 70B+ ਮਾਡਲ ਚਲਾਏ ਜਾ ਸਕਦੇ ਹਨ।
-* 🖥️ **ਡੈਸਕਟਾਪ ਸਟੂਡੀਓ (GUI)**: Monaco ਕੋਡ ਐਡੀਟਰ, ਵਿਜ਼ੂਅਲ diff, ਅਤੇ Git ਇੰਟੀਗ੍ਰੇਸ਼ਨ।
-* ⌨️ **ਟਰਮੀਨਲ ਸਟੂਡੀਓ (CLI)**: 30 ਤੋਂ ਵੱਧ ਸਲੈਸ਼ ਕਮਾਂਡਾਂ, ਪੇਅਰ ਪ੍ਰੋਗਰਾਮਿੰਗ, ਅਤੇ ਸੁਰੱਖਿਅਤ ਸੈਂਡਬਾਕਸਿੰਗ।
-* 🏢 **ਇੰਟਰਪ੍ਰਾਈਜ਼ ਕਲੱਸਟਰਿੰਗ**: ਪ੍ਰਾਈਵੇਟ ਨੈੱਟਵਰਕ ਉੱਤੇ ਸੈਂਟਰਲ ਹੋਸਟ ਅਤੇ ਆਟੋ-ਕਨੈਕਟ ਕਲਾਇੰਟ ਸਹੂਲਤ।
+* **ਨੇਟਿਵ ਡੁਅਲ ਇੰਜਨ ਕੋਰ**: llama.cpp ਰਾਹੀਂ ਉੱਚ-ਸਪੀਡ ਕੁਆਂਟਾਈਜ਼ਡ GGUF ਇਨਫਰੈਂਸ ਅਤੇ PyTorch ਰਾਹੀਂ ਨੇਟਿਵ safetensors ਰਨਟਾਈਮ।
+* **AirEngine ਨਾਲ ਅਸੀਮਤ ਸਕੇਲਿੰਗ**: GPU, CPU ਅਤੇ ਡਿਸਕ ਵਿਚਕਾਰ ਗਤੀਸ਼ੀਲ ਟੈਂਸਰ ਆਫਲੋਡਿੰਗ ਆਮ ਲੈਪਟਾਪਾਂ 'ਤੇ ਵੀ 70B+ ਮਾਡਲ ਚਲਾਉਣ ਦੀ ਆਗਿਆ ਦਿੰਦੀ ਹੈ।
+* **ਡੈਸਕਟਾਪ ਸਟੂਡੀਓ (GUI)**: ਮੋਨਾਕੋ ਕੋਡ ਐਡੀਟਰ, ਵਿਜ਼ੂਅਲ diff ਸਮੀਖਿਆ, Git ਏਕੀਕਰਣ ਅਤੇ ਬਿਲਟ-ਇਨ ਟੂਲ ਪ੍ਰਬੰਧਨ।
+* **ਟਰਮੀਨਲ ਸਟੂਡੀਓ (CLI)**: 30+ ਇੰਟਰਐਕਟਿਵ ਸਲੈਸ਼ ਕਮਾਂਡਾਂ, ਪੇਅਰ ਪ੍ਰੋਗਰਾਮਿੰਗ, ਸਬ-ਏਜੰਟ ਆਰਕੈਸਟ੍ਰੇਸ਼ਨ ਅਤੇ ਸੁਰੱਖਿਅਤ ਸੈਂਡਬੌਕਸ।
+* **ਇੰਟਰਪ੍ਰਾਈਜ਼ ਲਈ ਤਿਆਰ**: ਨਿੱਜੀ LAN/VPC ਨੈੱਟਵਰਕਾਂ 'ਤੇ ਕੇਂਦਰੀ ਹੋਸਟ ਅਤੇ ਆਟੋ-ਡਿਸਕਵਰੀ ਵਾਲਾ ਵਿਤਰਿਤ ਕਲੱਸਟਰ।
 
 ---
 
-## ਤੁਰੰਤ ਸ਼ੁਰੂਆਤ
+## ਸਿਸਟਮ ਆਰਕੀਟੈਕਚਰ
+
+ਹੇਠਾਂ ਦਿੱਤਾ ਚਿੱਤਰ LMMs OS ਦੇ ਯੂਜ਼ਰ ਇੰਟਰਫੇਸ, ਬੈਕਐਂਡ ਸੇਵਾਵਾਂ, ਮਾਡਲ ਇਨਫਰੈਂਸ ਅਤੇ ਏਜੰਟ ਸਮਰੱਥਾਵਾਂ ਦੇ ਆਰਕੀਟੈਕਚਰ ਨੂੰ ਦਰਸਾਉਂਦਾ ਹੈ:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **ਯੂਜ਼ਰ ਇੰਟਰਫੇਸ**: `GUI workspace [main_window.py]` (ਮੋਨਾਕੋ ਐਡੀਟਰ ਅਤੇ diff ਜਾਂਚ) ਅਤੇ `CLI [commands.py]` (ਇੰਟਰਐਕਟਿਵ ਟਰਮੀਨਲ ਸ਼ੈੱਲ)।
+2. **API ਅਤੇ ਬੈਕਐਂਡ ਲੇਅਰ**: `HTTP API [server.py]` (FastAPI ਡੈਮਨ ਪੋਰਟ 11435), `Backend session [main.py]` (ਸੈਸ਼ਨ ਕੋਆਰਡੀਨੇਟਰ), ਅਤੇ `Backend services [manager.py]`।
+3. **ਮਾਡਲ ਇਨਫਰੈਂਸ ਸਬ-ਸਿਸਟਮ**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (ਟੈਂਸਰ ਆਫਲੋਡਿੰਗ), `Model registry [registry.py]`, `llama.cpp ਇੰਜਨ` ਅਤੇ `PyTorch ਇੰਜਨ`।
+4. **ਏਜੰਟ ਸਮਰੱਥਾ ਸਬ-ਸਿਸਟਮ**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]` ਅਤੇ `Workspace & Git [manager.py]`।
+
+---
+
+## ਡੂੰਘੀਆਂ ਤਕਨੀਕੀ ਸਮਰੱਥਾਵਾਂ (Deep Technical Capabilities)
+
+### 1. ਮਲਟੀਮੋਡਲ ਵਿਜ਼ਨ ਇੰਜਨ (`/vision`, `/image`)
+LMMs ਵਿੱਚ ਸਥਾਨਕ ਇੰਜਨ ਦੇ ਅੰਦਰ ਸਿੱਧਾ ਮਲਟੀਮੋਡਲ ਪ੍ਰੋਸੈਸਿੰਗ ਸ਼ਾਮਲ ਹੈ:
+* **UI ਅਤੇ ਲੇਆਉਟ ਵਿਸ਼ਲੇਸ਼ਣ**: ਵਿਜ਼ੂਅਲ ਬੱਗ ਅਤੇ CSS ਰੈਂਡਰਿੰਗ ਗਲਤੀਆਂ ਲੱਭਣ ਲਈ ਵੈੱਬ ਜਾਂ ਡੈਸਕਟਾਪ ਸਕ੍ਰੀਨਸ਼ੌਟਸ ਦੀ ਜਾਂਚ ਕਰਦਾ ਹੈ।
+* **ਆਰਕੀਟੈਕਚਰ ਅਤੇ ਚਿੱਤਰ ਨਿਕਾਸੀ**: ਫਲੋਚਾਰਟ, ER ਚਿੱਤਰ ਅਤੇ UML ਕ੍ਰਮਾਂ ਦਾ ਵਿਸ਼ਲੇਸ਼ਣ ਕਰਕੇ ਸਿੱਧੇ ਮਰਮੇਡ ਕੋਡ ਵਿੱਚ ਬਦਲਦਾ ਹੈ।
+* **ਸਥਾਨਕ ਦਸਤਾਵੇਜ਼ OCR**: ਬਿਨਾਂ ਕਲਾਉਡ 'ਤੇ ਭੇਜੇ ਸਿੱਧੇ ਡਿਵਾਈਸ ਤੋਂ ਚਿੱਤਰਾਂ ਅਤੇ PDF ਵਿੱਚੋਂ ਟੈਕਸਟ ਅਤੇ ਟੇਬਲ ਕੱਢਦਾ ਹੈ।
+
+### 2. ਔਫਲਾਈਨ ਵੌਇਸ ਅਤੇ ਆਡੀਓ ਇਨਪੁੱਟ (`/mic`)
+* **ਲੋਕਲ ਸਪੀਚ-ਟੂ-ਟੈਕਸਟ**: ਕੁਆਂਟਾਈਜ਼ਡ ਲੋਕਲ Whisper ਮਾਡਲਾਂ ਦੁਆਰਾ ਤੇਜ਼ ਔਫਲਾਈਨ ਟ੍ਰਾਂਸਕ੍ਰਿਪਸ਼ਨ।
+* **ਹੈਂਡਸ-ਫ੍ਰੀ ਪ੍ਰੋਂਪਟਿੰਗ**: ਬਿਨਾਂ ਨੈੱਟਵਰਕ ਦੇਰੀ ਦੇ ਸਿੱਧੇ ਸਰਗਰਮ CLI ਸੈਸ਼ਨ ਵਿੱਚ ਆਵਾਜ਼ ਰਾਹੀਂ ਨਿਰਦੇਸ਼ ਰਿਕਾਰਡ ਕਰੋ।
+
+### 3. Git ਜਾਗਰੂਕਤਾ ਅਤੇ Worktree ਆਈਸੋਲੇਸ਼ਨ (`/git`, `/scope`)
+* **ਸਿਰਫ਼ ਪੜ੍ਹਨ ਵਾਲਾ ਸੁਰੱਖਿਆ ਗਾਰਡ**: ਜਦੋਂ ਤੱਕ ਸਪਸ਼ਟ ਤੌਰ 'ਤੇ ਮਨਜ਼ੂਰੀ ਨਾ ਹੋਵੇ, ਕਾਰਵਾਈਆਂ ਨੂੰ ਸੁਰੱਖਿਅਤ ਕਮਾਂਡਾਂ (`cat`, `git diff`, `grep`) ਤੱਕ ਸੀਮਤ ਰੱਖਦਾ ਹੈ।
+* **ਆਰਜ਼ੀ Git Worktree**: ਕੋਡ ਤਬਦੀਲੀਆਂ ਵੱਖਰੇ ਕਲੋਨ ਵਿੱਚ ਚੱਲਦੀਆਂ ਹਨ ਅਤੇ ਟੈਸਟ ਪਾਸ ਹੋਣ ਤੋਂ ਬਾਅਦ ਹੀ ਮੁੱਖ ਬ੍ਰਾਂਚ ਵਿੱਚ ਮਿਲਦੀਆਂ ਹਨ।
+* **ਰੰਗੀਨ Diff ਝਲਕ**: ਡਿਸਕ 'ਤੇ ਕੋਈ ਵੀ ਤਬਦੀਲੀ ਲਿਖਣ ਤੋਂ ਪਹਿਲਾਂ ਰੰਗੀਨ diff ਪੇਸ਼ ਕਰਦਾ ਹੈ।
+
+### 4. ਨਿਰਧਾਰਿਤ ਚੈੱਕਪੁਆਇੰਟ ਅਤੇ ਤੁਰੰਤ ਰੋਲਬੈਕ (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **ਕਦਮ-ਦਰ-ਕਦਮ ਸਨੈਪਸ਼ਾਟ**: ਹਰੇਕ ਫਾਈਲ ਤਬਦੀਲੀ ਤੋਂ ਪਹਿਲਾਂ ਬੈਕਅੱਪ ਸਨੈਪਸ਼ਾਟ ਸੁਰੱਖਿਅਤ ਕੀਤਾ ਜਾਂਦਾ ਹੈ।
+* **ਮਿਲੀਸਕਿੰਟਾਂ ਵਿੱਚ ਰੋਲਬੈਕ**: ਜੇਕਰ ਕੋਈ ਪੈਚ ਫੇਲ੍ਹ ਹੁੰਦਾ ਹੈ, ਤਾਂ `/rollback` ਜਾਂ `/undo` ਕੋਡ ਨੂੰ ਤੁਰੰਤ ਪਹਿਲੀ ਸਥਿਤੀ ਵਿੱਚ ਵਾਪਸ ਲਿਆਉਂਦਾ ਹੈ।
+
+### 5. ਖੁਦਮੁਖਤਿਆਰ ਸਬ-ਏਜੰਟ ਅਤੇ ਮਲਟੀ-ਏਜੰਟ ਪ੍ਰਬੰਧਨ (`/agent`, `/orchestrate`)
+* **ਬੈਕਗ੍ਰਾਉਂਡ ਕਾਰਜ**: ਸੀਮਤ ਟੋਕਨ ਬਜਟ ਅਤੇ ਫਾਈਲ ਇਜਾਜ਼ਤਾਂ ਨਾਲ ਬੈਕਗ੍ਰਾਉਂਡ ਵਿੱਚ ਸੁਤੰਤਰ ਸਬ-ਏਜੰਟ ਚਲਾਉਂਦਾ ਹੈ।
+* **ਲੜੀਵਾਰ ਤਾਲਮੇਲ**: ਮੁੱਖ ਪ੍ਰਬੰਧਕ ਵਿਸ਼ੇਸ਼ ਕੰਮ (ਟੈਸਟਿੰਗ, ਦਸਤਾਵੇਜ਼) ਸਬ-ਏਜੰਟਾਂ ਨੂੰ ਸੌਂਪਦਾ ਹੈ ਅਤੇ ਨਤੀਜਿਆਂ ਨੂੰ ਇਕੱਠਾ ਕਰਦਾ ਹੈ।
+
+### 6. ਸਥਾਨਕ ਖੋਜ ਅਤੇ ਵੈਕਟਰ ਮੈਮੋਰੀ RAG (`/research`)
+* **ਸਿਮੈਂਟਿਕ ਕੋਡਬੇਸ ਇੰਡੈਕਸਿੰਗ**: ਫੰਕਸ਼ਨਾਂ ਅਤੇ ਕਲਾਸਾਂ ਨੂੰ ਤੇਜ਼ੀ ਨਾਲ ਲੱਭਣ ਲਈ ਸਥਾਨਕ ਵੈਕਟਰ ਸਟੋਰ ਵਿੱਚ ਫਾਈਲਾਂ ਨੂੰ ਇੰਡੈਕਸ ਕਰਦਾ ਹੈ।
+* **ਭਰਮ-ਰਹਿਤ ਦਸਤਾਵੇਜ਼ ਖੋਜ**: ਗਲਤ ਜਾਣਕਾਰੀ ਤੋਂ ਬਚਣ ਲਈ ਸਥਾਨਕ ਅਤੇ ਵੈੱਬ API ਦਸਤਾਵੇਜ਼ਾਂ ਦਾ ਅਧਿਐਨ ਕਰਦਾ ਹੈ।
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -100,9 +149,7 @@ lmms            # Launch configured interface
 
 ---
 
-## ਆਰਕੀਟੈਕਚਰ ਸੈੱਟਅੱਪ ਵਿਜ਼ਾਰਡ (`lmms install`)
-
-`lmms install` ਚਲਾਉਣ ਨਾਲ ਟਰਮੀਨਲ ਵਿਜ਼ਾਰਡ ਸ਼ੁਰੂ ਹੁੰਦਾ ਹੈ:
+## ਆਰਕੀਟੈਕਚਰ ਇੰਸਟਾਲੇਸ਼ਨ ਵਿਜ਼ਾਰਡ (`lmms install`)
 
 ```text
   LMMs Installer · Architecture Setup Wizard
@@ -122,9 +169,7 @@ lmms            # Launch configured interface
 
 ---
 
-### [1] ਵਿਅਕਤੀਗਤ ਵਰਕਸਟੇਸ਼ਨ ਸੈੱਟਅੱਪ
-
-ਲੋਕਲ ਸਿਸਟਮ ਲਈ 6 ਪ੍ਰਮੁੱਖ ਕੰਪੋਨੈਂਟ:
+### [1] ਸਿੰਗਲ ਵਰਕਸਟੇਸ਼ਨ ਕੌਂਫਿਗਰੇਸ਼ਨ
 
 ```text
   ? Select Component Configuration:
@@ -155,8 +200,6 @@ lmms            # Launch configured interface
 
 ### [2] ਇੰਟਰਪ੍ਰਾਈਜ਼ ਬੁਨਿਆਦੀ ਢਾਂਚਾ ਅਤੇ ਸੁਪਰ ਹੋਸਟ
 
-ਸੰਸਥਾਵਾਂ ਅਤੇ ਟੀਮਾਂ ਲਈ ਸਾਂਝਾ ਸਿਸਟਮ:
-
 ```text
   ? Select Enterprise Infrastructure Role:
 
@@ -168,110 +211,138 @@ lmms            # Launch configured interface
   ──────────────────────────────────────────────────────────────────────
 ```
 
-* **ਮੁੱਖ ਸਰਵਰ**: ਕੰਪਨੀ ਦੇ ਵੱਡੇ ਸਰਵਰ ਉੱਤੇ ਹੋਸਟ ਡੈਮਨ `0.0.0.0:11435` ਉੱਤੇ ਚੱਲਦਾ ਹੈ ਜਿੱਥੇ ਮਾਡਲ ਹੋਸਟ ਤੇ ਟ੍ਰੇਨ ਹੁੰਦੇ ਹਨ।
-* **ਰਿਮੋਟ ਕਲਾਇੰਟ**: ਕਰਮਚਾਰੀ ਆਪਣੇ ਲੈਪਟਾਪਾਂ ਤੋਂ ਲੋਕਲ ਨੈੱਟਵਰਕ ਰਾਹੀਂ ਆਸਾਨੀ ਨਾਲ ਜੁੜਦੇ ਹਨ।
-* **ਡੇਟਾ ਸੁਰੱਖਿਆ**: ਕੋਈ ਵੀ ਡੇਟਾ ਜਾਂ ਕੋਡ ਕੰਪਨੀ ਦੇ ਨਿੱਜੀ ਨੈੱਟਵਰਕ ਤੋਂ ਬਾਹਰ ਨਹੀਂ ਜਾਂਦਾ।
-* **AirEngine ਸਕੇਲਿੰਗ**: ਮੈਮੋਰੀ ਦੀ ਕੋਈ ਰੁਕਾਵਟ ਨਹੀਂ ਰਹਿੰਦੀ।
+* **ਕੇਂਦਰੀਕ੍ਰਿਤ ਸ਼ਕਤੀਸ਼ਾਲੀ ਕੰਪਿਊਟ**: ਹੋਸਟ ਡੈਮਨ ਕੰਪਨੀ ਦੇ ਕੇਂਦਰੀ GPU ਸਰਵਰ (`0.0.0.0:11435`) 'ਤੇ ਚੱਲਦਾ ਹੈ ਜੋ ਨਿੱਜੀ ਮਾਡਲ ਸੇਵਾਵਾਂ ਪ੍ਰਦਾਨ ਕਰਦਾ ਹੈ।
+* **ਰਿਮੋਟ ਕਲਾਇੰਟ ਸਟੂਡੀਓ**: ਟੀਮ ਮੈਂਬਰ ਆਪਣੇ ਲੈਪਟਾਪ ਤੋਂ LAN/VPC ਨੈੱਟਵਰਕ ਰਾਹੀਂ ਆਟੋ-ਡਿਸਕਵਰੀ ਨਾਲ ਜੁੜਦੇ ਹਨ।
+* **ਪੂਰੀ ਡਾਟਾ ਗੋਪਨੀਯਤਾ**: ਕੋਈ ਵੀ ਕੋਡ ਜਾਂ ਪ੍ਰੋਂਪਟ ਕੰਪਨੀ ਦੇ ਨਿੱਜੀ ਨੈੱਟਵਰਕ ਤੋਂ ਬਾਹਰ ਨਹੀਂ ਜਾਂਦਾ।
+* **AirEngine ਬਿਨਾਂ ਮੈਮਰੀ ਰੁਕਾਵਟ**: VRAM, RAM ਅਤੇ NVMe ਸਟੋਰੇਜ ਰਾਹੀਂ ਵੱਡੇ ਮਾਡਲ ਨਿਰਵਿਘਨ ਚੱਲਦੇ ਹਨ।
 
 ---
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| ਕਮਾਂਡ | ਮਕਸਦ | ਨਿਸ਼ਾਨਾ ਕੰਪੋਨੈਂਟ |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | ਇੰਟਰਐਕਟਿਵ ਆਰਕੀਟੈਕਚਰ ਵਿਜ਼ਾਰਡ ਸ਼ੁਰੂ ਕਰੋ | ਇੰਟਰਐਕਟਿਵ ਕੌਂਫਿਗਰੇਸ਼ਨ ਮੀਨੂ |
+| `lmms install --all` | ਪੂਰਾ ਈਕੋਸਿਸਟਮ ਇੰਸਟਾਲ ਕਰੋ | ਡੈਸਕਟਾਪ ਸਟੂਡੀਓ, CLI, ਆਵਾਜ਼, ਸੁਪਰ ਇੰਜਨ |
+| `lmms install --gui` | ਡੈਸਕਟਾਪ ਸਟੂਡੀਓ (GUI) ਇੰਸਟਾਲ ਕਰੋ | PyQt6 GUI, ਮੋਨਾਕੋ ਐਡੀਟਰ, ਇੰਜਨ ਕਲਾਇੰਟ |
+| `lmms install --cli` | ਟਰਮੀਨਲ ਸਟੂਡੀਓ (CLI) ਇੰਸਟਾਲ ਕਰੋ | ਇੰਟਰਐਕਟਿਵ ਸ਼ੈੱਲ, ਡਿਵੈਲਪਰ ਟੂਲ, ਕਲਾਇੰਟ |
+| `lmms install --engine` | ਸੁਪਰ ਇੰਜਨ ਰਨਟਾਈਮ ਇੰਸਟਾਲ ਕਰੋ | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | ਲਾਈਟਵੇਟ ਇੰਜਨ ਇੰਸਟਾਲ ਕਰੋ | llama.cpp + AirEngine (ਸਿਰਫ਼ GGUF ਲਈ) |
+| `lmms install --engine2` | PyTorch ਨੇਟਿਵ ਇੰਜਨ ਇੰਸਟਾਲ ਕਰੋ | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | ਇੰਟਰਪ੍ਰਾਈਜ਼ ਕੇਂਦਰੀ ਹੋਸਟ ਡੈਮਨ ਇੰਸਟਾਲ ਕਰੋ | ਸੈਂਟਰਲ ਸਰਵਰ ਡੈਮਨ 0.0.0.0:11435 'ਤੇ ਸਰਗਰਮ |
+| `lmms install --client-gui` | ਇੰਟਰਪ੍ਰਾਈਜ਼ ਡੈਸਕਟਾਪ ਕਲਾਇੰਟ ਇੰਸਟਾਲ ਕਰੋ | ਰਿਮੋਟ ਹੋਸਟ ਨਾਲ ਜੁੜਨ ਲਈ GUI |
+| `lmms install --client-cli` | ਇੰਟਰਪ੍ਰਾਈਜ਼ ਟਰਮੀਨਲ ਕਲਾਇੰਟ ਇੰਸਟਾਲ ਕਰੋ | ਰਿਮੋਟ ਹੋਸਟ ਨਾਲ ਜੁੜਨ ਲਈ CLI |
+| `lmms update` | ਨਵੀਨਤਮ ਕੋਡ ਡਾਊਨਲੋਡ ਅਤੇ ਅੱਪਡੇਟ ਕਰੋ | ਮੌਜੂਦਾ ਸਰਗਰਮ ਬ੍ਰਾਂਚ ਦਾ ਅੱਪਡੇਟ |
+| `lmms update --all` | ਸਾਰੀਆਂ ਬ੍ਰਾਂਚਾਂ 'ਤੇ ਲਾਜ਼ਮੀ ਪੂਰਾ ਅੱਪਡੇਟ | GitHub ਰਿਪੋਜ਼ਟਰੀ ਨਾਲ ਪੂਰਾ ਸਮਕਾਲੀਕਰਨ |
+| `lmms -check` | ਹਾਰਡਵੇਅਰ ਜਾਂਚ ਅਤੇ ਸ਼ਰਤਾਂ ਦੀ ਪੁਸ਼ਟੀ | CPU, GPU, VRAM, AVX ਅਤੇ ਡਿਸਕ ਟੈਲੀਮੈਟਰੀ |
+| `lmms-uninstall -all` | ਸੋਰਸ ਕੋਡ ਨੂੰ ਸੁਰੱਖਿਅਤ ਢੰਗ ਨਾਲ ਹਟਾਓ | ਕੋਡ ਹਟਾਉਂਦਾ ਹੈ, pip ਪੈਕੇਜ ਅਤੇ ਮਾਡਲ ਕੈਸ਼ ਰੱਖਦਾ ਹੈ |
+| `lmms-uninstall -all --purge` | ਫੈਕਟਰੀ ਰੀਸੈੱਟ ਅਤੇ ਪੂਰੀ ਸਫਾਈ | ਸਾਰੀਆਂ ਸੈਟਿੰਗਾਂ, ਮਾਡਲਾਂ ਅਤੇ ਡਾਟੇ ਨੂੰ ਪੱਕੇ ਤੌਰ 'ਤੇ ਮਿਟਾਓ |
 
 ---
 
-## ਮੁੱਖ ਕਮਾਂਡਾਂ ਦੀ ਸੂਚੀ
+## ਮੁੱਖ ਕਮਾਂਡ ਰੈਫਰੈਂਸ (Core Command Reference)
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| ਕਮਾਂਡ | ਵੇਰਵਾ |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | ਸੈੱਟ ਕੀਤਾ ਮੂਲ ਇੰਟਰਫੇਸ ਲਾਂਚ ਕਰੋ |
+| `lmms --gui` | ਡੈਸਕਟਾਪ GUI ਸਟੂਡੀਓ ਸਿੱਧਾ ਚਲਾਓ |
+| `lmms --cli` | ਡਿਵੈਲਪਰ CLI ਸ਼ੈੱਲ ਸਿੱਧਾ ਚਲਾਓ |
+| `lmms --engine` | ਇਨਫਰੈਂਸ ਇੰਜਨ ਡੈਮਨ ਸਿੱਧਾ ਚਲਾਓ |
+| `lmms set --gui` | ਡੈਸਕਟਾਪ ਸਟੂਡੀਓ ਨੂੰ ਡਿਫੌਲਟ ਮੋਡ ਵਜੋਂ ਸੈੱਟ ਕਰੋ |
+| `lmms set --cli` | ਟਰਮੀਨਲ ਸਟੂਡੀਓ ਨੂੰ ਡਿਫੌਲਟ ਮੋਡ ਵਜੋਂ ਸੈੱਟ ਕਰੋ |
+| `lmms set --engine` | ਇੰਜਨ ਡੈਮਨ ਨੂੰ ਡਿਫੌਲਟ ਮੋਡ ਵਜੋਂ ਸੈੱਟ ਕਰੋ |
+| `lmms stop` | ਬੈਕਗ੍ਰਾਉਂਡ ਵਿੱਚ ਚੱਲ ਰਹੇ LMMs ਇੰਜਨ ਨੂੰ ਸੁਰੱਖਿਅਤ ਬੰਦ ਕਰੋ |
+| `lmms -check` | ਹਾਰਡਵੇਅਰ ਪ੍ਰੋਫਾਈਲ ਅਤੇ ਲੋੜਾਂ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ |
+| `lmms update` | ਮੌਜੂਦਾ ਬ੍ਰਾਂਚ ਤੋਂ ਸਮਾਰਟ ਅੱਪਡੇਟ ਕਰੋ |
+| `lmms update --all` | GitHub ਤੋਂ ਸਾਰੇ ਕੰਪੋਨੈਂਟ ਜ਼ਬਰਦਸਤੀ ਅੱਪਡੇਟ ਕਰੋ |
+| `lmms --help` | ਲਾਂਚਰ ਦੀ ਪੂਰੀ ਮਦਦ ਗਾਈਡ ਵੇਖੋ |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| ਕਮਾਂਡ | ਵੇਰਵਾ |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | ਇੰਟਰਐਕਟਿਵ ਚੈਟ ਜਾਂ ਸਿੰਗਲ ਪ੍ਰੋਂਪਟ ਵਿੱਚ ਮਾਡਲ ਚਲਾਓ |
+| `lmms list` | ਲੋਕਲ ਤੌਰ 'ਤੇ ਡਾਊਨਲੋਡ ਕੀਤੇ ਮਾਡਲਾਂ ਦੀ ਸੂਚੀ ਵੇਖੋ |
+| `lmms ps` | ਸਰਗਰਮ ਮਾਡਲ, ਮੈਮਰੀ ਵੰਡ ਅਤੇ VRAM ਸਥਿਤੀ ਵੇਖੋ |
+| `lmms pull <model>` | Hugging Face ਜਾਂ ਅਧਿਕਾਰਤ ਹੱਬ ਤੋਂ ਮਾਡਲ ਡਾਊਨਲੋਡ ਕਰੋ |
+| `lmms info <model>` | ਮਾਡਲ ਮੈਟਾਡੇਟਾ, ਸੰਦਰਭ ਵਿੰਡੋ ਅਤੇ ਕੁਆਂਟਾਈਜ਼ੇਸ਼ਨ ਦੀ ਜਾਂਚ ਕਰੋ |
+| `lmms search <query>` | ਉਪਲਬਧ ਓਪਨ ਸੋਰਸ ਮਾਡਲ ਰਿਪੋਜ਼ਟਰੀਆਂ ਵਿੱਚ ਖੋਜ ਕਰੋ |
+| `lmms benchmark <model>` | ਟੋਕਨ ਜਨਰੇਸ਼ਨ ਸਪੀਡ (t/s) ਅਤੇ ਦੇਰੀ ਦੀ ਜਾਂਚ ਕਰੋ |
+| `lmms doctor` | ਇੰਜਨ ਸਿਹਤ ਜਾਂਚ ਅਤੇ CUDA ਡਰਾਈਵਰ ਸਥਿਤੀ ਵੇਖੋ |
+| `lmms create <model> -f <file>` | GGUF ਜਾਂ Safetensors ਫਾਈਲ ਤੋਂ ਕਸਟਮ ਮਾਡਲ ਰਜਿਸਟਰ ਕਰੋ |
+| `lmms -air run <model> [prompt]` | Air ਮੈਮਰੀ ਆਫਲੋਡਿੰਗ ਨਾਲ ਵੱਡੇ ਮਾਡਲ ਚਲਾਓ |
+| `lmms --air run <m1> <m2>` | Air ਸ਼ਡਿਊਲਰ ਰਾਹੀਂ ਕਈ ਮਾਡਲ ਇੱਕੋ ਸਮੇਂ ਚਲਾਓ |
+| `lmms air ps` | ਸਰਗਰਮ Air ਸੈਸ਼ਨ ਅਤੇ GPU/CPU ਲੇਅਰ ਵੰਡ ਦੀ ਨਿਗਰਾਨੀ ਕਰੋ |
+| `lmms air stats` | ਰੀਅਲ-ਟਾਈਮ ਹਾਰਡਵੇਅਰ ਟੈਲੀਮੈਟਰੀ ਅਤੇ ਆਫਲੋਡ ਅੰਕੜੇ ਵੇਖੋ |
+| `lmms air cache` | Air ਡਿਸਕ ਕੈਸ਼ ਆਕਾਰ ਅਤੇ ਵਰਤੋਂ ਦੀ ਜਾਂਚ ਕਰੋ |
+| `lmms air unload` | ਸਾਰੇ Air ਮਾਡਲਾਂ ਨੂੰ ਅਨਲੋਡ ਕਰੋ ਅਤੇ VRAM ਕੈਸ਼ ਖਾਲੀ ਕਰੋ |
+| `lmms air benchmark <model>` | Air ਸ਼ਡਿਊਲਰ ਅਧੀਨ ਪ੍ਰੋਸੈਸਿੰਗ ਗਤੀ ਦੀ ਜਾਂਚ ਕਰੋ |
 
 ---
 
-## ਟਰਮੀਨਲ ਸਲੈਸ਼ ਕਮਾਂਡਾਂ
+### Server / Daemon
 
-| Command | Description |
+| ਕਮਾਂਡ | ਵੇਰਵਾ |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `lmms server` | API / ਵੈੱਬ ਸਰਵਰ ਡੈਮਨ ਸ਼ੁਰੂ ਕਰੋ |
+| `lmms server status` | ਸਰਵਰ ਸਥਿਤੀ, ਪੋਰਟ, ਅੱਪਟਾਈਮ ਅਤੇ ਸਿਹਤ ਦੀ ਜਾਂਚ ਕਰੋ |
+| `lmms engine status` | ਸਰਗਰਮ ਇੰਜਨ ਮੋਡ ਅਤੇ ਮੈਮਰੀ ਅੰਕੜੇ ਵੇਖੋ |
+| `lmms engine unload [model]` | ਮਾਡਲਾਂ ਨੂੰ ਮੈਮਰੀ ਤੋਂ ਹਟਾਓ ਅਤੇ VRAM ਖਾਲੀ ਕਰੋ |
+| `lmms server start [--port 11435]` | ਨਿਰਧਾਰਿਤ ਪੋਰਟ 'ਤੇ ਬੈਕਗ੍ਰਾਉਂਡ FastAPI ਸਰਵਰ ਚਲਾਓ |
+| `lmms server stop` | ਚੱਲ ਰਹੇ ਬੈਕਗ੍ਰਾਉਂਡ ਸਰਵਰ ਡੈਮਨ ਨੂੰ ਰੋਕੋ |
 
 ---
 
-## ਸਾਡੀ ਸੋਚ
+## ਇੰਟਰਐਕਟਿਵ CLI ਸਲੈਸ਼ ਕਮਾਂਡਾਂ
 
-1. **ਅਸਲ ਉਪਯੋਗਤਾ**: ਫਾਈਲ ਸੁਧਾਰ, AST ਜਾਂਚ ਅਤੇ ਸੁਰੱਖਿਅਤ ਕਾਰਜਾਂ ਉੱਤੇ ਧਿਆਨ।
-1. **ਇਮਾਨਦਾਰੀ**: ਜ਼ੀਰੋ ਟੈਲੀਮੈਟਰੀ ਅਤੇ ਕੋਈ ਛੁਪੀ ਹੋਈ ਫੀਸ ਨਹੀਂ।
-1. **ਲੋਕਲ ਫਸਟ**: ਤੁਹਾਡਾ ਡੇਟਾ ਹਮੇਸ਼ਾ ਤੁਹਾਡੇ ਕੋਲ ਸੁਰੱਖਿਅਤ ਰਹਿੰਦਾ ਹੈ।
-1. **ਸਾਫ਼ ਕੋਡ**: ਸ਼ੁੱਧ ਪਾਈਥਨ ਡਿਜ਼ਾਈਨ ਬਿਨਾਂ ਫਾਲਤੂ ਬੋਝ ਦੇ।
+| ਕਮਾਂਡ | ਵੇਰਵਾ |
+|---|---|
+| `/fast` | ਤੇਜ਼ ਜਵਾਬਾਂ ਅਤੇ ਹਲਕੇ ਟੂਲਾਂ ਲਈ FAST ਮੋਡ ਵਿੱਚ ਜਾਓ |
+| `/deep` | ਡੂੰਘੀ ਸੋਚ ਅਤੇ ਪੂਰੀ ਟੂਲ ਪਹੁੰਚ ਲਈ DEEP ਮੋਡ ਵਿੱਚ ਜਾਓ |
+| `/model <name>` | ਮੌਜੂਦਾ ਗੱਲਬਾਤ ਲਈ ਵੱਖਰਾ ਮਾਡਲ ਚੁਣੋ |
+| `/ml -l` | ਡਾਊਨਲੋਡ ਕੀਤੇ ਸਾਰੇ ਮਾਡਲਾਂ ਦੀ ਸੂਚੀ ਚੈਟ ਵਿੱਚ ਵੇਖੋ |
+| `/ml -s <name>` | ਗੱਲਬਾਤ ਦਾ ਇਤਿਹਾਸ ਗੁਆਏ ਬਿਨਾਂ ਮਾਡਲ ਤੁਰੰਤ ਬਦਲੋ |
+| `/folder <path>` | ਏਜੰਟ ਦੇ ਕੰਮ ਦੇ ਸੰਦਰਭ ਨਾਲ ਇੱਕ ਫੋਲਡਰ ਜੋੜੋ |
+| `/code` | ਕੋਡ ਬਣਾਉਣ ਅਤੇ ਸੰਪਾਦਿਤ ਕਰਨ ਵਾਲੇ ਮੋਡ ਵਿੱਚ ਜਾਓ |
+| `/chat` | ਪੁਰਾਣੇ ਚੈਟ ਸੈਸ਼ਨਾਂ ਦੀ ਸੂਚੀ ਵੇਖੋ ਅਤੇ ਸਮੀਖਿਆ ਕਰੋ |
+| `/newchat` | ਇੱਕ ਨਵਾਂ ਅਤੇ ਸਾਫ਼ ਚੈਟ ਸੈਸ਼ਨ ਸ਼ੁਰੂ ਕਰੋ |
+| `/chat -r <id> <name>` | ਕਿਸੇ ਖਾਸ ਚੈਟ ਸੈਸ਼ਨ ਦਾ ਨਾਮ ਬਦਲੋ |
+| `/chat -d <id>` | ਕਿਸੇ ਖਾਸ ਚੈਟ ਸੈਸ਼ਨ ਨੂੰ ਪੱਕੇ ਤੌਰ 'ਤੇ ਮਿਟਾਓ |
+| `/undo` | AI ਦੁਆਰਾ ਕੀਤੀ ਆਖਰੀ ਫਾਈਲ ਤਬਦੀਲੀ ਨੂੰ ਸੁਰੱਖਿਅਤ ਢੰਗ ਨਾਲ ਵਾਪਸ ਲਵੋ |
+| `/redo` | ਵਾਪਸ ਲਏ ਗਏ ਫਾਈਲ ਕੰਮ ਨੂੰ ਦੁਬਾਰਾ ਲਾਗੂ ਕਰੋ |
+| `/exit` | ਇੰਟਰਐਕਟਿਵ CLI ਸੈਸ਼ਨ ਤੋਂ ਬਾਹਰ ਜਾਓ |
+| `/reboot` | ਬੈਕਐਂਡ ਇੰਜਨ ਨੂੰ ਰੀਬੂਟ ਕਰੋ ਅਤੇ ਸੈਸ਼ਨ ਦੁਬਾਰਾ ਜੋੜੋ |
+| `/mic` | ਮਾਈਕ੍ਰੋਫੋਨ ਤੋਂ ਆਵਾਜ਼ ਰਿਕਾਰਡ ਕਰੋ ਅਤੇ ਸਿੱਧਾ ਟੈਕਸਟ ਵਿੱਚ ਬਦਲੋ |
+| `/vision ਜਾਂ /image` | ਚਿੱਤਰ ਵਿਸ਼ਲੇਸ਼ਣ ਅਤੇ UI ਜਾਂਚ ਲਈ ਮਲਟੀਮੋਡਲ ਵਿਜ਼ਨ ਮੋਡ ਵਿੱਚ ਜਾਓ |
+| `/research` | ਵੈੱਬ ਅਤੇ ਤਕਨੀਕੀ ਦਸਤਾਵੇਜ਼ ਖੋਜ ਲਈ ਰਿਸਰਚ ਮੋਡ ਵਿੱਚ ਜਾਓ |
+| `/read <file>` | ਵਰਕਸਪੇਸ ਦੀ ਕੋਈ ਵੀ ਫਾਈਲ ਸਿੱਧੀ ਚੈਟ ਵਿੱਚ ਪੜ੍ਹੋ |
+| `/task` | ਬੈਕਗ੍ਰਾਉਂਡ ਦੇ ਖੁਦਮੁਖਤਿਆਰ ਕਾਰਜਾਂ ਅਤੇ ਟੀਚਿਆਂ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ |
+| `/git` | ਏਜੰਟ ਰਾਹੀਂ ਸੁਰੱਖਿਅਤ ਅਤੇ ਜਾਂਚੀਆਂ ਹੋਈਆਂ Git ਕਾਰਵਾਈਆਂ ਕਰੋ |
+| `/scope` | ਟੂਲ ਚਲਾਉਣ ਦੀਆਂ ਇਜਾਜ਼ਤਾਂ ਦੀ ਸੀਮਾ ਦੀ ਜਾਂਚ ਕਰੋ ਅਤੇ ਬਦਲੋ |
+| `/tools list` | ਸਾਰੇ ਨੇਟਿਵ ਟੂਲਾਂ ਅਤੇ ਸਰਗਰਮ MCP ਸਰਵਰਾਂ ਦੀ ਸੂਚੀ ਵੇਖੋ |
+| `/report` | ਸੁਰੱਖਿਆ ਅਤੇ ਆਡਿਟ ਰਿਪੋਰਟ ਤਿਆਰ ਕਰੋ |
+| `/checkpoint` | ਵਰਕਸਪੇਸ ਦੀ ਮੌਜੂਦਾ ਸਥਿਤੀ ਦਾ ਇੱਕ ਸਥਾਈ ਚੈੱਕਪੁਆਇੰਟ ਬਣਾਓ |
+| `/checkpoints` | ਸੁਰੱਖਿਅਤ ਕੀਤੇ ਸਾਰੇ ਚੈੱਕਪੁਆਇੰਟਾਂ ਦੀ ਸੂਚੀ ਵੇਖੋ |
+| `/rollback` | ਰਿਪੋਜ਼ਟਰੀ ਅਤੇ ਫਾਈਲਾਂ ਨੂੰ ਪਿਛਲੇ ਚੈੱਕਪੁਆਇੰਟ 'ਤੇ ਵਾਪਸ ਲਿਆਓ |
+| `/status` | ਇੰਜਨ ਅਤੇ ਹਾਰਡਵੇਅਰ ਦੀ ਅਸਲ ਸਮੇਂ ਦੀ ਸਿਹਤ ਦੀ ਜਾਂਚ ਕਰੋ |
+| `/doctor` | ਸਿਸਟਮ ਦੀ ਪੂਰੀ ਜਾਂਚ ਅਤੇ ਸਵੈ-ਮੁਰੰਮਤ ਦੇ ਟੈਸਟ ਚਲਾਓ |
+| `/pair` | ਇੰਟਰਐਕਟਿਵ ਪੇਅਰ-ਪ੍ਰੋਗਰਾਮਿੰਗ ਮੋਡ ਚਾਲੂ ਕਰੋ |
+| `/perm <level>` | ਸੈਂਡਬੌਕਸ ਇਜਾਜ਼ਤ ਪੱਧਰ ਸੈੱਟ ਕਰੋ (`strict`, `ask`, `full`) |
+| `/agent` | ਸਮਾਨਾਂਤਰ ਕੰਮਾਂ ਲਈ ਸੁਤੰਤਰ ਸਬ-ਏਜੰਟ ਬਣਾਓ ਅਤੇ ਚਲਾਓ |
+| `/orchestrate` | ਕਈ ਏਜੰਟਾਂ ਵਿਚਕਾਰ ਤਾਲਮੇਲ ਵਾਲੇ ਕਾਰਜ ਪ੍ਰਵਾਹ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ |
+
+---
+
+## ਉਤਪਾਦ ਫਲਸਫਾ (Product Philosophy)
+
+1. **ਅਸਲ ਉਪਯੋਗਤਾ ਸਭ ਤੋਂ ਪਹਿਲਾਂ**: ਅਸਲ ਕੋਡ ਪੈਚਿੰਗ, AST ਪੁਸ਼ਟੀਕਰਨ ਅਤੇ ਸੁਰੱਖਿਅਤ ਸੈਂਡਬੌਕਸ।
+2. **ਇਮਾਨਦਾਰੀ ਅਤੇ ਪਾਰਦਰਸ਼ਤਾ**: ਕੋਈ ਟੈਲੀਮੈਟਰੀ ਨਹੀਂ, ਕੋਈ ਲੁਕਵੇਂ ਖਰਚੇ ਜਾਂ ਗਾਹਕੀਆਂ ਨਹੀਂ।
+3. **ਪੂਰੀ ਤਰ੍ਹਾਂ ਲੋਕਲ-ਫਰਸਟ**: ਤੁਹਾਡੇ ਸਾਰੇ ਮਾਡਲ, ਵੇਟਸ ਅਤੇ ਕੋਡ ਹਮੇਸ਼ਾ ਤੁਹਾਡੀ ਮਸ਼ੀਨ 'ਤੇ ਸੁਰੱਖਿਅਤ ਰਹਿੰਦੇ ਹਨ।
+4. **ਸਾਫ਼ ਅਤੇ ਸ਼ੁੱਧ ਆਰਕੀਟੈਕਚਰ**: ਬਿਨਾਂ ਵਾਧੂ ਬੋਝ ਦੇ ਸ਼ੁੱਧ ਪਾਈਥਨ ਵਿੱਚ ਬਣਿਆ ਸਿਸਟਮ।
 
 ---
 

@@ -1,20 +1,20 @@
 <div align="center">
   <a href="https://lmms.markanm.com">
-    <img src="../../assets/lmms-banner.svg" alt="LMMs OS Logo" width="100%" />
+    <img src="../../assets/lmms-banner.svg" alt="LMMs OS" width="100%" />
   </a>
 </div>
 
 <p align="center">
   <strong>Modellerle inşa edin. Ajanlarla yayınlayın.</strong><br>
-  <em>Raj Singh (MarkanM) tarafından geliştirilen Python tabanlı yerel yapay zeka işletim sistemi</em>
+  <em>Kurucu Raj Singh (MarkanM) tarafından geliştirilen Python tabanlı yerel yapay zeka işletim katmanı</em>
 </p>
 
 <p align="center">
-  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
-  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0284c7?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-334155?style=flat-square&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-16a34a?style=flat-square&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-6366f1?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-d97706?style=flat-square" alt="AirEngine" />
 </p>
 
 ---
@@ -49,12 +49,13 @@
 
 <p align="center">
   <a href="https://lmms.markanm.com">Resmi Web Sitesi</a> ·
+  <a href="#system-architecture">Sistem Mimarisi</a> ·
+  <a href="#deep-technical-capabilities">Temel Yetenekler</a> ·
   <a href="#quick-start">Hızlı Başlangıç</a> ·
-  <a href="#architecture-setup-wizard-lmms-install">Mimari Kurulum Sihirbazı</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">Kurulum Sihirbazı</a> ·
   <a href="#enterprise-infrastructure--super-host">Kurumsal Altyapı</a> ·
   <a href="#core-command-reference">Komut Kılavuzu</a> ·
   <a href="#cli-slash-commands">Slash Komutları</a> ·
-  <a href="#product-philosophy">Felsefe</a> ·
   <a href="#license">Lisans</a>
 </p>
 
@@ -62,17 +63,65 @@
 
 ## LMMs OS Nedir?
 
-LMMs, modellerin yerel ve uzak ortamda çalıştırılması için Python ile yazılmış bir yapay zeka işletim katmanıdır. Kurucu Raj Singh (MarkanM) tarafından tasarlanan sistem, masaüstü GUI stüdyosu, akıllı CLI ve gelişmiş çalışma zamanını telemetri ve bulut bağımlılığı olmadan sunar.
+LMMs, yerel ve uzak model yürütme için Python tabanlı yerel bir yapay zeka işletim katmanıdır. Kurucu Raj Singh (MarkanM) tarafından geliştirilen bu sistem; gerçek bir masaüstü GUI stüdyosunu, akıllı bir geliştirici CLI'sini ve olgun bir motor çalışma zamanını bir araya getirerek geliştiricilerin ve kurumların telemetri ve bulut bağımlılığı olmadan büyük çok modlu modelleri çalıştırmasını sağlar.
 
-* 🧠 **Çift Çekirdekli Motor**: llama.cpp ile yüksek hızlı GGUF çıkarımı ve PyTorch safetensors tam hassasiyetli çalışma zamanı.
-* ⚡ **AirEngine ile Sınırsız Ölçekleme**: GPU, CPU ve disk arasında dinamik tensör aktarımı sayesinde standart dizüstü bilgisayarlarda bile 70B+ modelleri çalıştırabilme.
-* 🖥️ **Masaüstü Stüdyosu (GUI)**: Monaco kod düzenleyici, görsel diff karşılaştırma, Git entegrasyonu ve araç paneli.
-* ⌨️ **Terminal Stüdyosu (CLI)**: 30'dan fazla slash komutu, eşli programlama ve güvenli kum havuzu (sandbox).
-* 🏢 **Kurumsal Kullanıma Hazır**: Özel LAN/VPC ağlarında merkezi sunucu ve otomatik istemci keşfi.
+* **Yerel Çift Çekirdekli Motor**: llama.cpp ile yüksek verimli kuantize GGUF çıkarımı ve PyTorch ile yerel safetensors çalıştırma.
+* **AirEngine ile Sınırsız Ölçeklendirme**: GPU, CPU ve disk arasında dinamik tensör aktarımı sayesinde sıradan dizüstü bilgisayarlarda bile 70B+ modeller çalıştırılabilir.
+* **Masaüstü Stüdyosu (GUI)**: Monaco kod düzenleyici, görsel diff incelemesi, Git entegrasyonu ve entegre araç yöneticisi.
+* **Terminal Stüdyosu (CLI)**: 30'dan fazla slash komutu, eşli programlama, alt ajan orkestrasyonu ve güvenli yalıtılmış alan.
+* **Kurumsal Kullanıma Hazır**: Özel LAN/VPC ağlarında merkezi ana bilgisayar ve otomatik istemci keşfi içeren dağıtık mimari.
 
 ---
 
-## Hızlı Başlangıç
+## Sistem Mimarisi
+
+Aşağıdaki şema, LMMs OS'un Kullanıcı Arayüzü, Arka Uç Servisleri, Model Çıkarımı ve Ajan Yetenekleri alt sistemlerini kapsayan mimarisini göstermektedir:
+
+<div align="center">
+  <img src="../../assets/lmms-architecture.png" alt="LMMs OS System Architecture" width="100%" />
+</div>
+
+### Architectural Subsystems:
+
+1. **Kullanıcı Arayüzleri**: `GUI workspace [main_window.py]` (Monaco IDE ve diff inceleme) ve `CLI [commands.py]` (etkileşimli terminal geliştirici kabuğu).
+2. **API ve Arka Uç Katmanı**: `HTTP API [server.py]` (11435 portunda dinleyen FastAPI arka plan hizmeti), `Backend session [main.py]` (oturum koordinatörü), ve `Backend services [manager.py]`.
+3. **Model Çıkarım Alt Sistemi**: `Runtime selection [manager.py]`, `AirEngine [runtime.py]` (GPU/CPU/Disk tensör aktarımı), `Model registry [registry.py]`, `llama.cpp motoru` ve `PyTorch motoru`.
+4. **Ajan Yetenekleri Alt Sistemi**: `Request orchestration [pipeline.py]`, `Vector retrieval [rag.py]`, `Agent routing [manager.py]`, `Tool execution [executor.py]`, `Session memory [core_memory.py]`, `Web research [engine.py]` ve `Workspace & Git [manager.py]`.
+
+---
+
+## Derin Teknik Yetenekler (Deep Technical Capabilities)
+
+### 1. Çok Modlu Görsel Motoru (`/vision`, `/image`)
+LMMs yerel motorunda doğrudan çok modlu görsel işleme kabiliyetine sahiptir:
+* **Arayüz ve Düzen Analizi**: Web veya masaüstü ekran görüntülerini inceleyerek görsel hataları ve CSS sorunlarını otomatik olarak tespit eder.
+* **Mimari ve Diyagram Çıkarma**: Akış şemalarını, ER diyagramlarını ve UML dizilimlerini analiz ederek doğrudan geçerli Mermaid koduna dönüştürür.
+* **Yerel Belge OCR**: Görsellerden ve PDF'lerden metin ve tabloları dış sunuculara göndermeden doğrudan cihazınızda ayrıştırır.
+
+### 2. Çevrimdışı Ses ve Konuşma Tanıma (`/mic`)
+* **Yerel Konuşmadan Metne**: Yerel kuantize Whisper modelleriyle sıfır ağ gecikmeli hızlı çevrimdışı ses dökümü.
+* **Eller Serbest Geliştirme**: Sesli talimatları doğrudan aktif CLI oturumuna gerçek zamanlı olarak yazdırın.
+
+### 3. Git Farkındalığı ve Worktree Yalıtımı (`/git`, `/scope`)
+* **Salt Okunur Güvenlik Kilidi**: Açık onay verilmedikçe ajan eylemlerini güvenli okuma komutlarıyla (`cat`, `git diff`, `grep`) sınırlar.
+* **Geçici Git Worktree Alanları**: Kod değişiklikleri izole worktree kopyalarında test edilir ve yalnızca testler başarıyla geçtiğinde ana dala birleştirilir.
+* **Renkli Diff Önizlemesi**: Diske kaydedilmeden önce her dosya değişikliği için renkli birleştirilmiş fark görünümü oluşturulur.
+
+### 4. Deterministik Denetim Noktaları ve Anında Geri Alma (`/checkpoint`, `/rollback`, `/undo`, `/redo`)
+* **Adım Başına Yedekleme**: Her kod değişikliğinden önce değiştirilecek dosyaların anlık kopyası kaydedilir.
+* **Milisaniyelik Geri Alma**: Üretilen yama testleri geçemezse, `/rollback` veya `/undo` depoyu saniyeler içinde tam önceki durumuna döndürür.
+
+### 5. Otonom Alt Ajanlar ve Çoklu Ajan Koordinasyonu (`/agent`, `/orchestrate`)
+* **Arka Plan Görevleri**: Belirli token bütçelerine ve izole izinlere sahip bağımsız alt ajanları arka planda çalıştırır.
+* **Hiyerarşik İş Bölümü**: Ana orkestratör test, dokümantasyon ve refaktör görevlerini alt ajanlara delege eder ve sonuçları birleştirir.
+
+### 6. Yerel Araştırma ve Vektör RAG (`/research`)
+* **Anlamsal Kod Tabanı İndeksleme**: Projeyi yerel bir vektör veri tabanında indeksleyerek fonksiyonları ve sınıfları semantik olarak arar.
+* **Halüsinasyonsuz Teknik Dokümantasyon**: Yerel ve web API belgelerini tarayarak uydurma cevapları tamamen ortadan kaldırır.
+
+---
+
+## Quick Start
 
 ```bash
 # 1. Clone repository
@@ -102,8 +151,6 @@ lmms            # Launch configured interface
 
 ## Mimari Kurulum Sihirbazı (`lmms install`)
 
-`lmms install` komutu terminalde etkileşimli bir mimari sihirbazı başlatır:
-
 ```text
   LMMs Installer · Architecture Setup Wizard
   For more details, visit: https://lmms.markanm.com
@@ -123,8 +170,6 @@ lmms            # Launch configured interface
 ---
 
 ### [1] Bireysel İş İstasyonu Yapılandırmaları
-
-Yerel çalışma için optimize edilmiş 6 temel bileşen:
 
 ```text
   ? Select Component Configuration:
@@ -155,8 +200,6 @@ Yerel çalışma için optimize edilmiş 6 temel bileşen:
 
 ### [2] Kurumsal Altyapı ve Süper Sunucu
 
-Mühendislik ekipleri ve şirketler için dağıtık kümeleme:
-
 ```text
   ? Select Enterprise Infrastructure Role:
 
@@ -168,32 +211,32 @@ Mühendislik ekipleri ve şirketler için dağıtık kümeleme:
   ──────────────────────────────────────────────────────────────────────
 ```
 
-* **Merkezi Güçlü Hesaplama**: Şirketin GPU sunucularında `0.0.0.0:11435` portunu dinleyen arka plan sunucusu.
-* **Hafif İstemci Stüdyoları**: Çalışanlar kendi bilgisayarlarından LAN otomatik keşfiyle bağlanır.
-* **Tam Veri Gizliliği**: Özel şirket kodları ve sorguları asla şirket ağının dışına çıkmaz.
-* **AirEngine ile Sonsuz Kapasite**: VRAM sınırlarını aşarak devasa modelleri kesintisiz çalıştırma imkanı.
+* **Merkezi Güçlü Hesaplama**: Sunucu arka plan hizmeti GPU sunucularında (`0.0.0.0:11435`) çalışarak şirket modellerine ev sahipliği yapar.
+* **Uzak İstemci Stüdyoları**: Çalışanlar kendi dizüstü bilgisayarlarından LAN/VPC ağı üzerinden otomatik keşifle bağlanır.
+* **Tam Veri Gizliliği**: Hiçbir kod veya prompt şirket içi yerel ağın dışına çıkmaz.
+* **AirEngine ile Bellek Sınırı Yok**: VRAM, RAM ve NVMe üzerinde dinamik model ağırlığı akışı sayesinde devasa modeller çalıştırılır.
 
 ---
 
 ### Pip & Installer Command Matrix
 
-| Command | Purpose | Target Component |
+| Komut | Amaç | Hedef Bileşen |
 |---|---|---|
-| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
-| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
-| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
-| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
-| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
-| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
-| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
-| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
-| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
-| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
-| `lmms update` | Pull latest code & update | Current branch update |
-| `lmms update --all` | Full update across branches | All components synced with GitHub |
-| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
-| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
-| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+| `lmms install` | Etkileşimli mimari seçim sihirbazını başlat | Etkileşimli yapılandırma menüsü |
+| `lmms install --all` | Tüm ekosistemi eksiksiz yükle | Masaüstü Stüdyo, CLI, Ses, Süper Motor |
+| `lmms install --gui` | Masaüstü Stüdyosunu (GUI) yükle | PyQt6 Arayüzü, Monaco Editör, Motor istemcisi |
+| `lmms install --cli` | Terminal Stüdyosunu (CLI) yükle | Etkileşimli kabuk, geliştirici araçları, İstemci |
+| `lmms install --engine` | Süper Motor (Super Engine) çalışma zamanını yükle | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | Hafif sıklet motoru yükle | llama.cpp + AirEngine (yalnızca GGUF) |
+| `lmms install --engine2` | PyTorch yerel motorunu yükle | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | Kurumsal merkezi sunucu arka plan hizmetini kur | 0.0.0.0:11435 adresinde dinleyen merkezi daemon |
+| `lmms install --client-gui` | Kurumsal uzak masaüstü istemcisini kur | LAN/VPC uzak ana bilgisayara bağlanan GUI |
+| `lmms install --client-cli` | Kurumsal uzak terminal istemcisini kur | LAN/VPC uzak ana bilgisayara bağlanan CLI |
+| `lmms update` | Kaynak kodun en son sürümünü indir ve güncelle | Aktif Git dalının güncellenmesi |
+| `lmms update --all` | Tüm dallarda zorunlu ve eksiksiz güncelleme | GitHub ile tam ve eşzamanlı senkronizasyon |
+| `lmms -check` | Donanım teşhisi ve önkoşul kontrolü gerçekleştir | CPU, GPU, VRAM, AVX ve disk telemetrisi |
+| `lmms-uninstall -all` | Kaynak kodları güvenli biçimde kaldır | Kodu siler, pip paketlerini ve modelleri korur |
+| `lmms-uninstall -all --purge` | Fabrika ayarlarına sıfırla ve tamamen temizle | Tüm ayar, model ve verilerin kalıcı olarak silinmesi |
 
 ---
 
@@ -201,77 +244,105 @@ Mühendislik ekipleri ve şirketler için dağıtık kümeleme:
 
 ### LMMs Core Launcher Commands
 
-| Command | Description |
+| Komut | Açıklama |
 |---|---|
-| `lmms` | Launch configured default interface |
-| `lmms --gui` | Launch desktop GUI studio |
-| `lmms --cli` | Launch developer CLI shell |
-| `lmms --engine` | Launch inference engine directly |
-| `lmms set --gui` | Set Desktop Studio as the default launch mode |
-| `lmms set --cli` | Set Terminal Studio as the default launch mode |
-| `lmms set --engine` | Set Engine Daemon as the default launch mode |
-| `lmms stop` | Gracefully stop active background LMMs engine |
-| `lmms -check` | Run hardware profile and prerequisite validation |
-| `lmms update` | Smart update from current branch |
-| `lmms update --all` | Force update and re-sync from GitHub |
-| `lmms --help` | Show comprehensive launcher help |
+| `lmms` | Yapılandırılmış varsayılan arayüzü başlat |
+| `lmms --gui` | Masaüstü GUI stüdyosunu doğrudan başlat |
+| `lmms --cli` | Geliştirici CLI terminal kabuğunu doğrudan başlat |
+| `lmms --engine` | Çıkarım motoru arka plan hizmetini doğrudan başlat |
+| `lmms set --gui` | Masaüstü Stüdyosunu varsayılan başlatma modu yap |
+| `lmms set --cli` | Terminal Stüdyosunu varsayılan başlatma modu yap |
+| `lmms set --engine` | Motor Daemon'ını varsayılan başlatma modu yap |
+| `lmms stop` | Arka planda çalışan LMMs motorunu güvenle durdur |
+| `lmms -check` | Donanım profilini ve çalışma gereksinimlerini doğrula |
+| `lmms update` | Mevcut Git dalından akıllı güncelleme yap |
+| `lmms update --all` | GitHub'dan tüm bileşenleri zorunlu güncelle |
+| `lmms --help` | Kapsamlı başlatıcı yardım kılavuzunu görüntüle |
 
 ---
 
 ### Engine Runtime & Air Engine
 
-| Command | Description |
+| Komut | Açıklama |
 |---|---|
-| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
-| `lmms list` | List locally downloaded models |
-| `lmms ps` | Show active running models, allocation state, and VRAM |
-| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
-| `lmms info <model>` | Inspect model metadata, context window, and quantization |
-| `lmms search <query>` | Search available model repositories |
-| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
-| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
-| `lmms -air run <model>` | Run ultra-large models with Air dynamic hybrid offloading |
-| `lmms air ps` | Display active Air session models and layer allocation |
-| `lmms air stats` | View real-time hardware telemetry and offload statistics |
-| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms run <model>` | Modeli etkileşimli sohbette veya tekli istemde çalıştır |
+| `lmms list` | Yerel olarak indirilmiş modelleri listele |
+| `lmms ps` | Çalışan modelleri, bellek dağılımını ve VRAM durumunu göster |
+| `lmms pull <model>` | Hugging Face veya resmi Model Hub'dan model indir |
+| `lmms info <model>` | Model meta verilerini, bağlam penceresini ve kuantizasyonu incele |
+| `lmms search <query>` | İndirilebilir açık kaynaklı model depolarında arama yap |
+| `lmms benchmark <model>` | Belirteç üretim hızını (token/s) ve yanıt gecikmesini ölç |
+| `lmms doctor` | Motor sağlığını denetle ve CUDA sürücü durumunu teşhis et |
+| `lmms create <model> -f <file>` | GGUF veya Safetensors dosyasından özel model kaydı oluştur |
+| `lmms -air run <model> [prompt]` | Air hibrit bellek aktarımıyla devasa modelleri çalıştır |
+| `lmms --air run <m1> <m2>` | Air zamanlayıcı ile birden fazla modeli aynı anda çalıştır |
+| `lmms air ps` | Aktif Air oturumlarını ve GPU/CPU katman dağılımını izle |
+| `lmms air stats` | Gerçek zamanlı donanım telemetrisi ve aktarım hızını incele |
+| `lmms air cache` | Air disk önbellek boyutunu ve depolama kullanımını kontrol et |
+| `lmms air unload` | Tüm Air modellerini bellekten kaldır ve VRAM önbelleğini hemen boşalt |
+| `lmms air benchmark <model>` | Air dinamik zamanlayıcı altında üretim hızını test et |
 
 ---
 
-## CLI Etkileşimli Slash Komutları
+### Server / Daemon
 
-| Command | Description |
+| Komut | Açıklama |
 |---|---|
-| `/fast` | FAST mode with quick responses and lightweight tool use |
-| `/deep` | DEEP mode with full multi-step reasoning and tool access |
-| `/model <name>` | Switch to a different model for the current conversation |
-| `/ml -l` | List all downloaded local models |
-| `/ml -s <name>` | Live-switch active model while preserving conversation history |
-| `/folder <path>` | Attach a directory to the agent's working context |
-| `/code` | Enter focused code generation and editing mode |
-| `/chat` | List and review past chat sessions |
-| `/newchat` | Start a fresh empty chat session |
-| `/undo` | Safely undo the last AI file edit or patch |
-| `/redo` | Redo the last undone file action |
-| `/mic` | Record voice audio and transcribe directly into the prompt |
-| `/vision` | Switch to multimodal vision mode for image and UI analysis |
-| `/research` | Switch to research mode for web and documentation exploration |
-| `/read <file>` | Read an arbitrary workspace file directly into the session |
-| `/git` | Execute safe, audited Git operations through the agent |
-| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
-| `/rollback` | Roll back repository and files to a previous checkpoint |
-| `/doctor` | Run comprehensive system diagnostics and repair checks |
-| `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
-| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `lmms server` | API / Web sunucu arka plan hizmetini başlat |
+| `lmms server status` | Sunucu durumunu, bağlantı noktasını, çalışma süresini ve sağlığı denetle |
+| `lmms engine status` | Aktif motor modunu ve bellek istatistiklerini görüntüle |
+| `lmms engine unload [model]` | Aktif modelleri bellekten kaldır ve VRAM'i serbest bırak |
+| `lmms server start [--port 11435]` | Belirtilen port üzerinde FastAPI arka plan hizmetini başlat |
+| `lmms server stop` | Çalışan arka plan sunucu hizmetini durdur |
+
+---
+
+## Etkileşimli CLI Slash Komutları
+
+| Komut | Açıklama |
+|---|---|
+| `/fast` | Hızlı yanıtlar ve hafif araçlar için FAST moduna geç |
+| `/deep` | Çok adımlı derin mantık yürütme ve tam araç yetkisi için DEEP moduna geç |
+| `/model <name>` | Geçerli konuşma oturumunda kullanılan modeli değiştir |
+| `/ml -l` | İndirilmiş tüm yerel modelleri sohbet penceresinde listele |
+| `/ml -s <name>` | Sohbet geçmişini koruyarak modeli anında değiştir |
+| `/folder <path>` | Ajanın çalışma bağlamına belirli bir dizini iliştir |
+| `/code` | Kod üretimi ve otomatik yama uygulamaya odaklanmış moda geç |
+| `/chat` | Geçmiş sohbet oturumlarını listele ve incele |
+| `/newchat` | Yeni ve temiz bir sohbet oturumu başlat |
+| `/chat -r <id> <name>` | Belirtilen sohbet oturumunun adını değiştir |
+| `/chat -d <id>` | Belirtilen sohbet oturumu geçmişini kalıcı olarak sil |
+| `/undo` | Yapay zekanın yaptığı son dosya değişikliğini veya yamayı güvenle geri al |
+| `/redo` | Geri alınan son dosya işlemini tekrar uygula |
+| `/exit` | Etkileşimli CLI oturumundan güvenli bir şekilde çık |
+| `/reboot` | Arka uç motorunu yeniden başlat ve oturumu tekrar bağla |
+| `/mic` | Mikrofondan sesi kaydet ve doğrudan istem alanına dök |
+| `/vision veya /image` | Görüntü ve arayüz analizi için çok modlu görme moduna geç |
+| `/research` | Web ve teknik dokümanlarda derin araştırma moduna geç |
+| `/read <file>` | Çalışma alanındaki bir dosyayı doğrudan sohbet bağlamına yükle |
+| `/task` | Arka planda çalışan otonom alt görevleri ve hedefleri yönet |
+| `/git` | Ajan aracılığıyla denetimli ve güvenli Git işlemleri yürüt |
+| `/scope` | Araç çalıştırma yetkilerinin sınırlarını görüntüle ve düzenle |
+| `/tools list` | Tüm yerel araçları ve aktif MCP sunucu uç noktalarını listele |
+| `/report` | Kriptografik olarak imzalanmış güvenlik ve eylem denetim raporu üret |
+| `/checkpoint` | Çalışma alanının mevcut durumuna ait sabit bir kontrol noktası kaydet |
+| `/checkpoints` | Kaydedilmiş tüm proje kontrol noktalarını listele |
+| `/rollback` | Depoyu ve dosyaları önceki bir kontrol noktasına geri döndür |
+| `/status` | Motorun ve sistem donanımının anlık durumunu denetle |
+| `/doctor` | Kapsamlı sistem teşhisi ve otomatik onarım testlerini çalıştır |
+| `/pair` | Etkileşimli eşli programlama (pair programming) modunu başlat |
+| `/perm <level>` | Yalıtılmış alan çalıştırma izin seviyesini ayarla (`strict`, `ask`, `full`) |
+| `/agent` | Paralel görevler için otonom alt ajanlar oluştur ve yönet |
+| `/orchestrate` | Birden çok ajan arasındaki koordineli iş akışlarını yönet |
 
 ---
 
 ## Ürün Felsefesi
 
-1. **Gerçek Kullanım**: Kod yamalama, AST doğrulama ve güvenli görevlere öncelik.
-1. **Şeffaflık**: Sıfır telemetri ve gizli ücretlendirme yok.
-1. **Önce Yerel**: Model ağırlıklarınız ve verileriniz kendi cihazlarınızda kalır.
-1. **Sade Mimari**: Gereksiz yabancı bağımlılıklar içermeyen saf Python tasarımı.
+1. **Gerçek Kullanışlılık Önceliklidir**: Dosya yamalama, AST doğrulama ve yalıtılmış terminal görevleri.
+2. **Dürüstlük ve Şeffaflık**: Sıfır telemetri, gizli abonelik veya ödeme duvarı yok.
+3. **Özünde Yerel (Local-First)**: Modelleriniz, ağırlıklarınız ve kodlarınız her zaman kendi cihazınızda kalır.
+4. **Yalın Mimari**: Gereksiz yüklerden arındırılmış saf Python altyapısı.
 
 ---
 
