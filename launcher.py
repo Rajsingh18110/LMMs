@@ -26,7 +26,8 @@ def check_for_updates():
     # Note: LMMs handles updates natively via git pull now
     pass
 
-CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
+CONFIG_PATH = os.path.expanduser("~/.lmms/config/config.json")
+LEGACY_CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
 
 def ensure_engine_running():
     try:
@@ -54,15 +55,29 @@ def ensure_engine_running():
 
 
 def load_config():
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r") as f:
-            return json.load(f)
+    for p in (CONFIG_PATH, LEGACY_CONFIG_PATH):
+        if os.path.exists(p):
+            try:
+                with open(p, "r") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+            except Exception:
+                pass
     return {"default_mode": "cli"}
 
 def save_config(config):
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(config, f)
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2)
+    except Exception:
+        pass
+    try:
+        with open(LEGACY_CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2)
+    except Exception:
+        pass
 
 def uninstall_main():
     args = [a.lower() for a in sys.argv[1:]]
