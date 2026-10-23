@@ -281,17 +281,25 @@ def main():
         return
 
     # Direct launch overrides
-    if args[0] in ["gui", "cli", "tui", "engine"]:
-        launch(args[0], args[1:])
-        return
-        
     if args[0] in ["gui", "cli", "tui", "engine", "-g", "-c", "-t", "-e", "--gui", "--cli", "--tui", "--engine"]:
         mode_map = {
             "gui": "gui", "cli": "cli", "tui": "tui", "engine": "engine",
             "-g": "gui", "-c": "cli", "-t": "tui", "-e": "engine",
             "--gui": "gui", "--cli": "cli", "--tui": "tui", "--engine": "engine"
         }
-        launch(mode_map[args[0]], args[1:])
+        resolved_mode = mode_map[args[0]]
+        # If 'engine' is followed by a subcommand (e.g. 'engine pull <model>'), forward to engine runtime
+        if resolved_mode == "engine" and len(args) > 1 and args[1] in [
+            "run", "list", "ls", "ps", "pull", "info", "benchmark", "bench",
+            "rm", "delete", "stop", "search", "doctor", "cache", "air",
+            "registry", "downloads", "create", "package", "packages",
+            "status", "mode", "unload", "purge"
+        ]:
+            if not getattr(sys, 'frozen', False):
+                from lmms.engine.main import run_engine
+                run_engine(args[1:])
+                return
+        launch(resolved_mode, args[1:])
         return
 
     if args[0] in ["connect", "remote"]:
@@ -368,8 +376,12 @@ def launch(mode, forward_args=None, ensure_engine=True):
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.dirname(os.path.abspath(__file__))
 
-    from lmms.api.service import get_ai_python_executable
-    py_exe = get_ai_python_executable()
+    try:
+        from lmms.api.service import get_ai_python_executable
+        py_exe = get_ai_python_executable()
+    except Exception:
+        venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
+        py_exe = venv_py if os.path.exists(venv_py) else sys.executable
 
     # In a compiled environment, this calls ./lmms-backend or ./lmms-engine
     while True:

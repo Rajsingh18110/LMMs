@@ -11,7 +11,10 @@ except ImportError:
     create_app = None
     run_server = None
 
-from .client import LMMsClient
+try:
+    from .client import LMMsClient
+except ImportError:
+    LMMsClient = None
 from .service import start_server_daemon, stop_server_daemon, get_server_daemon_status
 
 __all__ = [
