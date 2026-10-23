@@ -178,8 +178,9 @@ class OnlineModelClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
 
+        req_timeout = timeout if timeout and timeout > 120 else 180
         try:
-            with requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=(10, timeout)) as resp:
+            with requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=(20, req_timeout)) as resp:
                 if resp.status_code != 200:
                     err_msg = resp.text[:300]
                     yield f'data: {{"error": "HTTP {resp.status_code}: {err_msg}"}}\n\n'.encode("utf-8")
@@ -214,11 +215,11 @@ class OnlineModelClient:
                                 text_to_emit = d.get("content", "")
                                 delta_obj["content"] = text_to_emit
 
-                            # Yield dual-compatible SSE chunk (only emit if there is actual content)
-                            if text_to_emit or reasoning:
+                            # Yield dual-compatible SSE chunk (only emit when there is real user-facing content)
+                            if text_to_emit:
                                 norm_chunk = {
                                     "content": text_to_emit,
-                                    "choices": [{"delta": delta_obj}]
+                                    "choices": [{"delta": {"content": text_to_emit}}]
                                 }
                                 yield f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8")
                         except Exception:
@@ -275,8 +276,9 @@ class OnlineModelClient:
         if system_prompt.strip():
             payload["system"] = system_prompt.strip()
 
+        req_timeout = timeout if timeout and timeout > 120 else 180
         try:
-            with requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=(10, timeout)) as resp:
+            with requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=(20, req_timeout)) as resp:
                 if resp.status_code != 200:
                     err_msg = resp.text[:300]
                     yield f'data: {{"error": "Anthropic HTTP {resp.status_code}: {err_msg}"}}\n\n'.encode("utf-8")

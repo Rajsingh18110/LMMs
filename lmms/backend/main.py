@@ -528,24 +528,70 @@ class CapabilityManager:
 
 
 def robust_parse_tool_call(raw_tc: str) -> dict:
-    """Robust dual parser that handles native tool_calls, OpenAI schemas, unescaped code literals, and truncation."""
+    """Robust universal parser that handles XML function tags, OpenAI function calling, raw JSON, and truncated syntax."""
     import re
     import json
+    import ast
 
     if not raw_tc:
         return {}
 
     raw_tc = raw_tc.strip()
-    # Strip <tool_call> tags if present
-    if "<tool_call>" in raw_tc:
+
+    # 1. XML-style function calling (Nemotron / Hermes / Qwen / Command-R)
+    # Examples:
+    # <function=files.list><kwargs>{"path":"..."}</parameter></function>
+    # <function=terminal.run><parameter=command>ls -la</parameter></function>
+    fn_match = re.search(r'<function(?:=|\s+name=[\"\']?)([^>\s\"\']+)[\"\']?>', raw_tc, re.IGNORECASE)
+    if not fn_match:
+        fn_match = re.search(r'<function>([^<]+)</function>', raw_tc, re.IGNORECASE)
+
+    if fn_match:
+        tool_name = fn_match.group(1).strip()
+        kwargs = {}
+
+        # Look for JSON payload in <kwargs> or <arguments>
+        kw_json = re.search(r'<(?:kwargs|arguments)>(.*?)(?:</(?:kwargs|arguments)>|</parameter>|</function>|$)', raw_tc, re.DOTALL | re.IGNORECASE)
+        if kw_json:
+            j_str = kw_json.group(1).strip()
+            j_obj = re.search(r'(\{.*\})', j_str, re.DOTALL)
+            if j_obj:
+                try:
+                    kwargs = json.loads(j_obj.group(1), strict=False)
+                except Exception:
+                    pass
+
+        # Look for <parameter=key>value</parameter>
+        for p_m in re.finditer(r'<parameter(?:=|\s+name=[\"\']?)([^>\s\"\']+)[\"\']?>(.*?)(?:</parameter>|$)', raw_tc, re.DOTALL | re.IGNORECASE):
+            k = p_m.group(1).strip()
+            v = p_m.group(2).strip()
+            if (v.startswith('{') and v.endswith('}')) or (v.startswith('[') and v.endswith(']')):
+                try:
+                    v = json.loads(v, strict=False)
+                except Exception:
+                    pass
+            kwargs[k] = v
+
+        # Look for <parameter>\nkey\nvalue\n</parameter>
+        if not kwargs:
+            for p_m in re.finditer(r'<parameter>\s*([a-zA-Z_0-9]+)\s*\n\s*(.*?)\s*(?:</parameter>|$)', raw_tc, re.DOTALL | re.IGNORECASE):
+                k = p_m.group(1).strip()
+                v = p_m.group(2).strip()
+                kwargs[k] = v
+
+        if tool_name and tool_name not in ('<tool_name>', 'tool_name'):
+            return {'tool': tool_name, 'kwargs': kwargs}
+
+    # 2. Strip tags & markdown fences if present
+    if '<tool_call>' in raw_tc:
         tc_m = re.search(r'<tool_call>\s*(.*?)\s*(?:</tool_call>|$)', raw_tc, re.DOTALL)
         if tc_m:
             raw_tc = tc_m.group(1).strip()
-    if raw_tc.startswith("```json"):
+    if raw_tc.startswith('```json'):
         raw_tc = raw_tc[7:].strip()
-    elif raw_tc.startswith("```"):
+    elif raw_tc.startswith('```'):
         raw_tc = raw_tc[3:].strip()
-    if raw_tc.endswith("```"):
+    if raw_tc.endswith('```'):
         raw_tc = raw_tc[:-3].strip()
 
     def normalize_payload(data: dict) -> dict:
@@ -588,90 +634,57 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
                 return {"tool": k, "kwargs": v}
         return data
 
-    # 1. Try standard JSON (strict=False permits literal newlines/tabs inside strings)
+    # 3. Standard JSON parsing
     try:
         parsed = json.loads(raw_tc, strict=False)
         norm = normalize_payload(parsed)
-        if norm.get("tool"):
+        if norm.get("tool") and norm["tool"] not in ("<tool_name>", "tool_name"):
             return norm
     except Exception:
         pass
 
-    # 2. Try ast.literal_eval with JS booleans converted
+    # 4. JSON substring match
+    j_sub = re.search(r'(\{.*\})', raw_tc, re.DOTALL)
+    if j_sub:
+        try:
+            parsed = json.loads(j_sub.group(1), strict=False)
+            norm = normalize_payload(parsed)
+            if norm.get("tool") and norm["tool"] not in ("<tool_name>", "tool_name"):
+                return norm
+        except Exception:
+            pass
+
+    # 5. ast.literal_eval fallback with JS booleans
     try:
-        import ast
         s = re.sub(r'\btrue\b', 'True', raw_tc)
         s = re.sub(r'\bfalse\b', 'False', s)
         s = re.sub(r'\bnull\b', 'None', s)
         parsed = ast.literal_eval(s)
         norm = normalize_payload(parsed)
-        if norm.get("tool"):
+        if norm.get("tool") and norm["tool"] not in ("<tool_name>", "tool_name"):
             return norm
     except Exception:
         pass
 
-    # 3. Regex extraction fallback for large code blocks with internal quotes/truncation
+    # 6. Regex fallback for tool/kwargs
     tool_match = re.search(r'"(?:tool|name)"\s*:\s*"([^"]+)"', raw_tc)
     if tool_match:
         t_name = tool_match.group(1).strip()
-        kwargs = {}
-        if t_name in ("files.write", "file.write", "write_file", "write_to_file"):
-            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-            if path_m:
-                kwargs["path"] = path_m.group(1)
-            content_m = re.search(r'"content"\s*:\s*"(.*)', raw_tc, re.DOTALL)
-            if content_m:
-                c_str = content_m.group(1)
-                c_str = re.sub(r'"?\s*\}?\s*\}?\s*$', '', c_str)
-                try:
-                    c_str = c_str.encode('utf-8').decode('unicode_escape')
-                except Exception:
-                    pass
-                kwargs["content"] = c_str
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("replace_in_file", "files.replace_in_file"):
-            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-            if path_m: kwargs["path"] = path_m.group(1)
-            old_m = re.search(r'"(?:old_code|search)"\s*:\s*"(.*?)"(?:\s*,\s*"(?:new_code|replace)")', raw_tc, re.DOTALL)
-            if old_m: kwargs["old_code"] = old_m.group(1)
-            new_m = re.search(r'"(?:new_code|replace)"\s*:\s*"(.*?)"(?:\s*\}|$)', raw_tc, re.DOTALL)
-            if new_m: kwargs["new_code"] = new_m.group(1)
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("read_file_lines", "files.read_file_lines"):
-            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-            if path_m: kwargs["path"] = path_m.group(1)
-            s_m = re.search(r'"start_line"\s*:\s*(\d+)', raw_tc)
-            if s_m: kwargs["start_line"] = int(s_m.group(1))
-            e_m = re.search(r'"end_line"\s*:\s*(\d+)', raw_tc)
-            if e_m: kwargs["end_line"] = int(e_m.group(1))
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("view_file_outline", "files.view_file_outline", "files.read", "file.read", "view_file"):
-            path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-            if path_m: kwargs["path"] = path_m.group(1)
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("terminal.run", "run_command"):
-            cmd_m = re.search(r'"command"\s*:\s*"([^"]+)"', raw_tc)
-            if cmd_m:
-                kwargs["command"] = cmd_m.group(1)
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("web_search", "vector_db.search", "rag.search"):
-            q_m = re.search(r'"query"\s*:\s*"([^"]+)"', raw_tc)
-            if q_m:
-                kwargs["query"] = q_m.group(1)
-            return {"tool": t_name, "kwargs": kwargs}
-        elif t_name in ("browser.open_url", "browser.crawl_url"):
-            u_m = re.search(r'"url"\s*:\s*"([^"]+)"', raw_tc)
-            if u_m:
-                kwargs["url"] = u_m.group(1)
+        if t_name not in ("<tool_name>", "tool_name"):
+            kwargs = {}
+            for param in ("path", "command", "query", "url", "content"):
+                pm = re.search(rf'"{param}"\s*:\s*"([^"]*)"', raw_tc)
+                if pm:
+                    kwargs[param] = pm.group(1)
             return {"tool": t_name, "kwargs": kwargs}
 
-    # 4. Repair trailing syntax
+    # 7. Repair trailing syntax
     trimmed = raw_tc.rstrip()
     for fix in ['"}}', '"}', '}}', '}']:
         try:
             parsed = json.loads(trimmed + fix, strict=False)
             norm = normalize_payload(parsed)
-            if norm.get("tool"):
+            if norm.get("tool") and norm["tool"] not in ("<tool_name>", "tool_name"):
                 return norm
         except Exception:
             pass
@@ -780,9 +793,16 @@ def run_cli():
         display = text or ""
         if not show_thoughts:
             display = re.sub(r'<think>.*?(</think>|$)', '', display, flags=re.DOTALL).strip()
+            display = re.sub(r'<thought>.*?(</thought>|$)', '', display, flags=re.DOTALL).strip()
+            display = re.sub(r'<reasoning>.*?(</reasoning>|$)', '', display, flags=re.DOTALL).strip()
             if "</think>" in display:
                 display = display.split("</think>", 1)[1].strip()
+            if "</thought>" in display:
+                display = display.split("</thought>", 1)[1].strip()
+            if "</reasoning>" in display:
+                display = display.split("</reasoning>", 1)[1].strip()
         display = re.sub(r'<tool_call>.*?(</tool_call>|$)', '', display, flags=re.DOTALL).strip()
+        display = re.sub(r'<function[=>\s].*?(?:</function>|$)', '', display, flags=re.DOTALL | re.IGNORECASE).strip()
         return display
     
     # Init config files
@@ -906,137 +926,7 @@ def run_cli():
         )
     )
 
-    def robust_parse_tool_call(raw_tc: str) -> dict:
-        """Robust dual parser that handles native tool_calls, OpenAI schemas, unescaped code literals, and truncation."""
-        def normalize_payload(data: dict) -> dict:
-            if not isinstance(data, dict):
-                return {}
-            # Format A: {"tool": "name", "kwargs": {...}}
-            if "tool" in data:
-                return {
-                    "tool": data["tool"],
-                    "kwargs": data.get("kwargs", {}) if isinstance(data.get("kwargs"), dict) else {}
-                }
-            # Format B: {"name": "...", "arguments": {...}} (OpenAI Function Calling)
-            if "name" in data and ("arguments" in data or "parameters" in data):
-                args = data.get("arguments", data.get("parameters", {}))
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args, strict=False)
-                    except Exception:
-                        args = {"raw_arguments": args}
-                return {
-                    "tool": data["name"],
-                    "kwargs": args if isinstance(args, dict) else {}
-                }
-            # Format C: {"function": {"name": "...", "arguments": {...}}}
-            if "function" in data and isinstance(data["function"], dict):
-                fn = data["function"]
-                args = fn.get("arguments", {})
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args, strict=False)
-                    except Exception:
-                        pass
-                return {
-                    "tool": fn.get("name", ""),
-                    "kwargs": args if isinstance(args, dict) else {}
-                }
-            # Format D: Direct function name as top-level key: {"files.read": {"path": "..."}}
-            for k, v in data.items():
-                if isinstance(v, dict) and any(sep in k for sep in [".", "_"]):
-                    return {"tool": k, "kwargs": v}
-            return data
 
-        # 1. Try standard JSON (strict=False permits literal newlines/tabs inside strings)
-        try:
-            parsed = json.loads(raw_tc, strict=False)
-            norm = normalize_payload(parsed)
-            if norm.get("tool"):
-                return norm
-        except Exception:
-            pass
-
-        # 2. Try ast.literal_eval with JS booleans converted
-        try:
-            import ast
-            s = re.sub(r'\btrue\b', 'True', raw_tc)
-            s = re.sub(r'\bfalse\b', 'False', s)
-            s = re.sub(r'\bnull\b', 'None', s)
-            parsed = ast.literal_eval(s)
-            norm = normalize_payload(parsed)
-            if norm.get("tool"):
-                return norm
-        except Exception:
-            pass
-
-        # 3. Regex extraction fallback for large code blocks with internal quotes/truncation
-        tool_match = re.search(r'"(?:tool|name)"\s*:\s*"([^"]+)"', raw_tc)
-        if tool_match:
-            t_name = tool_match.group(1).strip()
-            kwargs = {}
-            if t_name in ("files.write", "file.write", "write_file", "write_to_file"):
-                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-                if path_m:
-                    kwargs["path"] = path_m.group(1)
-                content_m = re.search(r'"content"\s*:\s*"(.*)', raw_tc, re.DOTALL)
-                if content_m:
-                    c_str = content_m.group(1)
-                    c_str = re.sub(r'"?\s*\}?\s*\}?\s*$', '', c_str)
-                    try:
-                        c_str = c_str.encode('utf-8').decode('unicode_escape')
-                    except Exception:
-                        pass
-                    kwargs["content"] = c_str
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("replace_in_file", "files.replace_in_file"):
-                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-                if path_m: kwargs["path"] = path_m.group(1)
-                old_m = re.search(r'"(?:old_code|search)"\s*:\s*"(.*?)"(?:\s*,\s*"(?:new_code|replace)")', raw_tc, re.DOTALL)
-                if old_m: kwargs["old_code"] = old_m.group(1)
-                new_m = re.search(r'"(?:new_code|replace)"\s*:\s*"(.*?)"(?:\s*\}|$)', raw_tc, re.DOTALL)
-                if new_m: kwargs["new_code"] = new_m.group(1)
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("read_file_lines", "files.read_file_lines"):
-                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-                if path_m: kwargs["path"] = path_m.group(1)
-                s_m = re.search(r'"start_line"\s*:\s*(\d+)', raw_tc)
-                if s_m: kwargs["start_line"] = int(s_m.group(1))
-                e_m = re.search(r'"end_line"\s*:\s*(\d+)', raw_tc)
-                if e_m: kwargs["end_line"] = int(e_m.group(1))
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("view_file_outline", "files.view_file_outline", "files.read", "file.read", "view_file"):
-                path_m = re.search(r'"path"\s*:\s*"([^"]+)"', raw_tc)
-                if path_m: kwargs["path"] = path_m.group(1)
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("terminal.run", "run_command"):
-                cmd_m = re.search(r'"command"\s*:\s*"([^"]+)"', raw_tc)
-                if cmd_m:
-                    kwargs["command"] = cmd_m.group(1)
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("web_search", "vector_db.search", "rag.search"):
-                q_m = re.search(r'"query"\s*:\s*"([^"]+)"', raw_tc)
-                if q_m:
-                    kwargs["query"] = q_m.group(1)
-                return {"tool": t_name, "kwargs": kwargs}
-            elif t_name in ("browser.open_url", "browser.crawl_url"):
-                u_m = re.search(r'"url"\s*:\s*"([^"]+)"', raw_tc)
-                if u_m:
-                    kwargs["url"] = u_m.group(1)
-                return {"tool": t_name, "kwargs": kwargs}
-
-        # 4. Repair trailing syntax
-        trimmed = raw_tc.rstrip()
-        for fix in ['"}}', '"}', '}}', '}']:
-            try:
-                parsed = json.loads(trimmed + fix, strict=False)
-                norm = normalize_payload(parsed)
-                if norm.get("tool"):
-                    return norm
-            except Exception:
-                pass
-
-        raise ValueError("Could not parse tool call as valid JSON.")
 
     def check_permission(tool_name: str, kwargs: dict, current_workspace: str, current_perm_level: str) -> bool:
         nonlocal checkpoint_created_this_session
@@ -1316,12 +1206,18 @@ def run_cli():
         import time
         while True:
             time.sleep(2)
+            try:
+                from lmms.backend.core.registry.online_models import OnlineModelRegistry
+                if OnlineModelRegistry.get_active_type() == "online":
+                    continue
+            except Exception:
+                pass
             new_health = check_engine_health()
             if new_health != _cached_engine_health[0]:
                 _cached_engine_health[0] = new_health
                 try:
-                    if hasattr(session, "app") and session.app:
-                        session.app.invalidate()
+                    if hasattr(session, "app") and session.app and hasattr(session.app, "loop") and session.app.loop:
+                        session.app.loop.call_soon_threadsafe(session.app.invalidate)
                 except Exception:
                     pass
 
@@ -2511,6 +2407,7 @@ def run_cli():
                 full_reply = ""
                 executed_tool_calls = []
                 search_tool_count = 0
+                model_header_printed = False
                 while iter_count < MAX_ITERATIONS:
                     iter_count += 1
                     
@@ -2667,7 +2564,7 @@ def run_cli():
                                             chunk_text = chunk.get("content", "")
                                             if not chunk_text and "choices" in chunk and chunk["choices"]:
                                                 delta = chunk["choices"][0].get("delta", {})
-                                                chunk_text = delta.get("content") or delta.get("reasoning_content") or ""
+                                                chunk_text = delta.get("content") or ""
                                             full_reply += chunk_text
                                             
                                             if voice_mode_active and vsession is not None:
@@ -2740,7 +2637,9 @@ def run_cli():
                                                 first_token = True
                                                 if not voice_mode_active:
                                                     spin_status.stop()
-                                                    console.print(f"\n[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
+                                                    if not model_header_printed:
+                                                        console.print(f"\n[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
+                                                        model_header_printed = True
                                                     live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
                                                     live_view.start()
                                                 
@@ -2825,6 +2724,21 @@ def run_cli():
                     force_tool_mode = should_force_tool_mode(cmd)
                     tool_call_match = re.search(r"<tool_call>\s*(.*?)\s*(</tool_call>|$)", full_reply, re.DOTALL)
                     
+                    if not tool_call_match:
+                        # Fallback 1: XML-style function call <function=...>...</function>
+                        xml_fn_match = re.search(r'(<function[=>\s].*?(?:</function>|$))', full_reply, re.DOTALL | re.IGNORECASE)
+                        if xml_fn_match:
+                            tool_call_match = xml_fn_match
+
+                    if not tool_call_match:
+                        # Fallback 2: check if the reply contains a raw JSON tool call
+                        try:
+                            raw_json_match = re.search(r'(\{\s*"tool"\s*:\s*".*?"\s*,\s*"kwargs"\s*:.*?\})', full_reply, re.DOTALL)
+                            if raw_json_match:
+                                tool_call_match = raw_json_match
+                        except Exception:
+                            pass
+
                     # If the model emitted a tool_call but we're not in force_tool_mode,
                     # we STILL execute it — the model decided a tool is needed.
                     # We only suppress/strip tool calls when the reply is PURELY a tool call
@@ -2835,28 +2749,22 @@ def run_cli():
                     if tool_call_match and is_pure_tool_only and is_casual_chat:
                         # Casual chat like "hello" that triggered a spurious tool call — strip it
                         full_reply = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
+                        full_reply = re.sub(r"<function[=>\s].*?(</function>|$)", "", full_reply, flags=re.DOTALL | re.IGNORECASE).strip()
                         if not full_reply:
                             full_reply = "I'm ready to help, but this looks like a normal chat request rather than a tool-driven task."
                             console.print(Markdown(full_reply))
                         reply = full_reply
                         break
 
-                    if not tool_call_match:
-                        # Fallback: check if the entire reply is just a raw JSON tool call
-                        try:
-                            raw_json_match = re.search(r'(\{\s*"tool"\s*:\s*".*?"\s*,\s*"kwargs"\s*:.*?\})', full_reply, re.DOTALL)
-                            if raw_json_match:
-                                tool_call_match = raw_json_match
-                        except Exception:
-                            pass
-
                     if tool_call_match:
                         raw_tc = ""
                         try:
-                            raw_tc = tool_call_match.group(1).strip()
-                            json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
-                            if json_match:
-                                raw_tc = json_match.group(1).strip()
+                            raw_tc = tool_call_match.group(1).strip() if tool_call_match.groups() else tool_call_match.group(0).strip()
+                            # Only extract raw JSON if this is NOT an XML function call
+                            if not re.search(r'<function[=>\s]', raw_tc, re.IGNORECASE):
+                                json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
+                                if json_match:
+                                    raw_tc = json_match.group(1).strip()
                             if raw_tc.startswith("```json"):
                                 raw_tc = raw_tc[7:]
                             elif raw_tc.startswith("```"):
@@ -2868,6 +2776,8 @@ def run_cli():
                             tc_data = robust_parse_tool_call(raw_tc)
                             t_name = tc_data.get("tool", "")
                             t_kwargs = tc_data.get("kwargs", {})
+                            if not t_name or t_name in ("tool_name", "<tool_name>"):
+                                raise ValueError(f"Invalid or placeholder tool name '{t_name}'.")
 
                             # 1. Universal Answer Delivery Guard:
                             # Terminate on substantive answer ONLY for search/information intents,

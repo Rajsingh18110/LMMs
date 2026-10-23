@@ -135,3 +135,47 @@ def test_search_provider_depth():
         assert "title" in r
         assert "url" in r
         assert "snippet" in r
+
+
+def test_robust_parse_xml_and_nemotron_tool_calls():
+    from lmms.backend.main import robust_parse_tool_call
+
+    # Nemotron XML format 1 (files.list with kwargs tag)
+    tc1 = """<tool_call>
+<function=files.list>
+<kwargs>
+{"path":"/home/kali/heretic"}
+</parameter>
+</function>
+</tool_call>"""
+    res1 = robust_parse_tool_call(tc1)
+    assert res1["tool"] == "files.list"
+    assert res1["kwargs"] == {"path": "/home/kali/heretic"}
+
+    # Nemotron XML format 2 (terminal.run with parameter=command)
+    tc2 = """<tool_call>
+<function=terminal.run>
+<parameter=command>
+ls -la /home/kali/heretic
+</parameter>
+</function>
+</tool_call>"""
+    res2 = robust_parse_tool_call(tc2)
+    assert res2["tool"] == "terminal.run"
+    assert res2["kwargs"] == {"command": "ls -la /home/kali/heretic"}
+
+    # Nemotron XML format 3 (cat README.md)
+    tc3 = """<function=terminal.run>
+<parameter=command>
+cat README.md
+</parameter>
+</function>"""
+    res3 = robust_parse_tool_call(tc3)
+    assert res3["tool"] == "terminal.run"
+    assert res3["kwargs"] == {"command": "cat README.md"}
+
+    # OpenAI format
+    tc4 = '<tool_call>{"name": "files.read", "arguments": {"path": "README.md"}}</tool_call>'
+    res4 = robust_parse_tool_call(tc4)
+    assert res4["tool"] == "files.read"
+    assert res4["kwargs"] == {"path": "README.md"}

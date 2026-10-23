@@ -398,6 +398,14 @@ def launch(mode, forward_args=None, ensure_engine=True):
         venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
         py_exe = venv_py if os.path.exists(venv_py) else sys.executable
 
+    # Check if an online model is actively configured; if so, skip local heavy engine startup
+    try:
+        from lmms.backend.core.registry.online_models import OnlineModelRegistry
+        if OnlineModelRegistry.get_active_type() == "online" and OnlineModelRegistry.get_active_model() is not None:
+            ensure_engine = False
+    except Exception:
+        pass
+
     # In a compiled environment, this calls ./lmms-backend or ./lmms-engine
     while True:
         engine_proc = None

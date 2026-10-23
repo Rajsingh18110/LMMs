@@ -126,8 +126,8 @@ class ContextBuilder:
                 lines.append(f"- {tool.id}: {summary}")
 
         lines.append(
-            "\nLoad a tool's full schema when needed:\n"
-            "<tool_call>{\"tool\":\"discover_additional_tool\",\"kwargs\":{\"capability\":\"<tool_name>\"}}</tool_call>"
+            "\nTo inspect an unlisted tool schema, request its capability name:\n"
+            "<tool_call>{\"tool\":\"discover_additional_tool\",\"kwargs\":{\"capability\":\"tool_identifier\"}}</tool_call>"
         )
         return "\n".join(lines)
 
@@ -141,8 +141,9 @@ class ContextBuilder:
 
         lines = [
             "## Active Tools (Full Schemas)",
-            "To use an active tool, output a raw JSON block wrapped in <tool_call> tags:",
-            "<tool_call>{\"tool\": \"tool_name\", \"kwargs\": {...}}</tool_call>",
+            "To use an active tool, output a raw JSON block wrapped in <tool_call> tags without extra commentary:",
+            "<tool_call>{\"tool\": \"files.read\", \"kwargs\": {\"path\": \"README.md\"}}</tool_call>",
+            "Note: Never use placeholder names like 'tool_name' or '<tool_name>'. Always use the exact active tool name.",
             "Active tool schemas:"
         ]
 
