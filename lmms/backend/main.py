@@ -261,6 +261,137 @@ def get_clean_model_display_name(model_key_or_name: str) -> str:
     return model_key_or_name
 
 
+def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int, max_steps: int):
+    """
+    Renders a crystal-clear, structured visual panel for tool executions in the CLI.
+    Ensures the user sees exactly what file is being written, read, or modified,
+    what terminal commands are running, and what actions are taking place on their system.
+    """
+    from rich.panel import Panel
+
+    step_tag = f"[bold magenta]Step {step}/{max_steps}[/bold magenta]"
+
+    if t_name in ("files.write", "file.write", "write_file"):
+        path = t_kwargs.get("path") or t_kwargs.get("file_path") or t_kwargs.get("filename") or ""
+        content = t_kwargs.get("content") or t_kwargs.get("data") or t_kwargs.get("text") or t_kwargs.get("code") or ""
+        lines = content.splitlines() if content else []
+        preview_lines = lines[:10]
+        preview_text = "\n".join(preview_lines) if preview_lines else "[dim](empty file)[/dim]"
+        hidden_lines = len(lines) - len(preview_lines)
+
+        footer = f"\n[dim]... +{hidden_lines} more lines ({len(content):,} bytes)[/dim]" if hidden_lines > 0 else f"\n[dim]({len(lines)} lines, {len(content):,} bytes)[/dim]"
+        body = f"[bold cyan]📁 Target File:[/bold cyan] [bold white]{path}[/bold white]\n[bold cyan]📄 Content Preview:[/bold cyan]\n[green]{preview_text}[/green]{footer}"
+
+        console.print(Panel(
+            body,
+            title=f"📝 {step_tag} [bold green]Writing File[/bold green]",
+            border_style="green",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    elif t_name in ("files.read", "file.read", "read_file"):
+        path = t_kwargs.get("path") or t_kwargs.get("file_path") or t_kwargs.get("filename") or ""
+        body = f"[bold cyan]📁 File Path:[/bold cyan] [bold white]{path}[/bold white]"
+        console.print(Panel(
+            body,
+            title=f"📖 {step_tag} [bold blue]Reading File[/bold blue]",
+            border_style="blue",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    elif t_name in ("files.list", "list_folder"):
+        path = t_kwargs.get("path") or "."
+        body = f"[bold cyan]📂 Directory:[/bold cyan] [bold white]{path}[/bold white]"
+        console.print(Panel(
+            body,
+            title=f"📂 {step_tag} [bold yellow]Listing Files[/bold yellow]",
+            border_style="yellow",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    elif t_name == "terminal.run":
+        cmd_str = t_kwargs.get("command") or t_kwargs.get("cmd") or ""
+        body = f"[bold cyan]💻 Command:[/bold cyan] [bold white]$ {cmd_str}[/bold white]"
+        console.print(Panel(
+            body,
+            title=f"⚡ {step_tag} [bold magenta]Running Terminal[/bold magenta]",
+            border_style="magenta",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    elif t_name in ("patch.apply", "apply_patch"):
+        path = t_kwargs.get("path") or ""
+        patch = t_kwargs.get("patch") or ""
+        patch_preview = "\n".join(patch.splitlines()[:8])
+        body = f"[bold cyan]📁 Target File:[/bold cyan] [bold white]{path}[/bold white]\n[dim]{patch_preview}[/dim]"
+        console.print(Panel(
+            body,
+            title=f"🩹 {step_tag} [bold cyan]Applying Code Patch[/bold cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    elif t_name in ("web_search", "browser.open_url"):
+        query = t_kwargs.get("query") or t_kwargs.get("url") or ""
+        body = f"[bold cyan]🌐 Target / Query:[/bold cyan] [bold white]{query}[/bold white]"
+        console.print(Panel(
+            body,
+            title=f"🔍 {step_tag} [bold blue]Web Research[/bold blue]",
+            border_style="blue",
+            padding=(0, 1),
+            expand=False
+        ))
+
+    else:
+        clean_kwargs = {k: v for k, v in t_kwargs.items() if k not in ("content", "patch")}
+        body = f"[bold cyan]Tool:[/bold cyan] [white]{t_name}[/white]\n[dim]{json.dumps(clean_kwargs)}[/dim]" if clean_kwargs else f"[bold cyan]Tool:[/bold cyan] [white]{t_name}[/white]"
+        console.print(Panel(
+            body,
+            title=f"🛠️ {step_tag} [bold cyan]{t_name}[/bold cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+            expand=False
+        ))
+
+
+def render_tool_observation_panel(t_name: str, observation: str, step: int, max_steps: int):
+    """
+    Renders compact, bounded observation results so terminal scrollback
+    is never locked or flooded, while maintaining full clarity for the user.
+    """
+    from rich.panel import Panel
+
+    obs_str = str(observation).strip()
+    if not obs_str:
+        obs_str = "Operation completed with no console output."
+
+    lines = obs_str.splitlines()
+    if len(lines) > 7:
+        preview = "\n".join(lines[:6]) + f"\n[dim]... +{len(lines) - 6} more lines of output[/dim]"
+    elif len(obs_str) > 350:
+        preview = obs_str[:330] + "... [dim](truncated)[/dim]"
+    else:
+        preview = obs_str
+
+    is_error = any(err in obs_str.lower()[:30] for err in ["error", "failed", "rejected", "denied", "exception"])
+    border_col = "red" if is_error else "dim green"
+    icon = "❌" if is_error else "✓"
+    status_label = "Error" if is_error else "Output"
+
+    console.print(Panel(
+        f"[dim]{preview}[/dim]",
+        title=f"{icon} [Step {step}/{max_steps}] {t_name} {status_label}",
+        border_style=border_col,
+        padding=(0, 1),
+        expand=False
+    ))
+
+
 async def ipc_handshake():
     token = os.environ.get("LMMS_INTERNAL_TOKEN")
     if not token:
@@ -2533,7 +2664,13 @@ def run_cli():
                             final_display = ""
                             leak_check_done = False
 
-                            with console.status(f"[bold blue]{current_model}:[/bold blue]", spinner="lmms_wave") as spin_status:
+                            clean_model_name = get_clean_model_display_name(current_model)
+                            if iter_count == 1:
+                                spin_label = f"[bold cyan]• {clean_model_name}[/bold cyan] [dim]Thinking & planning next step...[/dim]"
+                            else:
+                                spin_label = f"[bold cyan]• {clean_model_name}[/bold cyan] [dim]Step {iter_count}/{MAX_ITERATIONS}: Processing tool results...[/dim]"
+
+                            with console.status(spin_label, spinner="lmms_wave") as spin_status:
                                 for line_bytes in chunks_iterator:
                                     if not line_bytes:
                                         continue
@@ -2854,7 +2991,7 @@ def run_cli():
                             perm = permission_manager.check_permission(req)
                             
                             if check_permission(t_name, t_kwargs, current_workspace, current_permission_level):
-                                console.print(f"\n[bold magenta][Step {iter_count}/{MAX_ITERATIONS}] Running:[/bold magenta] [white]{t_name} {t_kwargs}[/white]")
+                                render_tool_execution_panel(t_name, t_kwargs, iter_count, MAX_ITERATIONS)
                                 try:
                                     from lmms.backend.events.bus import get_event_bus
                                     get_event_bus().tool_start(t_name, t_kwargs, step=iter_count)
@@ -2953,11 +3090,8 @@ def run_cli():
                                 except Exception:
                                     pass
 
-                                # Truncate observation for display
-                                disp_obs = str(observation)
-                                if len(disp_obs) > 500:
-                                    disp_obs = disp_obs[:500] + "... (truncated)"
-                                console.print(f"[bold cyan][Step {iter_count}/{MAX_ITERATIONS}] Observation:[/bold cyan] [dim]{disp_obs}[/dim]")
+                                # Render clean, bounded observation panel (prevents terminal flooding/scroll lock)
+                                render_tool_observation_panel(t_name, observation, iter_count, MAX_ITERATIONS)
                             else:
                                 record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason="Denied by interactive check or policy"))
                                 observation = "Tool execution denied by user or policy."
