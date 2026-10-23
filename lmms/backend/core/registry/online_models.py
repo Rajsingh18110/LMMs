@@ -24,6 +24,7 @@ import os
 import json
 import uuid
 from datetime import datetime
+import re
 from typing import Dict, List, Any, Optional
 
 ONLINE_MODELS_FILE = os.path.expanduser("~/.lmms/config/online_models.json")
@@ -136,17 +137,46 @@ class OnlineModelRegistry:
         entry_id = str(uuid.uuid4())[:8]
         unique_key = f"{provider_id}:{model_id}" if provider_id != "custom_webhook" else f"webhook:{entry_id}"
 
+        # Sanitize API key against accidental environment block pastes or newlines
+        clean_key = str(api_key or "").strip()
+        match = re.search(r'(?:API_KEY|TOKEN|SECRET|KEY)\s*[:=]\s*["\']?([^\s"\']+)["\']?', clean_key, re.IGNORECASE)
+        if match:
+            clean_key = match.group(1).strip()
+        for line in clean_key.splitlines():
+            m = re.search(r'(?:nvapi-[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+|AIza[A-Za-z0-9_-]+|gsk_[A-Za-z0-9_-]+)', line.strip())
+            if m:
+                clean_key = m.group(0)
+                break
+        clean_key = clean_key.replace("\r", "").replace("\n", "").strip().strip("\"'")
+
+        # Clean base_url
+        clean_base_url = base_url.replace("\r", "").replace("\n", "").strip().rstrip("/")
+        clean_model_id = model_id.replace("\r", "").replace("\n", "").strip()
+
+        # Auto-normalize NVIDIA NIM model prefix
+        if "integrate.api.nvidia.com" in clean_base_url and not clean_model_id.startswith("nvidia/") and not clean_model_id.startswith("meta/") and not clean_model_id.startswith("mistralai/"):
+            clean_model_id = f"nvidia/{clean_model_id}"
+
+        # Clean custom headers
+        clean_headers = {}
+        if custom_headers and isinstance(custom_headers, dict):
+            for hk, hv in custom_headers.items():
+                chk = str(hk).replace("\r", "").replace("\n", "").strip()
+                chv = str(hv).replace("\r", "").replace("\n", "").strip()
+                if chk:
+                    clean_headers[chk] = chv
+
         model_entry = {
             "key": unique_key,
-            "id": model_id,
-            "name": name or model_id,
+            "id": clean_model_id,
+            "name": name or clean_model_id,
             "provider_id": provider_id,
             "provider_name": provider_name,
             "type": p_type,
-            "base_url": base_url.rstrip("/"),
-            "api_key": api_key.strip(),
+            "base_url": clean_base_url,
+            "api_key": clean_key,
             "webhook_url": webhook_url.strip(),
-            "custom_headers": custom_headers or {},
+            "custom_headers": clean_headers,
             "category": category,
             "enabled": True,
             "created_at": datetime.utcnow().isoformat(),

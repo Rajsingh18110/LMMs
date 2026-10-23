@@ -202,6 +202,23 @@ PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
         "models": ["deepseek-chat", "deepseek-reasoner"],
         "description": "DeepSeek V3 and R1 reasoning APIs.",
     },
+    "nvidia": {
+        "name": "NVIDIA NIM (Cloud)",
+        "type": "openai_compatible",
+        "category": "cloud",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "api_key_required": True,
+        "default_model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "models": [
+            "nvidia/nemotron-3.5-super-vl-120b-a12b",
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+            "nvidia/nemotron-3-super-120b-a12b",
+            "meta/llama-3.1-70b-instruct",
+            "meta/llama-3.1-405b-instruct",
+            "mistralai/mistral-large-2-instruct"
+        ],
+        "description": "NVIDIA NIM microservices and Nemotron reasoning foundation models.",
+    },
     "groq": {
         "name": "Groq Fast LPU",
         "type": "openai_compatible",

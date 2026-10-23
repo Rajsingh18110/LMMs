@@ -22,6 +22,7 @@ Emits standard SSE lines (data: {...}) matching LMMs engine streaming contract.
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Dict, List, Any, Generator, Optional
 import requests
@@ -31,6 +32,41 @@ from lmms.backend.core.registry.online_models import OnlineModelRegistry
 
 class OnlineModelClient:
     """Dispatches completions to cloud LLM providers and custom webhook endpoints."""
+
+    @staticmethod
+    def sanitize_api_key(raw_key: str) -> str:
+        """Sanitizes API keys, removing newlines, quotes, or accidental env-variable prefixes."""
+        if not raw_key:
+            return ""
+        raw = str(raw_key).strip()
+
+        # Check for multi-line or single-line env variable assignment (e.g. MODEL_API_KEY=nvapi-... or API_KEY="sk-...")
+        match = re.search(r'(?:API_KEY|TOKEN|SECRET|KEY)\s*[:=]\s*["\']?([^\s"\']+)["\']?', raw, re.IGNORECASE)
+        if match:
+            return match.group(1).replace("\r", "").replace("\n", "").strip()
+
+        # Check for known API key signatures in multi-line paste
+        for line in raw.splitlines():
+            line_str = line.strip()
+            m = re.search(r'(?:nvapi-[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+|AIza[A-Za-z0-9_-]+|gsk_[A-Za-z0-9_-]+)', line_str)
+            if m:
+                return m.group(0)
+
+        # Remove newlines, returns, leading/trailing whitespace, and enclosing quotes
+        clean = raw.replace("\r", "").replace("\n", "").strip().strip("\"'")
+        return clean
+
+    @staticmethod
+    def _sanitize_headers(headers: Dict[str, Any]) -> Dict[str, str]:
+        """Cleanses all header keys and values to strictly comply with HTTP RFC specifications."""
+        clean = {}
+        for k, v in headers.items():
+            if not k:
+                continue
+            clean_k = str(k).replace("\r", "").replace("\n", "").strip()
+            clean_v = str(v).replace("\r", "").replace("\n", "").strip()
+            clean[clean_k] = clean_v
+        return clean
 
     @staticmethod
     def stream_chat(
@@ -107,15 +143,21 @@ class OnlineModelClient:
         custom_headers: Optional[Dict[str, str]] = None,
         timeout: int = 120
     ) -> Generator[bytes, None, None]:
+        # Auto-correct NVIDIA model name prefix if pointing to integrate.api.nvidia.com
+        if "integrate.api.nvidia.com" in base_url and not model_id.startswith("nvidia/") and not model_id.startswith("meta/") and not model_id.startswith("mistralai/"):
+            model_id = f"nvidia/{model_id}"
+
         endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
         if not base_url.endswith("/v1") and not base_url.endswith("/chat/completions"):
             endpoint = f"{base_url}/v1/chat/completions"
 
         headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        clean_key = OnlineModelClient.sanitize_api_key(api_key)
+        if clean_key:
+            headers["Authorization"] = f"Bearer {clean_key}"
         if custom_headers and isinstance(custom_headers, dict):
             headers.update(custom_headers)
+        headers = OnlineModelClient._sanitize_headers(headers)
 
         # Normalize messages (ensure content is string)
         clean_messages = []
@@ -145,7 +187,41 @@ class OnlineModelClient:
                     return
 
                 for line in resp.iter_lines():
-                    if line:
+                    if not line:
+                        continue
+                    line_str = line.decode("utf-8") if isinstance(line, bytes) else str(line)
+                    if line_str.startswith("data: "):
+                        payload_str = line_str[6:].strip()
+                        if payload_str == "[DONE]":
+                            yield b"data: [DONE]\n\n"
+                            break
+                        try:
+                            d = json.loads(payload_str)
+                            delta = d.get("choices", [{}])[0].get("delta", {}) if d.get("choices") else {}
+                            content = delta.get("content")
+                            reasoning = delta.get("reasoning_content")
+                            
+                            text_to_emit = ""
+                            delta_obj = {}
+                            if reasoning:
+                                delta_obj["reasoning_content"] = reasoning
+                                text_to_emit = reasoning
+                            if content:
+                                delta_obj["content"] = content
+                                text_to_emit = content
+                            elif not reasoning and "content" in d:
+                                text_to_emit = d.get("content", "")
+                                delta_obj["content"] = text_to_emit
+
+                            # Yield dual-compatible SSE chunk
+                            norm_chunk = {
+                                "content": text_to_emit,
+                                "choices": [{"delta": delta_obj}]
+                            }
+                            yield f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8")
+                        except Exception:
+                            yield line + b"\n"
+                    else:
                         yield line + b"\n"
         except Exception as e:
             yield f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8")
@@ -295,15 +371,20 @@ class OnlineModelClient:
         """Runs a fast live ping to verify endpoint and API key validity."""
         base_url = base_url.rstrip("/")
 
+        clean_key = OnlineModelClient.sanitize_api_key(api_key)
+        if "integrate.api.nvidia.com" in base_url and not model_id.startswith("nvidia/") and not model_id.startswith("meta/") and not model_id.startswith("mistralai/"):
+            model_id = f"nvidia/{model_id}"
+
         if p_type == "anthropic":
             test_url = f"{base_url}/messages"
             headers = {
-                "x-api-key": api_key,
+                "x-api-key": clean_key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json"
             }
             if custom_headers:
                 headers.update(custom_headers)
+            headers = OnlineModelClient._sanitize_headers(headers)
             payload = {
                 "model": model_id or "claude-3-5-haiku-20241022",
                 "messages": [{"role": "user", "content": "ping"}],
@@ -318,7 +399,7 @@ class OnlineModelClient:
                 return {"success": False, "error": str(e)}
 
         elif p_type == "gemini" and "generativelanguage.googleapis.com" in base_url and not base_url.endswith("/openai"):
-            test_url = f"{base_url}/models?key={api_key}"
+            test_url = f"{base_url}/models?key={clean_key}"
             try:
                 r = requests.get(test_url, timeout=8)
                 if r.status_code == 200:
@@ -334,10 +415,11 @@ class OnlineModelClient:
                 test_url = f"{base_url}/v1/models"
 
             headers = {}
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
+            if clean_key:
+                headers["Authorization"] = f"Bearer {clean_key}"
             if custom_headers:
                 headers.update(custom_headers)
+            headers = OnlineModelClient._sanitize_headers(headers)
 
             try:
                 r = requests.get(test_url, headers=headers, timeout=8)

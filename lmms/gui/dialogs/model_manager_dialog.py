@@ -776,6 +776,7 @@ class ModelManagerDialog(QDialog):
                 ("perplexity", "Perplexity Sonar"),
             ]),
             ("⚡ Ultra-Fast Cloud & LPUs", "cloud_fast", [
+                ("nvidia", "NVIDIA NIM (Cloud)"),
                 ("groq", "Groq Fast LPU"),
                 ("cerebras", "Cerebras CS-3"),
                 ("sambanova", "SambaNova Systems"),
@@ -965,7 +966,41 @@ class ModelManagerDialog(QDialog):
             self.btn_toggle_key.setText("👁 Show")
 
     def _update_key_badge(self):
-        val = self.key_edit.text().strip()
+        val = self.key_edit.text()
+
+        # Check if user pasted a multi-field environment block (e.g. MODEL_BASE_URL=... MODEL_API_KEY=... NEMOTRON_MODEL=...)
+        if ("MODEL_API_KEY" in val or "API_KEY" in val) and ("MODEL_BASE_URL" in val or "NEMOTRON_MODEL" in val or "\n" in val):
+            b_match = re.search(r'(?:MODEL_BASE_URL|BASE_URL|ENDPOINT)\s*[:=]\s*["\']?([^\s"\']+)["\']?', val, re.IGNORECASE)
+            k_match = re.search(r'(?:MODEL_API_KEY|API_KEY|TOKEN)\s*[:=]\s*["\']?([^\s"\']+)["\']?', val, re.IGNORECASE)
+            m_match = re.search(r'(?:NEMOTRON_MODEL|MODEL_ID|MODEL)\s*[:=]\s*["\']?([^\s"\']+)["\']?', val, re.IGNORECASE)
+
+            if k_match:
+                extracted_key = k_match.group(1).strip()
+                self.key_edit.blockSignals(True)
+                self.key_edit.setText(extracted_key)
+                self.key_edit.blockSignals(False)
+                val = extracted_key
+
+            if b_match:
+                extracted_url = b_match.group(1).strip()
+                if "nvidia.com" in extracted_url and "integrate.api.nvidia.com" not in extracted_url:
+                    extracted_url = "https://integrate.api.nvidia.com/v1"
+                self.url_edit.setText(extracted_url)
+
+            if m_match:
+                extracted_model = m_match.group(1).strip()
+                self.model_combo.setCurrentText(extracted_model)
+
+            self.status_label.setText("<span style='color: #10b981;'>✓ Auto-detected & populated Base URL, Model ID, and API Key from env block!</span>")
+
+        # Strip any accidental newlines or surrounding quotes
+        if "\n" in val or "\r" in val or '"' in val or "'" in val:
+            clean_v = val.replace("\r", "").replace("\n", "").strip().strip("\"'")
+            self.key_edit.blockSignals(True)
+            self.key_edit.setText(clean_v)
+            self.key_edit.blockSignals(False)
+            val = clean_v
+
         preset = PROVIDER_PRESETS.get(self._active_preset_key, {})
         required = preset.get("api_key_required", False)
 

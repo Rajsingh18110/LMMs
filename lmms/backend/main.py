@@ -2618,6 +2618,9 @@ def run_cli():
                                                 break
                                                 
                                             chunk_text = chunk.get("content", "")
+                                            if not chunk_text and "choices" in chunk and chunk["choices"]:
+                                                delta = chunk["choices"][0].get("delta", {})
+                                                chunk_text = delta.get("content") or delta.get("reasoning_content") or ""
                                             full_reply += chunk_text
                                             
                                             if voice_mode_active and vsession is not None:

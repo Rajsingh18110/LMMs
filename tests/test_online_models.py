@@ -75,3 +75,23 @@ def test_indian_providers_in_presets():
     assert PROVIDER_PRESETS["sarvam"]["category"] == "indian_ai"
     assert "sarvam-2b" in PROVIDER_PRESETS["sarvam"]["models"]
     assert "Krutrim-spectre-v2" in PROVIDER_PRESETS["krutrim"]["models"]
+
+
+def test_api_key_sanitization_and_env_block():
+    raw_env_paste = """MODEL_BASE_URL=https://nvidia.com
+MODEL_API_KEY=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
+NEMOTRON_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b"""
+
+    cleaned = OnlineModelClient.sanitize_api_key(raw_env_paste)
+    assert cleaned == "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"
+    assert "\n" not in cleaned
+    assert "\r" not in cleaned
+
+    # Test quotes and whitespace
+    assert OnlineModelClient.sanitize_api_key(' "sk-test-12345" \n') == "sk-test-12345"
+
+
+def test_nvidia_nim_preset():
+    assert "nvidia" in PROVIDER_PRESETS
+    assert PROVIDER_PRESETS["nvidia"]["base_url"] == "https://integrate.api.nvidia.com/v1"
+    assert "nvidia/nemotron-3.5-super-vl-120b-a12b" in PROVIDER_PRESETS["nvidia"]["models"]
