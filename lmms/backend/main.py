@@ -43,6 +43,8 @@ from prompt_toolkit.formatted_text import HTML, ANSI
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.completion import Completer, Completion
 
+console = Console()
+
 
 def _patched_ask(message, choices=None, default=None, **kwargs):
     import io
