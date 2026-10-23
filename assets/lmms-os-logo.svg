@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">LMMs OS logo</title>
+  <desc id="desc">Minimal dark brand mark for LMMs OS</desc>
+  <rect width="1200" height="700" fill="#03070d"/>
+  <g transform="translate(600 246)">
+    <polygon points="0,-96 96,0 0,96 -96,0" fill="#f3f5f7"/>
+    <polygon points="0,-32 32,0 0,32 -32,0" fill="#03070d" opacity="0.8"/>
+  </g>
+  <g fill="#f5f7fa" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">
+    <text x="600" y="392" font-size="82" font-weight="600" letter-spacing="2">LMMs</text>
+    <text x="600" y="468" font-size="64" font-weight="500" fill="#d9dee7" letter-spacing="2">OS</text>
+  </g>
+  <g fill="#bfc8d4" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">
+    <text x="600" y="545" font-size="24" font-weight="600" letter-spacing="5">POWERED BY MARKANM</text>
+    <line x1="350" y1="570" x2="850" y2="570" stroke="#dfe6ef" opacity="0.4" stroke-width="1.5"/>
+  </g>
+</svg>

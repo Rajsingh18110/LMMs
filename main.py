@@ -89,11 +89,9 @@ def main():
   lmms install --gui/cli/air     # Modular install
   lmms uninstall --all --purge   # Full wipe
 
-6. Package Management
-  lmms package install runtime <x>
-  lmms package install provider <x>
-  lmms package install tool <x>
-  lmms package list/remove
+6. Runtime & Session Control
+  lmms engine status/mode/server
+  lmms server status
 
 7. AI Shell Slash Commands
   /fast, /deep, /code, /research # Reasoning modes
@@ -248,11 +246,9 @@ def main():
   lmms install --gui/cli/air     # Modular install
   lmms uninstall --all --purge   # Full wipe
 
-6. Package Management
-  lmms package install runtime <x>
-  lmms package install provider <x>
-  lmms package install tool <x>
-  lmms package list/remove
+6. Runtime & Session Control
+  lmms engine status/mode/server
+  lmms server status
 
 7. AI Shell Slash Commands
   /fast, /deep, /code, /research # Reasoning modes

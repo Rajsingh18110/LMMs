@@ -1,334 +1,333 @@
-# LMMs Unified Architecture
-
-```
-       ██╗     ███╗   ███╗███╗   ███╗███████╗
-       ██║     ████╗ ████║████╗ ████║██╔════╝
-       ██║     ██╔████╔██║██╔████╔██║███████╗
-       ██║     ██║╚██╔╝██║██║╚██╔╝██║╚════██║
-       ███████╗██║ ╚═╝ ██║██║ ╚═╝ ██║███████║
-       ╚══════╝╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝
-```
-
 <div align="center">
-  <a href="https://LMMs.MarkanM.com">
-    🌐 Visit Our Official Website: LMMs.MarkanM.com
+  <a href="https://lmms.markanm.com">
+    <img src="assets/lmms-banner.svg" alt="LMMs OS - Build with models. Ship with agents." width="100%" />
   </a>
 </div>
 
-<br>
+<p align="center">
+  <strong>Build with models. Ship with agents.</strong><br>
+  <em>The Python-Native Local AI Operating System by <a href="https://markanm.com">Raj Singh (MarkanM)</a></em>
+</p>
 
-**LMMs** is an advanced, multi-component agentic AI ecosystem designed to run any open-source language model — from 1B to 350B+ parameters — and instantly equip it with autonomous agent capabilities like web search, code execution, API calling, file management, vector memory, and state tracking. We never modify the model itself. Instead, our Engine and Backend layer wraps around any model and gives it superpowers.
-
----
-
-## 👑 Founders
-
-| Role | Name |
-|------|------|
-| Founder | **Raj Singh** |
-| Co-Founder | **Adarsh Singh** |
-
----
-
-## 🏗️ How LMMs Works — Deep Architecture Overview
-
-LMMs is built around a core philosophy: **the model should never need to be modified or fine-tuned to gain new capabilities**. Instead, all intelligence is injected through the architecture itself. Here is a deep breakdown of every layer:
+<p align="center">
+  <a href="https://lmms.markanm.com"><img src="https://img.shields.io/badge/Official_Website-lmms.markanm.com-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://pypi.org/project/lmms"><img src="https://img.shields.io/badge/PyPI-lmms_builder-3776ab?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-Apache_2.0-22c55e?style=for-the-badge&logo=apache&logoColor=white" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Local--First_&_Enterprise-8b5cf6?style=for-the-badge" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Offloading-Infinite_AirEngine-f59e0b?style=for-the-badge" alt="AirEngine" />
+</p>
 
 ---
 
-### ⚙️ Layer 1: LMMs Engine — The Execution Core
+### 🌐 Select Language / भाषा चुनें / Выберите язык / 选择语言
 
-The Engine is the lowest level of LMMs. It is responsible for actually loading and running the AI model on your hardware. Because AI models come in wildly different sizes and architectures — from tiny 1B models to massive 350B behemoths — LMMs uses a **Dual Engine Architecture** to handle all of them efficiently:
+<div align="center">
 
-#### 🦙 Engine A: `llama.cpp` Runtime
-- **Core Mechanism:** Utilizes zero-copy memory mapping (`mmap`) to load model weights directly from disk into RAM/VRAM without duplication.
-- **Quantization Logic:** Converts standard 16-bit float (fp16) weights into 4-bit or 8-bit integers (GGUF format) using block-wise quantization. This reduces memory footprint by 75% while maintaining ~95% of the model's reasoning capability.
-- **KV Caching:** Employs an optimized Key-Value (KV) cache matrix to store past token attention states, allowing ultra-fast generation of subsequent tokens without re-evaluating the entire prompt.
-- **Best for:** Running highly optimized models (Llama 3, Mistral) on consumer hardware with limited VRAM.
+[![English](https://img.shields.io/badge/Language-English_(Default)-0284c7?style=flat-square)](#)
+[![हिन्दी](https://img.shields.io/badge/Language-%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80-ea580c?style=flat-square)](docs/i18n/README_hi.md)
+[![Русский](https://img.shields.io/badge/Language-%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-dc2626?style=flat-square)](docs/i18n/README_ru.md)
+[![中文](https://img.shields.io/badge/Language-%E4%B8%AD%E6%96%87-b91c1c?style=flat-square)](docs/i18n/README_zh.md)
+[![Français](https://img.shields.io/badge/Language-Fran%C3%A7ais-2563eb?style=flat-square)](docs/i18n/README_fr.md)
+[![Español](https://img.shields.io/badge/Language-Espa%C3%B1ol-ca8a04?style=flat-square)](docs/i18n/README_es.md)
+[![Deutsch](https://img.shields.io/badge/Language-Deutsch-475569?style=flat-square)](docs/i18n/README_de.md)
+[![日本語](https://img.shields.io/badge/Language-%E6%97%A5%E6%9C%AC%E8%AA%9E-0f172a?style=flat-square)](docs/i18n/README_ja.md)
+[![한국어](https://img.shields.io/badge/Language-%ED%95%9C%EA%B5%AD%EC%96%B4-16a34a?style=flat-square)](docs/i18n/README_ko.md)
+[![العربية](https://img.shields.io/badge/Language-%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-059669?style=flat-square)](docs/i18n/README_ar.md)
+[![Português](https://img.shields.io/badge/Language-Portugu%C3%AAs-15803d?style=flat-square)](docs/i18n/README_pt.md)
+[![Italiano](https://img.shields.io/badge/Language-Italiano-0d9488?style=flat-square)](docs/i18n/README_it.md)
+[![Türkçe](https://img.shields.io/badge/Language-T%C3%BCrk%C3%A7e-e11d48?style=flat-square)](docs/i18n/README_tr.md)
+[![Tiếng Việt](https://img.shields.io/badge/Language-Ti%E1%BA%BFng%20Vi%E1%BB%87t-d97706?style=flat-square)](docs/i18n/README_vi.md)
+[![Bahasa Indonesia](https://img.shields.io/badge/Language-Bahasa%20Indonesia-be123c?style=flat-square)](docs/i18n/README_id.md)
+[![বাংলা](https://img.shields.io/badge/Language-%E0%A6%AC%E0%A6%BE%E0%A6%82%E0%A6%B2%E0%A6%BE-047857?style=flat-square)](docs/i18n/README_bn.md)
+[![ਪੰਜਾਬੀ](https://img.shields.io/badge/Language-%E0%A8%AA%E0%A9%80%E0%A8%9C%E0%A8%BE%E0%A8%AC%E0%A9%80-c2410c?style=flat-square)](docs/i18n/README_pa.md)
+[![मराठी](https://img.shields.io/badge/Language-%E0%A4%AE%E0%A4%B0%E0%A4%BE%E0%A4%A0%E0%A5%80-1d4ed8?style=flat-square)](docs/i18n/README_mr.md)
+[![اردو](https://img.shields.io/badge/Language-%D8%A7%D8%B1%D8%AF%D9%88-065f46?style=flat-square)](docs/i18n/README_ur.md)
+[![ไทย](https://img.shields.io/badge/Language-%E0%B9%84%E0%B8%97%E0%B8%A2-4338ca?style=flat-square)](docs/i18n/README_th.md)
 
-#### 🔥 Engine B: `PyTorch` Runtime
-- **Core Mechanism:** Natively loads standard HuggingFace `safetensors`. It utilizes dynamic graph execution and highly optimized CUDA kernels (like Flash Attention 2) to compute multi-head attention blocks faster on modern GPUs.
-- **Memory Management:** Automatically splits the model layers across available GPUs (Tensor Parallelism) or shifts non-active layers to CPU RAM (Model Offloading) to prevent Out of Memory (OOM) errors.
-- **Best for:** Multimodal models (Vision + Text), frontier models with custom attention mechanisms, and unquantized precision tasks.
+</div>
 
-#### 🌬️ Engine C: `AirEngine` — Distributed / Disk-Offloading Runtime
-- **Core Mechanism:** Traditional engines load the *entire* model into RAM/VRAM before generating a single token. AirEngine uses a **Layer-by-Layer Streaming** logic. It keeps only a small subset of the neural network layers in GPU memory at any given millisecond. As the forward pass reaches layer N, layer N+1 is pre-fetched from the SSD, and layer N-1 is evicted.
-- **Impact:** Allows a standard 16GB RAM PC to run massive 70B parameter models by bottlenecking on disk read-speed rather than memory capacity.
-
-> **Key Insight:** You can select which engine to use at model load time using `lmms run <model> -use l` (llama.cpp) or `lmms run <model> -use p` (PyTorch). The Engine auto-detects the best runtime if you omit the flag.
-
----
-
-### 🧠 Layer 2: LMMs Backend — The Brain of the Agent
-
-The Backend is the most important layer. It sits between the user and the Engine, intercepting every message and response. It is what transforms a plain language model into a fully autonomous AI agent — without touching the model's weights at all.
-
-Here is what the Backend injects into every session:
-
-#### 💻 Autonomous Code Execution (The Tool Interceptor)
-- **Logic & Mechanics:** When the user asks for code, the Backend injects a strict "System Prompt" defining available tools. As the model streams tokens, the Backend constantly scans the stream using AST/Regex parsers for `<tool_call>` boundaries.
-- **Execution Sandbox:** If the model emits a tool call (e.g., `execute_python`), the Backend pauses model inference immediately. It extracts the code payload, spawns a heavily monitored isolated OS subprocess, captures the `stdout` and `stderr` (output and errors), and forcefully terminates runaway loops using strict timeouts.
-- **The Feedback Loop:** The captured output is wrapped in an `<observation>` block and appended to the context. The model is then resumed, allowing it to read its own output, realize if its code failed, and autonomously rewrite it until it passes.
-
-#### 🗂️ Vector DB & RAG (Retrieval-Augmented Generation)
-- **Ingestion Pipeline:** When a user attaches a folder (`/folder src`), the Backend reads all text/code files. It uses a **Recursive Character Text Splitter** to chop the files into smaller overlapping chunks (e.g., 500 tokens).
-- **Embedding & Indexing:** Each chunk is passed through a lightweight Sentence Transformer model (e.g., `all-MiniLM-L6-v2`) which converts the text into a dense mathematical vector (an array of numbers). These vectors are stored in **FAISS (Facebook AI Similarity Search)**.
-- **Query Retrieval:** When the user asks a question, their prompt is also vectorized. The FAISS database calculates the **Cosine Similarity** between the prompt's vector and the document chunks, fetching only the Top-K most relevant chunks and injecting them into the LLM's context window. This allows the model to "know" entire codebases without overflowing its context limit.
-
-#### 🔍 Web Search & API Routing
-- **Search Mechanics:** Upon needing live data, the Backend halts inference and executes a headless query to search APIs (like DuckDuckGo or Google). It parses the raw DOM/HTML of the top 3 results, strips out the noise (ads/scripts), extracts the core text, and feeds a summarized factual snippet back to the model.
-- **Dynamic API Calling:** The Backend can parse REST API schemas dynamically. It allows the model to map natural language intents directly into structured HTTP GET/POST requests with appropriate headers and JSON payloads.
-
-#### 📋 Sliding Window State & Session Memory
-- **Context Eviction Logic:** LLMs crash if they exceed their maximum context window (e.g., 8192 tokens). The Backend tracks every single token using a `tiktoken` tokenizer. When the session nears the limit, the Backend activates a **Sliding Window Algorithm**: it safely evicts the oldest middle-conversation pairs while permanently pinning the System Prompt and critical tool observations at the top.
-- **Undo/Redo Graph:** Every step (user input, model response, tool execution) is saved as an immutable node in a JSON state tree. Using `/undo` simply resets the pointer to the previous node and reverts associated filesystem changes.
-
-#### 🔄 Intelligent Orchestration
-- **Dynamic Routing:** For complex workflows, the Backend orchestrator monitors the token load. If a task requires massive context (e.g., summarizing 5 large files), the orchestrator dynamically routes the request to the PyTorch runtime; for rapid, short conversational bursts, it routes to the `llama.cpp` engine to save battery and compute cycles.
-
-> **The Big Picture:** Because all of this complex tool-calling and memory management lives in the Backend — not the model's weights — you can swap the underlying model at any time. A user can start a conversation with a 1B model for speed, switch mid-chat to a 70B model using `/ml -s <modelname>`, and the entire agentic toolset carries over instantly.
+<p align="center">
+  <a href="https://lmms.markanm.com">Website</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#architecture-setup-wizard-lmms-install">Architecture Setup Wizard</a> ·
+  <a href="#enterprise-infrastructure--super-host">Enterprise Infrastructure</a> ·
+  <a href="#core-command-reference">Command Reference</a> ·
+  <a href="#cli-slash-commands">Slash Commands</a> ·
+  <a href="#product-philosophy">Philosophy</a> ·
+  <a href="#license">License</a>
+</p>
 
 ---
 
-### 🖥️ Layer 3: LMMs CLI — The Smart Terminal *(Beta — Ready for Use)*
+## What is LMMs OS?
 
-The CLI is the primary interface for LMMs. It is **fully functional** and considered ready for general use in its current beta state. It gives you a rich, interactive terminal session where you can chat with any model, switch models live, and orchestrate the full backend toolset.
+**LMMs** is a Python-native AI operating layer for local and remote model execution. Built by founder **Raj Singh (MarkanM)**, it combines a real desktop GUI studio, a smart developer CLI, and a mature engine runtime so developers and teams can run large multimodal models, manage sessions, and execute agentic toolchains with zero telemetry and zero cloud lock-in.
 
-**Status: ✅ Beta — Stable & Ready**
-
----
-
-### 🖼️ Layer 4: LMMs GUI — The AI Workspace IDE *(Under Active Development)*
-
-The GUI is a PyQt6-based graphical AI Workspace IDE. It is designed to be a visual environment where you can:
-
-- **Download models** directly from HuggingFace or the LMMs model hub with one click.
-- **Run and test models** with a visual chat interface.
-- **Browse and manage** your local model library.
-- **Monitor VRAM, CPU, and RAM** usage in real time.
-- **Configure the Backend** tools, vector DB indexes, and session settings visually.
-- **View session state** and conversation history in a structured graph view.
-- **Edit and run code** generated by the AI in an integrated editor.
-
-> **Status: 🚧 Under Active Development** — The GUI is currently in an early development phase. Core features like model downloading and basic chat are being built. It is not yet ready for production use, but it is available in the repository as a sandbox for contributors.
+Unlike bloated workflow mockups or fake extension marketplaces, LMMs delivers the **real product**:
+* 🧠 **Native Dual Engine Core**: High-throughput quantized GGUF inference (`llama.cpp`) alongside PyTorch native safetensors execution.
+* ⚡ **Infinite Scaling with AirEngine**: Dynamic layer-wise GPU, CPU, and Disk tensor offloading enables running models of arbitrary size—even 70B+ parameters on everyday developer workstations.
+* 🖥️ **Desktop Studio (GUI)**: Monaco code editor, visual diffs, workspace Git integration, and tool management.
+* ⌨️ **Terminal Studio (CLI)**: Interactive AI shell with 30+ interactive slash commands, pair programming, subagent orchestration, and sandboxed command validation.
+* 🏢 **Enterprise Ready**: Seamless client-server clustering across private LAN/VPC networks with central host inference and multi-client auto-discovery.
 
 ---
 
-## 📦 Component Summary
-
-| Component | Description | Status |
-|---|---|---|
-| **LMMs Engine** | AI execution layer (llama.cpp + PyTorch + AirEngine) | ✅ Stable |
-| **LMMs Backend** | Agentic brain: tools, RAG, web search, state tracking | ✅ Stable |
-| **LMMs CLI** | Smart terminal interface for all interactions | ✅ Beta |
-| **LMMs GUI** | PyQt6 graphical AI Workspace IDE | 🚧 In Development |
-
----
-
-## 🛠️ Installation
-
-LMMs now uses a standard Python package structure.
+## Quick Start
 
 ```bash
-# Step 1: Clone the repository
+# 1. Clone repository
 git clone https://github.com/Rajsingh18110/LMMs.git
 cd LMMs
 
-# Step 2: Install dependencies
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# Step 3: Run the setup to configure LMMs
-python setup.py install
+# 3. Launch default interface
+python main.py
+
+# Or launch specific components directly
+python main.py --gui       # Native Desktop GUI Studio
+python main.py --cli       # Interactive Developer Terminal Shell
+python main.py --engine    # Core Inference Engine Daemon
+```
+
+Or install via the official PyPI bootstrapper:
+```bash
+pip install lmms
+lmms check      # Hardware & prerequisite diagnostic check
+lmms install    # Interactive Architecture Setup Wizard
+lmms            # Launch configured interface
 ```
 
 ---
 
-## 💻 Commands Reference
+## Architecture Setup Wizard (`lmms install`)
+
+When running `lmms install`, LMMs launches an interactive, terminal-guided architecture wizard:
+
+```text
+  LMMs Installer · Architecture Setup Wizard
+  For more details, visit: https://lmms.markanm.com
+  ──────────────────────────────────────────────────────────────────────
+  Controls: [↑/↓] Navigate  ·  [Enter] Select  ·  [1-2] Quick Select  ·  [Q] Exit
+
+  ? Select Deployment Architecture:
+
+  ❯ [1] Individual Workstation
+        Single workstation deployment with local hardware acceleration & offloading.
+
+    [2] Enterprise Infrastructure
+        Distributed client-server infrastructure for teams across LAN/VPC networks.
+  ──────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### [1] Individual Workstation Configurations
+
+Choosing **Individual Workstation** opens the component selection menu tailored for local execution:
+
+```text
+  ? Select Component Configuration:
+
+  ❯ [1] Engine 1 (Lightweight Runtime)
+        llama.cpp + AirEngine (GGUF format, low RAM footprint, pure API on port 11435)
+
+    [2] Engine 2 (PyTorch Native)
+        PyTorch + Transformers + AirEngine (Full-precision Safetensors model runtime)
+
+    [3] Super Engine (Unified Runtimes)
+        All runtimes unified (llama.cpp + PyTorch + AirEngine) in a single service
+
+    [4] Desktop Studio (GUI)
+        Monaco Editor + Local Engine Client + Git Integration (gui/ branch)
+
+    [5] Terminal Studio (CLI)
+        Interactive AI Shell + Developer Toolchain + Local Engine Client (cli/ branch)
+
+    [6] Complete Ecosystem Suite
+        Full installation: Desktop Studio, Terminal CLI, Voice & Super Engine
+
+  ──────────────────────────────────────────────────────────────────────
+    [B] ◄ Back to Architecture Selection
+```
+
+* **Engine 1**: Highly optimized GGUF runner for laptops and workstations with low RAM footprint.
+* **Engine 2**: PyTorch safetensors engine for unquantized precision and research workflows.
+* **Super Engine**: Unified background daemon that dynamically selects between GGUF and PyTorch based on model format.
+* **Desktop Studio**: Full visual IDE experience with Monaco editor, multi-tab terminal, and file exploration.
+* **Terminal Studio**: Fast interactive terminal shell with REPL, live diff inspection, and sandboxed tool execution.
+* **Complete Suite**: Installs all local components for an all-in-one standalone AI workstation.
+
+---
+
+### [2] Enterprise Infrastructure & Super Host
+
+Choosing **Enterprise Infrastructure** configures a distributed cluster for organizations, labs, and development teams:
+
+```text
+  ? Select Enterprise Infrastructure Role:
+
+  ❯ [1] Host Server Infrastructure
+        Central inference server daemon listening on 0.0.0.0:11435 for team access
+
+    [2] Remote Client Studio
+        Workstation applications connecting to host via Local->LAN->Global discovery
+  ──────────────────────────────────────────────────────────────────────
+```
+
+#### Why Enterprise Architecture?
+1. **Centralized Heavy Compute**: If a company or lab possesses high-end server racks or multi-GPU workstations (e.g. NVIDIA A100/H100/RTX 4090 clusters), the **Host Server** is installed on that node. The host runs models, handles fine-tuning/training data, and binds securely to `0.0.0.0:11435`.
+2. **Thin Workstation Clients**: Developers, engineers, and employees install the **Remote Client Studio** (GUI or CLI) on their individual laptops (macOS, Windows, Linux). The clients automatically discover the central server via `Local -> LAN -> Global` discovery.
+3. **Privacy & Data Sovereign**: No corporate prompts or proprietary code ever leave the company's internal network.
+4. **Infinite Model Scalability**: Powered by AirEngine, the host server can load arbitrarily massive models (70B, 120B, 405B) by dynamically streaming tensor layers between VRAM, system RAM, and NVMe cache.
+
+---
+
+### Complete Pip & Installer Command Matrix
+
+| Command | Purpose | Target Component |
+|---|---|---|
+| `lmms install` | Interactive Architecture Wizard | Interactive Menu |
+| `lmms install --all` | Install full ecosystem | Desktop Studio, CLI, Voice, Super Engine |
+| `lmms install --gui` | Install Desktop Studio | PyQt6 GUI, Monaco Editor, Engine client |
+| `lmms install --cli` | Install Terminal Studio | Interactive Shell, dev tools, Engine client |
+| `lmms install --engine` | Install Super Engine | llama.cpp + PyTorch + AirEngine |
+| `lmms install --engine1` | Install Lightweight Engine | llama.cpp + AirEngine (GGUF runner) |
+| `lmms install --engine2` | Install PyTorch Engine | PyTorch + Transformers + AirEngine |
+| `lmms install --host` | Install Enterprise Host Daemon | Central server daemon listening on `0.0.0.0:11435` |
+| `lmms install --client-gui` | Install Enterprise Desktop Client | GUI configured for LAN/VPC remote host |
+| `lmms install --client-cli` | Install Enterprise Terminal Client | CLI configured for LAN/VPC remote host |
+| `lmms update` | Pull latest code & update | Current branch update |
+| `lmms update --all` | Full update across branches | All components synced with GitHub |
+| `lmms -check` | Hardware diagnostics | CPU, GPU, VRAM, AVX, disk telemetry |
+| `lmms-uninstall -all` | Clean removal | Removes code, preserves pip and user cache |
+| `lmms-uninstall -all --purge` | Factory reset | Complete purge of all config, models, and data |
+
+---
+
+## Core Command Reference
 
 ### LMMs Core Launcher Commands
 
 | Command | Description |
 |---|---|
-| `LMMs` | Launch your configured default interface |
-| `LMMs --gui` <br> `LMMs --cli` <br> `LMMs --engine` | Directly runs the specified component |
-| `LMMs set --cli` | Set CLI as your permanent default |
-| `LMMs set --engine` | Set Engine as your permanent default |
-| `LMMs stop` | Stop the LMMs background engine |
-| `LMMs -check` | Hardware Profiler & Prerequisites check |
-| `LMMs install --all` | Install Entire Ecosystem (main branch) |
-| `LMMs install --gui` | Install GUI + Backend + Engine only (gui branch) |
-| `LMMs install --cli` | Install CLI + Backend + Engine only (cli branch) |
-| `LMMs update` | Smart update (auto-pulls from your installed branch) |
-| `LMMs update --all` | Force Update Entire Ecosystem from GitHub |
-| `LMMs-uninstall -all` | Remove Source Code (Data Safe) |
-| `LMMs-uninstall -all --purge` | Total Purge (Factory Reset) |
-| `LMMs --help` | Show launcher help |
+| `lmms` | Launch configured default interface |
+| `lmms --gui` | Launch desktop GUI studio |
+| `lmms --cli` | Launch developer CLI shell |
+| `lmms --engine` | Launch inference engine directly |
+| `lmms set --gui` | Set Desktop Studio as the default launch mode |
+| `lmms set --cli` | Set Terminal Studio as the default launch mode |
+| `lmms set --engine` | Set Engine Daemon as the default launch mode |
+| `lmms stop` | Gracefully stop active background LMMs engine |
+| `lmms -check` | Run hardware profile and prerequisite validation |
+| `lmms update` | Smart update from current branch |
+| `lmms update --all` | Force update and re-sync from GitHub |
+| `lmms --help` | Show comprehensive launcher help |
 
 ---
 
-## 🧠 CLI Slash Commands *(Inside the LMMs Terminal)*
-
-These commands are typed inside an active LMMs CLI chat session.
+### Engine Runtime
 
 | Command | Description |
 |---|---|
-| `/fast` | Switch to **FAST** mode — quick responses with no tool use |
-| `/deep` | Switch to **DEEP** mode — full reasoning loop with all tools enabled (default) |
-| `/model <name>` | Switch to a different model for this session (e.g., `/model llama3`) |
-| `/ml -l` | List all models downloaded on your system |
-| `/ml -s <modelname>` | **Live model switch** — swap the active model mid-conversation without losing context |
-| `/folder <name>` | Attach an entire folder to the agent's context (e.g., `/folder src`) |
-| `/code` | Enter focused code generation and editing mode for complex programming tasks |
-| `/chat` | Show a list of all your past chat sessions |
-| `/newchat` | Start a brand new empty chat session |
-| `/chat -r <id> <name>` | Rename a specific chat by its ID |
-| `/chat -d <id>` | Delete a specific chat history by its ID |
-| `/undo` | Undo the last AI action or file edit |
-| `/redo` | Redo the last undone action |
-| `/exit` | Exit the LMMs CLI session |
-| `/reboot` | Reboot the LMMs engine and exit the session |
-| `/mic` | Record audio from the microphone and transcribe it as input |
-| `/vision` (or `/image`) | Switch to VISION mode to analyze images with multimodal models |
-| `/research` | Switch to RESEARCH mode for in-depth web search and data aggregation |
-| `/read <file>` | Quickly read a file's contents into the context |
-| `/task` | Manage background tasks or subagent goals |
-| `/git` | Execute safe Git operations through the agent |
-| `/scope init\|status` | Manage strict workspace boundaries and check scope rules |
-| `/tools list` | List all available system and terminal tools for the agent |
-| `/report` | Generate a detailed security audit report of AI actions |
-| `/checkpoint` | Save a manual checkpoint of the current session state |
-| `/checkpoints` | List all saved session checkpoints |
-| `/rollback` | Rollback the session and file state to a previous checkpoint |
-| `/status` | Check the overall system health and engine status |
-| `/doctor` | Run automated diagnostics and repair engine issues |
-| `/pair` | Enter Pair Programming mode for interactive coding |
-| `/perm <level>` | Change the permission level for AI tool execution |
-| `/agent` | Spawn and manage autonomous subagents |
-| `/orchestrate` | Manage multi-agent orchestration for complex workflows |
-
-> **Note:** Only the commands listed above are currently implemented and functional. Legacy or planned commands (e.g. `/cyber`) that are not yet fully available have been removed or are in development.
+| `lmms run <model>` | Run model in interactive chat or single-shot evaluation |
+| `lmms list` | List locally downloaded models |
+| `lmms ps` | Show active running models, allocation state, and VRAM |
+| `lmms pull <model>` | Download model from Hugging Face / Model Hub |
+| `lmms info <model>` | Inspect model metadata, context window, and quantization |
+| `lmms search <query>` | Search available model repositories |
+| `lmms benchmark <model>` | Benchmark token generation speed (t/s) and latency |
+| `lmms doctor` | Run engine health checks and diagnose driver/CUDA issues |
+| `lmms create <model> -f <file>` | Create custom model entry from GGUF, Safetensors, or manifest |
 
 ---
 
-## ⚙️ Engine Terminal Commands
-
-These commands are run directly in your system terminal (not inside the chat session) to manage models, modular packages, hardware offloading, and the engine runtime.
-
-### 🦙 Core Model Management (Ollama-Style CLI)
+### Air Engine (Infinite Tensor Offloading)
 
 | Command | Description |
 |---|---|
-| `lmms run <model> [prompt]` | Run a model in interactive chat mode or execute a single-shot prompt directly from the command line. |
-| `lmms list` / `lmms ls` | List all locally installed GGUF models and registered manifests with exact file sizes. |
-| `lmms ps` | Show all currently loaded models, active VRAM/RAM allocation, and offloading regimes. |
-| `lmms pull <model>` | Search Hugging Face for GGUF repos, interactively select quantization (`Q4_K_M`, `Q5_K_M`, `Q8_0`), and download with auto-registration. |
-| `lmms info <model>` | Inspect model architecture, total layers, context length, embedding size, and quantization type. |
-| `lmms rm <model>` / `lmms delete <model>` | Delete a model and its associated manifest tag from the local registry. |
-| `lmms stop <model>` / `lmms unload <model>` | Unload an active model from memory and immediately purge GPU VRAM. |
-| `lmms search <query>` | Search Hugging Face Hub for available GGUF repositories. |
-| `lmms benchmark <model>` / `lmms bench <model>` | Run automated speed benchmark measuring load time, TTFT, and generation throughput (tokens/sec). |
-| `lmms doctor [--fix]` | Run system health diagnostics (Models dir, NVIDIA CUDA driver, llama-cpp-python, RAM, Disk). |
-| `lmms create <model> -f <file>` | Create custom model manifests and aliases from a Modelfile. |
-
-### 🌬️ Air Engine (Swapping & Dynamic Hybrid Offload)
-
-The Air Engine dynamically partitions transformer layers between GPU VRAM and DDR5 system RAM with zero-copy `mmap`, quantized Q8_0 KV cache, and physical P-core thread locking.
-
-| Command | Description |
-|---|---|
-| `lmms -air run <model> [prompt]` | Run large models (e.g. 30B MoE, 70B) in Air dynamic hybrid offload mode. |
-| `lmms --air run <m1> <m2>` | Run multiple models simultaneously managed by the Air scheduler. |
-| `lmms air ps` | Display active Air session models, allocated GPU layers, CPU DDR5 layers, and active regime. |
-| `lmms air stats` | View real-time hardware telemetry: VRAM %, RAM %, swapping engine status, and throughput. |
-| `lmms air cache` | View Air Engine disk cache directory size and storage utilization. |
-| `lmms air unload` | Forcefully unload all Air models and flush GPU VRAM to 0 MiB. |
-| `lmms air benchmark <model>` | Benchmark model execution under the Air Engine dynamic offloading scheduler. |
-
-### 📦 Modular Package Management
-
-Manage modular execution backends, model providers, and agentic tools.
-
-| Command | Description |
-|---|---|
-| `lmms package list` | List all installed and available runtime backends, model providers, and agent tools. |
-| `lmms package install runtime <name>` | Register/install an execution runtime (e.g., `llama-cpp`, `pytorch`, `vllm`). |
-| `lmms package install provider <name>` | Register/install a model provider (e.g., `huggingface`, `lmstudio`, `ollama`). |
-| `lmms package install tool <name>` | Register/install an external agent capability (e.g., `terminal`, `browser`, `files`, `web_search`, `github`). |
-| `lmms package remove [<type>] <name>` | Unregister and remove a package from the local environment. |
-
-### 🔄 Dual-Engine Architecture & Server Daemon
-
-| Command | Description |
-|---|---|
-| `lmms engine status` | Inspect active engine mode (**Engine 1: Air + Llama.cpp GGUF**, **Engine 2: Air + PyTorch Safetensors**) and memory stats. |
-| `lmms engine mode <auto\|1\|2>` | Switch the hardware execution engine backend (`auto`, `1` for GGUF high-throughput, `2` for PyTorch/Safetensors). |
-| `lmms engine unload [model]` | Purge all active models from memory and clear GPU VRAM cache. |
-| `lmms server start [--port 11435]` | Start the 24/7 background FastAPI engine daemon (Business Server mode). |
-| `lmms server stop` | Terminate the persistent background engine daemon. |
-| `lmms server status` | Check server daemon status, active port, PID, and uptime. |
-
-### 💬 Interactive Chat Controls & Clean VRAM Purge
-
-When running interactive chat (`lmms run <model>` or `lmms -air run <model>`):
-
-- **Clean Exits:** Type `exit`, `quit`, `bye`, `/exit`, `/quit`, `/bye`, `/q`, `:q`, or press `Ctrl+C` to immediately terminate the session. The engine automatically unloads model weights and flushes GPU VRAM back to 0 MiB.
-- **Arrow-Key History:** Full navigation through past prompts using Up/Down arrow keys and line editing (powered by `readline`).
-- **Context Reset:** Type `/clear` to reset the active conversation memory without restarting the engine.
+| `lmms -air run <model> [prompt]` | Run ultra-large models with Air dynamic hybrid GPU/CPU/Disk offloading |
+| `lmms --air run <m1> <m2>` | Run multiple concurrent models through the Air scheduler |
+| `lmms air ps` | Display active Air session models and GPU/CPU layer allocation |
+| `lmms air stats` | View real-time hardware telemetry and offload statistics |
+| `lmms air cache` | View Air disk cache directory size and storage utilization |
+| `lmms air unload` | Unload all Air models and immediately flush VRAM/RAM cache |
+| `lmms air benchmark <model>` | Benchmark execution throughput under the Air offload scheduler |
 
 ---
 
-## 🚀 CI/CD Pipeline (GitHub Actions)
+### Server / Daemon
 
-Every push to the `main` branch automatically triggers the LMMs build pipeline. It:
-
-1. Compiles the Python source into standalone binaries using PyInstaller:
-   - **Windows:** `.exe` files
-   - **Linux:** Native ELF binaries
-   - **macOS:** `.app` bundles
-2. Produces **12 build artifacts** (one per component per platform).
-3. Publishes all artifacts directly to the **GitHub Releases** page.
-4. You can download the latest standalone binaries directly from the Releases page — no Git required.
-
----
-
-## 🤝 Join the Revolution: Open Source Contributions & Learning
-
-LMMs is an **open-source AI ecosystem**, and we believe that the best software is built collaboratively. We are actively looking for passionate, serious developers, AI enthusiasts, and visionaries to join our community and contribute to the future of agentic AI. 
-
-Whether you are a seasoned software engineer or just starting your coding journey, there is a place for you here!
-
-### 🎓 Why Students Should Contribute to LMMs
-For computer science students and tech enthusiasts, contributing to LMMs is an unparalleled opportunity to bridge the gap between academic theory and real-world software engineering. 
-- **Hands-on AI Experience:** Work directly with cutting-edge Large Language Models (LLMs), RAG pipelines, autonomous agents, and vector databases (FAISS). 
-- **Build Your Portfolio:** Open-source contributions to a complex, multi-layered AI architecture like LMMs serve as a powerful resume builder that stands out to top tech recruiters.
-- **Learn Industry Best Practices:** Experience first-hand how an enterprise-grade AI architecture is designed, tested, and maintained at scale.
-- **Networking:** Collaborate with other passionate students, AI researchers, and professional developers globally.
-
-### 🌱 A Playground for Beginner Developers
-Are you a beginner looking for a welcoming open-source project to learn from? LMMs is the perfect training ground!
-- **Mentorship & Guidance:** Our community is extremely welcoming. We love guiding beginners through their first Pull Requests (PRs), code reviews, and architecture discussions.
-- **Modular Codebase:** The project is clearly separated into Engine, Backend, CLI, and GUI layers. You can pick the exact area you are most interested in—whether it's building a PyQt6 user interface or tweaking API routing in Python.
-- **"Good First Issues":** We regularly tag easy, beginner-friendly tasks that help you learn the ropes without feeling overwhelmed.
-- **AI-Powered Learning:** Using LMMs' autonomous coding and pair-programming capabilities (`/pair`, `/code`), you can actually use the AI itself to help you understand and contribute to the codebase!
-
-### 🎯 Who Can Join?
-**Anyone who is serious about learning and building can join us.** You do not need a PhD in Machine Learning to contribute. We need help in various areas:
-- **Python Developers** (Backend, CLI, Tool integration, Agentic loops)
-- **UI/UX Designers & PyQt6 Devs** (LMMs GUI IDE)
-- **Documentation Writers** (Tutorials, API references, SEO optimization, Guides)
-- **QA Testers & Bug Hunters** (Help us find edge cases and improve stability)
-- **AI Enthusiasts** (Prompt engineering, testing new GGUF/PyTorch models)
-
-### 🚀 How to Get Started?
-1. **Fork the Repository:** Click the 'Fork' button at the top of this GitHub page.
-2. **Clone & Install:** Follow the Installation guide above to get LMMs running locally.
-3. **Pick an Issue:** Check out our GitHub Issues tab, filter by `good first issue` or `help wanted`.
-4. **Submit a Pull Request:** Write your code, push to your fork, and open a PR! We will review it and guide you.
-
-*Join us today, and let's build the ultimate autonomous AI ecosystem together!*
+| Command | Description |
+|---|---|
+| `lmms server` | Start API/web server daemon |
+| `lmms server status` | Check daemon status, listening port, uptime, and health |
+| `lmms engine status` | Inspect active engine execution mode and memory stats |
+| `lmms engine unload [model]` | Purge active models from memory and clear VRAM cache |
+| `lmms server start [--port 11435]` | Start background FastAPI engine daemon |
+| `lmms server stop` | Stop running background server daemon |
 
 ---
 
-## 📄 License
+## CLI Slash Commands
 
-This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for full details.
+These interactive commands are typed directly inside an active LMMs CLI chat session:
+
+| Command | Description |
+|---|---|
+| `/fast` | Switch to FAST mode with quick responses and lightweight tool use |
+| `/deep` | Switch to DEEP mode with full multi-step reasoning and tool access |
+| `/model <name>` | Switch to a different model for the current conversation |
+| `/ml -l` | List all downloaded local models |
+| `/ml -s <modelname>` | Live-switch active model while preserving conversation history |
+| `/folder <path>` | Attach a directory to the agent's working context |
+| `/code` | Enter focused code generation and editing mode |
+| `/chat` | List and review past chat sessions |
+| `/newchat` | Start a fresh empty chat session |
+| `/chat -r <id> <name>` | Rename a specific chat session |
+| `/chat -d <id>` | Delete a specific chat session |
+| `/undo` | Safely undo the last AI file edit or patch |
+| `/redo` | Redo the last undone file action |
+| `/exit` | Exit the interactive CLI session |
+| `/reboot` | Reboot the engine and restart the session |
+| `/mic` | Record voice audio and transcribe directly into the prompt |
+| `/vision` or `/image` | Switch to multimodal vision mode for image and UI analysis |
+| `/research` | Switch to research mode for deep web and local documentation exploration |
+| `/read <file>` | Read an arbitrary workspace file directly into the session context |
+| `/task` | Manage autonomous background tasks and subagent goals |
+| `/git` | Execute safe, audited Git operations through the agent |
+| `/scope` | Inspect and manage active tool execution boundaries |
+| `/tools list` | List all discovered native tools and active MCP endpoints |
+| `/report` | Generate a cryptographic security and action audit report |
+| `/checkpoint` | Save an immutable checkpoint of the current workspace state |
+| `/checkpoints` | List all saved workspace checkpoints |
+| `/rollback` | Roll back repository and files to a previous checkpoint |
+| `/status` | Check real-time engine and system hardware health |
+| `/doctor` | Run comprehensive system diagnostics and repair checks |
+| `/pair` | Enter interactive pair-programming mode |
+| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
+| `/agent` | Spawn and manage autonomous subagents for parallel execution |
+| `/orchestrate` | Manage multi-agent coordination workflows and handoffs |
+
+---
+
+## Product Philosophy
+
+LMMs is not a noisy wrapper or an empty workflow generator. It is a genuine, local-first operating layer built for developers who demand real performance and privacy:
+
+1. **Stay Useful**: Prioritize real execution—file patching, AST validation, sandboxed terminal tasks, and low-latency inference.
+2. **Stay Honest**: No telemetry, no forced subscriptions, no artificial paywalls.
+3. **Stay Local-First**: Your models, weights, tokens, and code remain on your machine or private cluster.
+4. **Clean & Minimal Stack**: Python-native architecture without bloated foreign dependencies.
+
+---
+
+## License
+
+This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for complete details.
+
+<div align="center">
+  <p>Official Website: <a href="https://lmms.markanm.com">https://lmms.markanm.com</a></p>
+  <p><sub>Developed with pride by <strong>Raj Singh (MarkanM)</strong> · All rights reserved.</sub></p>
+</div>

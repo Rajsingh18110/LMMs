@@ -60,12 +60,11 @@ def print_engine_banner() -> None:
     sys.stdout.write(f"  {COLOR_CYAN}lmms air unload{COLOR_RESET}                    Unload models and purge GPU VRAM\n")
     sys.stdout.write(f"  {COLOR_CYAN}lmms air benchmark{COLOR_RESET}                 Test Air mode performance\n\n")
 
-    sys.stdout.write(f"{COLOR_BOLD_WHITE}6. Packages (Modular Plugins):{COLOR_RESET}\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms package install runtime <name>{COLOR_RESET}  Install backend (e.g., llama-cpp, vllm)\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms package install provider <name>{COLOR_RESET} Install model source (e.g., huggingface, lmstudio)\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms package install tool <name>{COLOR_RESET}     Install capability (e.g., wikipedia, github)\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms package list{COLOR_RESET}                   List installed packages\n")
-    sys.stdout.write(f"  {COLOR_CYAN}lmms package remove [<type>] <name>{COLOR_RESET} Remove a package\n\n")
+    sys.stdout.write(f"{COLOR_BOLD_WHITE}6. Runtime & Session Control:{COLOR_RESET}\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms engine status{COLOR_RESET}                 Show active engine mode and runtime health\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms engine mode <auto|1|2>{COLOR_RESET}        Switch execution backend\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms engine server{COLOR_RESET}                  Launch the API server daemon\n")
+    sys.stdout.write(f"  {COLOR_CYAN}lmms server status{COLOR_RESET}                  Show server and process health\n\n")
     sys.stdout.flush()
 
 
@@ -544,28 +543,6 @@ def cmd_engine_search(args: List[str]) -> None:
         sys.stdout.write(f"Search failed: {e}\n")
 
 
-def cmd_engine_package(args: List[str]) -> None:
-    """Dispatches package manager commands."""
-    from lmms.engine.packages import PackageManager
-    mgr = PackageManager()
-    if not args or args[0] in ["list", "ls"]:
-        mgr.list_packages()
-    elif args[0] in ["install", "add"] and len(args) >= 3:
-        pkg_type = args[1]
-        pkg_name = args[2]
-        mgr.install(pkg_type, pkg_name)
-    elif args[0] in ["remove", "rm", "uninstall"] and len(args) >= 2:
-        if len(args) >= 3:
-            mgr.remove(args[1], args[2])
-        else:
-            mgr.remove(args[1])
-    else:
-        sys.stdout.write("Usage:\n")
-        sys.stdout.write("  lmms package list\n")
-        sys.stdout.write("  lmms package install <runtime|provider|tool> <name>\n")
-        sys.stdout.write("  lmms package remove [<type>] <name>\n")
-
-
 def cmd_engine_create(args: List[str]) -> None:
     """Creates a custom model entry or Modelfile manifest in registry."""
     if not args:
@@ -761,10 +738,6 @@ def run_engine(args: Optional[List[str]] = None) -> None:
         run_benchmark(model)
     elif subcmd in ["create"]:
         cmd_engine_create(sub_args)
-
-    # Modular Packages
-    elif subcmd in ["package", "packages"]:
-        cmd_engine_package(sub_args)
 
     # Core Engine modes & Execution
     elif subcmd in ["run", "chat"]:
