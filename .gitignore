@@ -27,6 +27,7 @@ test_*.py
 !tests/test_sessions.py
 !tests/test_app_server.py
 !tests/test_app_server_hardening.py
+!tests/test_backend_verification.py
 !tests/test_mcp_gui.py
 !tests/test_workflow_engine.py
 !tests/test_codex_parity.py
