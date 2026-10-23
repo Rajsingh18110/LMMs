@@ -263,135 +263,118 @@ def get_clean_model_display_name(model_key_or_name: str) -> str:
     return model_key_or_name
 
 
-def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int, max_steps: int):
+def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int = 0, max_steps: int = 0):
     """
-    Renders a crystal-clear, structured visual panel for tool executions in the CLI.
-    Ensures the user sees exactly what file is being written, read, or modified,
-    what terminal commands are running, and what actions are taking place on their system.
+    Renders sleek, modern, Gemini-inspired timeline tree nodes for tool executions.
+    Pure professional CLI styling without cartoon stickers or bulky boxes.
     """
-    from rich.panel import Panel
-
-    step_tag = f"[bold magenta]Step {step}/{max_steps}[/bold magenta]"
+    clean_kwargs = dict(t_kwargs or {})
 
     if t_name in ("files.write", "file.write", "write_file"):
-        path = t_kwargs.get("path") or t_kwargs.get("file_path") or t_kwargs.get("filename") or ""
-        content = t_kwargs.get("content") or t_kwargs.get("data") or t_kwargs.get("text") or t_kwargs.get("code") or ""
+        path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
+        content = clean_kwargs.get("content") or clean_kwargs.get("data") or clean_kwargs.get("text") or clean_kwargs.get("code") or ""
         lines = content.splitlines() if content else []
-        preview_lines = lines[:10]
-        preview_text = "\n".join(preview_lines) if preview_lines else "[dim](empty file)[/dim]"
-        hidden_lines = len(lines) - len(preview_lines)
+        line_count = len(lines)
+        byte_count = len(content.encode("utf-8")) if content else 0
 
-        footer = f"\n[dim]... +{hidden_lines} more lines ({len(content):,} bytes)[/dim]" if hidden_lines > 0 else f"\n[dim]({len(lines)} lines, {len(content):,} bytes)[/dim]"
-        body = f"[bold cyan]📁 Target File:[/bold cyan] [bold white]{path}[/bold white]\n[bold cyan]📄 Content Preview:[/bold cyan]\n[green]{preview_text}[/green]{footer}"
+        console.print(f"  [bold green]●[/bold green] [bold white]Wrote[/bold white] [cyan]{path}[/cyan] [dim]({line_count} lines · {byte_count:,} bytes)[/dim]")
 
-        console.print(Panel(
-            body,
-            title=f"📝 {step_tag} [bold green]Writing File[/bold green]",
-            border_style="green",
-            padding=(0, 1),
-            expand=False
-        ))
+        # Subtle preview of first 3-4 key lines
+        if lines:
+            preview = [f"    [dim]│   {l}[/dim]" for l in lines[:3]]
+            if len(lines) > 3:
+                preview.append(f"    [dim]│   ... +{len(lines) - 3} more lines[/dim]")
+            console.print("\n".join(preview))
 
     elif t_name in ("files.read", "file.read", "read_file"):
-        path = t_kwargs.get("path") or t_kwargs.get("file_path") or t_kwargs.get("filename") or ""
-        body = f"[bold cyan]📁 File Path:[/bold cyan] [bold white]{path}[/bold white]"
-        console.print(Panel(
-            body,
-            title=f"📖 {step_tag} [bold blue]Reading File[/bold blue]",
-            border_style="blue",
-            padding=(0, 1),
-            expand=False
-        ))
+        path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
+        console.print(f"  [bold blue]●[/bold blue] [bold white]Read[/bold white] [cyan]{path}[/cyan]")
 
     elif t_name in ("files.list", "list_folder"):
-        path = t_kwargs.get("path") or "."
-        body = f"[bold cyan]📂 Directory:[/bold cyan] [bold white]{path}[/bold white]"
-        console.print(Panel(
-            body,
-            title=f"📂 {step_tag} [bold yellow]Listing Files[/bold yellow]",
-            border_style="yellow",
-            padding=(0, 1),
-            expand=False
-        ))
+        path = clean_kwargs.get("path") or "."
+        console.print(f"  [bold yellow]●[/bold yellow] [bold white]Scanned[/bold white] [cyan]{path}[/cyan]")
 
     elif t_name == "terminal.run":
-        cmd_str = t_kwargs.get("command") or t_kwargs.get("cmd") or ""
-        body = f"[bold cyan]💻 Command:[/bold cyan] [bold white]$ {cmd_str}[/bold white]"
-        console.print(Panel(
-            body,
-            title=f"⚡ {step_tag} [bold magenta]Running Terminal[/bold magenta]",
-            border_style="magenta",
-            padding=(0, 1),
-            expand=False
-        ))
+        cmd_str = clean_kwargs.get("command") or clean_kwargs.get("cmd") or ""
+        console.print(f"  [bold magenta]●[/bold magenta] [bold white]Terminal[/bold white] [dim white]$ {cmd_str}[/dim white]")
 
     elif t_name in ("patch.apply", "apply_patch"):
-        path = t_kwargs.get("path") or ""
-        patch = t_kwargs.get("patch") or ""
-        patch_preview = "\n".join(patch.splitlines()[:8])
-        body = f"[bold cyan]📁 Target File:[/bold cyan] [bold white]{path}[/bold white]\n[dim]{patch_preview}[/dim]"
-        console.print(Panel(
-            body,
-            title=f"🩹 {step_tag} [bold cyan]Applying Code Patch[/bold cyan]",
-            border_style="cyan",
-            padding=(0, 1),
-            expand=False
-        ))
+        path = clean_kwargs.get("path") or ""
+        console.print(f"  [bold cyan]●[/bold cyan] [bold white]Patched[/bold white] [cyan]{path}[/cyan]")
 
     elif t_name in ("web_search", "browser.open_url"):
-        query = t_kwargs.get("query") or t_kwargs.get("url") or ""
-        body = f"[bold cyan]🌐 Target / Query:[/bold cyan] [bold white]{query}[/bold white]"
-        console.print(Panel(
-            body,
-            title=f"🔍 {step_tag} [bold blue]Web Research[/bold blue]",
-            border_style="blue",
-            padding=(0, 1),
-            expand=False
-        ))
+        query = clean_kwargs.get("query") or clean_kwargs.get("url") or ""
+        console.print(f"  [bold cyan]●[/bold cyan] [bold white]Searching[/bold white] [dim]\"{query}\"...[/dim]")
 
     else:
-        clean_kwargs = {k: v for k, v in t_kwargs.items() if k not in ("content", "patch")}
-        body = f"[bold cyan]Tool:[/bold cyan] [white]{t_name}[/white]\n[dim]{json.dumps(clean_kwargs)}[/dim]" if clean_kwargs else f"[bold cyan]Tool:[/bold cyan] [white]{t_name}[/white]"
-        console.print(Panel(
-            body,
-            title=f"🛠️ {step_tag} [bold cyan]{t_name}[/bold cyan]",
-            border_style="cyan",
-            padding=(0, 1),
-            expand=False
-        ))
+        filtered = {k: v for k, v in clean_kwargs.items() if k not in ("content", "patch")}
+        arg_str = f" [dim]{json.dumps(filtered)}[/dim]" if filtered else ""
+        console.print(f"  [bold cyan]●[/bold cyan] [bold white]{t_name}[/bold white]{arg_str}")
 
 
-def render_tool_observation_panel(t_name: str, observation: str, step: int, max_steps: int):
+def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, max_steps: int = 0):
     """
-    Renders compact, bounded observation results so terminal scrollback
-    is never locked or flooded, while maintaining full clarity for the user.
+    Renders Gemini-style source pills for web searches and clean tree leaves for tool results.
+    Prevents scroll lock and terminal flooding.
     """
-    from rich.panel import Panel
+    import re
+    import urllib.parse
 
     obs_str = str(observation).strip()
     if not obs_str:
-        obs_str = "Operation completed with no console output."
+        return
 
+    # Special handling for Web Search: Render Domain Pill Badges (Exactly like Gemini screenshot)
+    if t_name in ("web_search", "browser.open_url"):
+        urls = re.findall(r'https?://[^\s)\]\'"]+', obs_str)
+        domains = []
+        for u in urls:
+            try:
+                d = urllib.parse.urlparse(u).netloc.replace("www.", "")
+                if d and d not in domains and "." in d and len(d) > 3:
+                    domains.append(d)
+            except Exception:
+                pass
+
+        if domains:
+            # Rounded pill style in dark slate background: [domain.com]
+            pills = "    " + "  ".join(f"[bold white on #262626]  {d}  [/]" for d in domains[:5])
+            console.print(pills)
+        else:
+            first_line = obs_str.splitlines()[0][:80]
+            console.print(f"    [dim]└── {first_line}[/dim]")
+        return
+
+    # For Terminal Run: Show clean 1-2 line summary of output
+    if t_name == "terminal.run":
+        lines = [l.strip() for l in obs_str.splitlines() if l.strip()]
+        if lines:
+            summary = lines[0] if len(lines) == 1 else lines[-1]
+            if len(summary) > 90:
+                summary = summary[:88] + "..."
+            console.print(f"    [dim green]└── ✓ {summary}[/dim green]")
+        return
+
+    # For File Write:
+    if t_name in ("files.write", "file.write", "write_file"):
+        console.print(f"    [dim green]└── ✓ Saved successfully[/dim green]")
+        return
+
+    # For File Read / List:
+    if t_name in ("files.read", "file.read", "read_file"):
+        line_count = len(obs_str.splitlines())
+        console.print(f"    [dim]└── {line_count} lines loaded[/dim]")
+        return
+
+    if t_name in ("files.list", "list_folder"):
+        items = len(obs_str.splitlines())
+        console.print(f"    [dim]└── Found {items} items[/dim]")
+        return
+
+    # Generic tool output
     lines = obs_str.splitlines()
-    if len(lines) > 7:
-        preview = "\n".join(lines[:6]) + f"\n[dim]... +{len(lines) - 6} more lines of output[/dim]"
-    elif len(obs_str) > 350:
-        preview = obs_str[:330] + "... [dim](truncated)[/dim]"
-    else:
-        preview = obs_str
-
-    is_error = any(err in obs_str.lower()[:30] for err in ["error", "failed", "rejected", "denied", "exception"])
-    border_col = "red" if is_error else "dim green"
-    icon = "❌" if is_error else "✓"
-    status_label = "Error" if is_error else "Output"
-
-    console.print(Panel(
-        f"[dim]{preview}[/dim]",
-        title=f"{icon} [Step {step}/{max_steps}] {t_name} {status_label}",
-        border_style=border_col,
-        padding=(0, 1),
-        expand=False
-    ))
+    first = lines[0][:80] if lines else "Done."
+    console.print(f"    [dim]└── {first}[/dim]")
 
 
 async def ipc_handshake():
@@ -2500,14 +2483,9 @@ def run_cli():
                     if valid_img_paths and messages and messages[-1]["role"] == "user":
                         messages[-1]["content"] = user_content
 
-                    # Calculate iteration limits based on verified token budget
-                    avg_iter_cost = 600
-                    max_possible = max(1, budget.remaining_tokens // avg_iter_cost)
-                    MIN_ITERATIONS = 24
-                    if current_mode == "/fast":
-                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 24))
-                    else:
-                        MAX_ITERATIONS = max(MIN_ITERATIONS, min(max_possible, 40))
+                    # Continuous autonomous execution without artificial 24-step cap!
+                    # Large coding projects (Flutter apps, full-stack repos) execute to completion.
+                    MAX_ITERATIONS = 150
 
                     iter_count = 0
                 except Exception as e:
@@ -2667,12 +2645,9 @@ def run_cli():
                             leak_check_done = False
 
                             clean_model_name = get_clean_model_display_name(current_model)
-                            if iter_count == 1:
-                                spin_label = f"[bold cyan]• {clean_model_name}[/bold cyan] [dim]Thinking & planning next step...[/dim]"
-                            else:
-                                spin_label = f"[bold cyan]• {clean_model_name}[/bold cyan] [dim]Step {iter_count}/{MAX_ITERATIONS}: Processing tool results...[/dim]"
+                            spin_label = f"[dim cyan]Thinking...[/dim cyan] [dim]({clean_model_name})[/dim]"
 
-                            with console.status(spin_label, spinner="lmms_wave") as spin_status:
+                            with console.status(spin_label, spinner="dots") as spin_status:
                                 for line_bytes in chunks_iterator:
                                     if not line_bytes:
                                         continue
@@ -2777,7 +2752,9 @@ def run_cli():
                                                 if not voice_mode_active:
                                                     spin_status.stop()
                                                     if not model_header_printed:
-                                                        console.print(f"\n[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
+                                                        elapsed_s = max(1, int(time.time() - turn_start_time))
+                                                        console.print(f"[dim]::: Thought for {elapsed_s}s[/dim]")
+                                                        console.print(f"[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
                                                         model_header_printed = True
                                                     live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
                                                     live_view.start()
@@ -3097,7 +3074,7 @@ def run_cli():
                             else:
                                 record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason="Denied by interactive check or policy"))
                                 observation = "Tool execution denied by user or policy."
-                                console.print(f"\n[bold red][Step {iter_count}/{MAX_ITERATIONS}] Denied tool execution: {t_name}[/bold red]")
+                                console.print(f"\n[bold red]Denied tool execution: {t_name}[/bold red]")
                                 
                             obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
                             exit_code = 0
