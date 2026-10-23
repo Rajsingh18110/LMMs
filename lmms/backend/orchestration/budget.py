@@ -10,6 +10,38 @@ import os
 import requests
 
 
+def get_system_hardware_profile() -> Dict[str, Any]:
+    """
+    Detects total system RAM (GB) and GPU VRAM (GB) dynamically.
+    Enables automatic hardware-aware scaling for local/offline models.
+    """
+    ram_gb = 16.0
+    try:
+        import psutil
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+    except Exception:
+        pass
+
+    vram_gb = 0.0
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=1.5
+        )
+        if res.returncode == 0:
+            lines = res.stdout.strip().splitlines()
+            vram_gb = sum(float(l.strip()) for l in lines if l.strip()) / 1024.0
+    except Exception:
+        pass
+
+    return {
+        "ram_gb": ram_gb,
+        "vram_gb": vram_gb,
+        "has_gpu": vram_gb > 0
+    }
+
+
 class ContextOverflowError(Exception):
     """Raised when mandatory prompt content exceeds the usable context limit."""
     def __init__(self, message: str, required_tokens: int, usable_limit: int):
@@ -61,11 +93,12 @@ class TokenBudgetManager:
 
     def get_effective_context_limit(self, model_name: str) -> int:
         """
-        Determines the true context window limit from:
+        Determines the true context window limit dynamically:
         1. Local cache
-        2. GGUF header parser (direct binary inspection)
-        3. Engine `/v1/model/context` endpoint
-        4. Safe default
+        2. Online Model Registry & Provider-Aware Dynamic Limits (Gemini 1M+, Claude 200k, GPT-4o/Nemotron 128k)
+        3. GGUF header parser (direct binary inspection) scaled with System VRAM / RAM
+        4. Engine `/v1/model/context` endpoint scaled with hardware capacity
+        5. Hardware-Aware Heuristics
         """
         if model_name in self._limit_cache:
             return self._limit_cache[model_name]
@@ -74,7 +107,64 @@ class TokenBudgetManager:
             self._limit_cache[model_name] = limit
             return limit
 
-        # 1. Try direct GGUF metadata parsing from ~/.lmms/models
+        # 1. Online Model Registry & Dynamic Cloud Limits
+        try:
+            from lmms.backend.core.registry.online_models import OnlineModelRegistry
+            online_model = OnlineModelRegistry.get_model(model_name)
+            if online_model is None and OnlineModelRegistry.get_active_type() == "online":
+                online_model = OnlineModelRegistry.get_active_model()
+
+            if online_model is not None or OnlineModelRegistry.is_online_model(model_name):
+                # Check user explicit context config
+                if online_model and online_model.get("context_window"):
+                    cw = int(online_model["context_window"])
+                    if cw > 0:
+                        self._limit_cache[model_name] = cw
+                        TokenBudgetManager._global_limit_cache[model_name] = cw
+                        return cw
+
+                # Check model name or configured model id
+                mid = f"{model_name.lower()} {(online_model.get('id', '') if online_model else '').lower()}"
+                p_id = (online_model.get("provider_id", "") if online_model else "").lower()
+
+                if "gemini" in mid or "gemini" in p_id:
+                    limit = 1048576  # 1M context
+                elif "claude" in mid or "anthropic" in p_id:
+                    limit = 200000   # 200k context
+                elif any(k in mid for k in ["gpt-4", "gpt-4o", "o1", "o3", "chatgpt"]):
+                    limit = 128000   # 128k context
+                elif any(k in mid for k in ["nemotron", "llama-3", "llama3", "deepseek", "qwen", "mistral"]):
+                    limit = 131072   # 128k context
+                else:
+                    limit = 131072   # Standard 128k context for modern cloud webhooks
+
+                self._limit_cache[model_name] = limit
+                TokenBudgetManager._global_limit_cache[model_name] = limit
+                return limit
+        except Exception:
+            pass
+
+        # 2. Hardware profile for local/offline models
+        hw = get_system_hardware_profile()
+        vram_gb = hw["vram_gb"]
+        ram_gb = hw["ram_gb"]
+
+        # Maximum context hardware can safely sustain without CUDA OOM:
+        if vram_gb >= 40.0 or ram_gb >= 128.0:
+            max_hw_context = 1048576  # Enterprise datacenter: full native up to 1M
+        elif vram_gb >= 20.0 or ram_gb >= 64.0:
+            max_hw_context = 65536    # 64k for 24GB GPUs (3090/4090/A10/A5000)
+        elif vram_gb >= 10.0 or ram_gb >= 32.0:
+            max_hw_context = 32768    # 32k for 12GB/16GB GPUs
+        elif vram_gb >= 7.0:
+            max_hw_context = 16384    # 16k for 8GB GPUs
+        elif vram_gb > 0:
+            max_hw_context = 8192     # Safe ceiling for <= 6GB laptop GPU
+        else:
+            # CPU only execution
+            max_hw_context = 32768 if ram_gb >= 32.0 else 16384
+
+        # 3. Direct GGUF metadata parsing from ~/.lmms/models
         models_dir = os.path.expanduser("~/.lmms/models")
         candidates = [
             os.path.join(models_dir, f"{model_name}.gguf"),
@@ -88,20 +178,15 @@ class TokenBudgetManager:
                     meta = parse_gguf_metadata(path)
                     for k, v in meta.items():
                         if k.endswith(".context_length") and isinstance(v, int) and v > 0:
-                            # Clamp native window to the verified hardware safe context limit:
-                            # 8B on 6GB VRAM safely fits up to 4,096 tokens (8,192 triggers CUDA OOM).
-                            lower_p = path.lower()
-                            if "8b" in lower_p or "30b" in lower_p:
-                                effective = 4096
-                            else:
-                                effective = min(v, 4096)
+                            # Dynamically scale native GGUF context against hardware capacity!
+                            effective = min(v, max_hw_context)
                             self._limit_cache[model_name] = effective
                             TokenBudgetManager._global_limit_cache[model_name] = effective
                             return effective
                 except Exception:
                     pass
 
-        # 2. Try Engine HTTP endpoint
+        # 4. Engine HTTP endpoint
         if not self._engine_offline:
             try:
                 resp = requests.get(f"{self.engine_url}/v1/model/context", params={"model_name": model_name}, timeout=1)
@@ -109,22 +194,24 @@ class TokenBudgetManager:
                     data = resp.json()
                     ctx = data.get("context_length")
                     if isinstance(ctx, int) and ctx > 0:
-                        ctx = min(ctx, 4096)
-                        self._limit_cache[model_name] = ctx
-                        TokenBudgetManager._global_limit_cache[model_name] = ctx
-                        return ctx
+                        effective = min(ctx, max_hw_context)
+                        self._limit_cache[model_name] = effective
+                        TokenBudgetManager._global_limit_cache[model_name] = effective
+                        return effective
             except Exception:
                 self._engine_offline = True
                 TokenBudgetManager._global_offline_urls.add(self.engine_url)
 
-        # 3. Known heuristics based on model name
+        # 5. Dynamic Model Architecture Heuristics
         lower = model_name.lower()
-        if "8b" in lower or "qwen3" in lower or "30b" in lower:
-            limit = 4096  # Verified hardware safe context limit on 6GB VRAM
+        if any(sz in lower for sz in ["70b", "120b", "770b"]):
+            limit = min(32768, max_hw_context)
+        elif any(sz in lower for sz in ["8b", "qwen3", "30b", "14b"]):
+            limit = min(8192, max_hw_context)
         elif "1.5b" in lower or "nano" in lower:
-            limit = 4096
+            limit = min(4096, max_hw_context)
         else:
-            limit = self.default_context_limit
+            limit = min(self.default_context_limit, max_hw_context)
 
         self._limit_cache[model_name] = limit
         TokenBudgetManager._global_limit_cache[model_name] = limit
@@ -189,9 +276,25 @@ class TokenBudgetManager:
     ) -> BudgetBreakdown:
         """
         Computes detailed token budget allocation across all sections.
+        Dynamically scales output_reserve to match model context capacity.
         """
         context_limit = self.get_effective_context_limit(model_name)
-        output_reserve = requested_output_reserve or self.default_output_reserve
+
+        if requested_output_reserve:
+            output_reserve = requested_output_reserve
+        else:
+            # Proportional dynamic output allocation
+            if context_limit >= 100000:       # 100k+ (Gemini, Claude, GPT-4o, 128k local/cloud)
+                output_reserve = 8192
+            elif context_limit >= 32000:      # 32k - 64k
+                output_reserve = 4096
+            elif context_limit >= 16000:      # 16k
+                output_reserve = 3072
+            elif context_limit >= 8000:       # 8k
+                output_reserve = 2048
+            else:                             # <= 4k
+                output_reserve = min(1024, max(512, context_limit // 4))
+
         safety = self.safety_margin
         usable_context = max(512, context_limit - output_reserve - safety)
 

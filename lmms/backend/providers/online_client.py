@@ -96,6 +96,14 @@ class OnlineModelClient:
         model_id = model_info.get("id", model_name)
         custom_headers = model_info.get("custom_headers", {})
 
+        # Determine dynamic output token limit if not explicitly passed
+        if not max_tokens:
+            mid = model_id.lower()
+            if "gemini" in mid or "claude" in mid or "o1" in mid or "o3" in mid:
+                max_tokens = 8192
+            else:
+                max_tokens = 4096
+
         if p_type == "anthropic":
             yield from OnlineModelClient._stream_anthropic(
                 base_url=base_url or "https://api.anthropic.com/v1",
@@ -103,7 +111,7 @@ class OnlineModelClient:
                 model_id=model_id,
                 messages=messages,
                 temperature=temperature or 0.7,
-                max_tokens=max_tokens or 4096,
+                max_tokens=max_tokens or 8192,
                 custom_headers=custom_headers,
                 timeout=timeout
             )
@@ -114,7 +122,7 @@ class OnlineModelClient:
                 model_id=model_id,
                 messages=messages,
                 temperature=temperature or 0.7,
-                max_tokens=max_tokens or 4096,
+                max_tokens=max_tokens or 8192,
                 timeout=timeout
             )
         else:
@@ -178,6 +186,30 @@ class OnlineModelClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
 
+        accumulated_tool_calls: Dict[int, Dict[str, Any]] = {}
+
+        def _format_and_emit_tool_calls():
+            chunks_to_yield = []
+            if accumulated_tool_calls:
+                for idx in sorted(accumulated_tool_calls.keys()):
+                    tc = accumulated_tool_calls[idx]
+                    t_name = tc.get("name", "").strip()
+                    t_args_str = tc.get("arguments", "").strip()
+                    if not t_name:
+                        continue
+                    try:
+                        t_kwargs = json.loads(t_args_str) if t_args_str else {}
+                    except Exception:
+                        t_kwargs = {"args": t_args_str}
+                    tc_tag = f'<tool_call>{{"tool": "{t_name}", "kwargs": {json.dumps(t_kwargs)}}}</tool_call>'
+                    norm_chunk = {
+                        "content": tc_tag,
+                        "choices": [{"delta": {"content": tc_tag}}]
+                    }
+                    chunks_to_yield.append(f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8"))
+                accumulated_tool_calls.clear()
+            return chunks_to_yield
+
         req_timeout = timeout if timeout and timeout > 120 else 180
         try:
             with requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=(20, req_timeout)) as resp:
@@ -194,26 +226,40 @@ class OnlineModelClient:
                     if line_str.startswith("data: "):
                         payload_str = line_str[6:].strip()
                         if payload_str == "[DONE]":
+                            for tc_bytes in _format_and_emit_tool_calls():
+                                yield tc_bytes
                             yield b"data: [DONE]\n\n"
                             break
                         try:
                             d = json.loads(payload_str)
-                            delta = d.get("choices", [{}])[0].get("delta", {}) if d.get("choices") else {}
+                            choices = d.get("choices", [{}])
+                            choice = choices[0] if choices else {}
+                            delta = choice.get("delta", {}) if choice else {}
+                            finish_reason = choice.get("finish_reason") if choice else None
                             content = delta.get("content")
                             reasoning = delta.get("reasoning_content")
+                            tool_call_deltas = delta.get("tool_calls")
                             
+                            # Accumulate streaming OpenAI-compatible tool call fragments
+                            if tool_call_deltas:
+                                for tc in tool_call_deltas:
+                                    idx = tc.get("index", 0)
+                                    if idx not in accumulated_tool_calls:
+                                        accumulated_tool_calls[idx] = {
+                                            "name": "",
+                                            "arguments": ""
+                                        }
+                                    fn = tc.get("function", {})
+                                    if fn.get("name"):
+                                        accumulated_tool_calls[idx]["name"] += fn.get("name")
+                                    if fn.get("arguments"):
+                                        accumulated_tool_calls[idx]["arguments"] += fn.get("arguments")
+
                             text_to_emit = ""
-                            delta_obj = {}
-                            if reasoning:
-                                delta_obj["reasoning_content"] = reasoning
-                                # Keep internal reasoning isolated so it never leaks into user chat
-                                text_to_emit = ""
                             if content:
-                                delta_obj["content"] = content
                                 text_to_emit = content
                             elif not reasoning and not content and "content" in d:
                                 text_to_emit = d.get("content", "")
-                                delta_obj["content"] = text_to_emit
 
                             # Yield dual-compatible SSE chunk (only emit when there is real user-facing content)
                             if text_to_emit:
@@ -222,10 +268,18 @@ class OnlineModelClient:
                                     "choices": [{"delta": {"content": text_to_emit}}]
                                 }
                                 yield f"data: {json.dumps(norm_chunk)}\n\n".encode("utf-8")
+
+                            if finish_reason == "tool_calls":
+                                for tc_bytes in _format_and_emit_tool_calls():
+                                    yield tc_bytes
                         except Exception:
                             yield line + b"\n"
                     else:
                         yield line + b"\n"
+
+                # Flush any remaining accumulated tool calls if stream finished without explicit [DONE]
+                for tc_bytes in _format_and_emit_tool_calls():
+                    yield tc_bytes
         except Exception as e:
             yield f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8")
             yield b"data: [DONE]\n\n"

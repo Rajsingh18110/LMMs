@@ -2468,7 +2468,7 @@ def run_cli():
                                     messages=req_messages,
                                     temperature=req_temp,
                                     top_p=req_top_p,
-                                    max_tokens=max(reserve, 2048) if intent_res.intent == IntentType.CODING else reserve,
+                                    max_tokens=max(reserve, 4096),
                                     mode=req_mode,
                                     think=req_think
                                 )
@@ -2715,7 +2715,8 @@ def run_cli():
                             continue
 
                         full_reply = "No response from AI."
-                        console.print(f"\n[bold yellow]⚠️ {current_model}[/bold yellow]")
+                        clean_disp_name = get_clean_model_display_name(current_model)
+                        console.print(f"\n[bold yellow]⚠️ {clean_disp_name}[/bold yellow]")
                         console.print(Markdown(full_reply))
                         reply = full_reply
                         break
@@ -2786,11 +2787,14 @@ def run_cli():
                             is_action_prompt = any(act in cmd.lower() for act in ["write", "create", "make", "build", "run", "execute", "install", "test", "flutter", "game", "code", "script"])
 
                             clean_text_before_tool = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", full_reply, flags=re.DOTALL).strip()
+                            clean_text_before_tool = re.sub(r"<function[=>\s].*?(</function>|$)", "", clean_text_before_tool, flags=re.DOTALL | re.IGNORECASE).strip()
                             clean_text_before_tool = re.sub(r"<think>.*?</think>", "", clean_text_before_tool, flags=re.DOTALL).strip()
+                            clean_text_before_tool = re.sub(r"<thought>.*?</thought>", "", clean_text_before_tool, flags=re.DOTALL).strip()
+                            clean_text_before_tool = re.sub(r"<reasoning>.*?</reasoning>", "", clean_text_before_tool, flags=re.DOTALL).strip()
                             has_substantive_answer = (
-                                len(clean_text_before_tool) >= 150 and
+                                len(clean_text_before_tool) >= 120 and
                                 iter_count >= 2 and
-                                any(marker in clean_text_before_tool for marker in ["\n1.", "\n2.", "\n- ", "\n* ", "\n• ", "http", "here are", "Based on the"])
+                                any(marker in clean_text_before_tool for marker in ["\n", "1.", "2.", "- ", "* ", "• ", "http", "Project", "Overview", "Based on", "Here is", "Here are", "Summary", "```"])
                             )
 
                             # 2. Duplicate tool call guard:
@@ -2809,16 +2813,23 @@ def run_cli():
                                 and not any(explicit in cmd.lower() for explicit in ["clone", "install", "download", "run ", "execute", "setup"])
                             )
 
-                            # ReAct Loop: If a tool was emitted, NEVER terminate prematurely!
-                            # Only prevent runaway search loops if search_tool_count exceeds 5
-                            if is_duplicate and iter_count >= 3:
-                                console.print(f"\n[dim yellow]⚠️ Model repeated tool call: {t_name}. Providing feedback to advance reasoning...[/dim yellow]")
-                                messages.append({"role": "assistant", "content": full_reply})
-                                messages.append({
-                                    "role": "user",
-                                    "content": f"<observation>\n[Notice: {t_name} was already executed with identical arguments. Please evaluate previous observation and proceed to the next step, file modification, or provide final response.]\n</observation>"
-                                })
-                                continue
+                            # Universal Substantive Answer Delivery Guard (Offline & Online):
+                            # If a duplicate tool is emitted but the model ALREADY synthesized a complete response,
+                            # deliver the completed answer immediately instead of looping into silent failure!
+                            if is_duplicate:
+                                if has_substantive_answer:
+                                    console.print(f"\n[dim green]✓ Substantive response synthesized. Delivering completed answer...[/dim green]")
+                                    reply = clean_text_before_tool
+                                    break
+
+                                if iter_count >= 2:
+                                    console.print(f"\n[dim yellow]⚠️ Model repeated tool call: {t_name}. Providing feedback to advance reasoning...[/dim yellow]")
+                                    messages.append({"role": "assistant", "content": full_reply})
+                                    messages.append({
+                                        "role": "user",
+                                        "content": f"<observation>\n[Notice: {t_name} was already executed with identical arguments. Please evaluate previous observation and proceed to the next step, file modification, or provide final response.]\n</observation>"
+                                    })
+                                    continue
 
                             if t_name in ("web_search", "browser.open_url") and search_tool_count > 24:
                                 console.print(f"\n[dim green]✓ Sufficient web information gathered. Proceeding to answer...[/dim green]")

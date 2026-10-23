@@ -179,3 +179,87 @@ cat README.md
     res4 = robust_parse_tool_call(tc4)
     assert res4["tool"] == "files.read"
     assert res4["kwargs"] == {"path": "README.md"}
+
+
+def test_dynamic_context_window_online_and_local(tmp_path, monkeypatch):
+    from lmms.backend.orchestration.budget import TokenBudgetManager
+
+    mgr = TokenBudgetManager(engine_url="http://127.0.0.1:0")
+
+    # Online models get dynamic native context
+    assert mgr.get_effective_context_limit("gemini-2.5-pro") >= 1000000
+    assert mgr.get_effective_context_limit("claude-3-7-sonnet") >= 200000
+    assert mgr.get_effective_context_limit("nvidia/nemotron-3.5-super-vl-120b-a12b") == 131072
+    assert mgr.get_effective_context_limit("gpt-4o") == 128000
+
+    # Large local models (70B, 770B) get hardware-scaled context, not arbitrary 4096
+    local_770b_ctx = mgr.get_effective_context_limit("deepseek-v3-770b")
+    assert local_770b_ctx >= 8192
+
+
+def test_dynamic_output_reserve_scaling():
+    from lmms.backend.orchestration.budget import TokenBudgetManager
+
+    mgr = TokenBudgetManager(engine_url="http://127.0.0.1:0")
+
+    # 128k context model gets generous dynamic output reserve (8192 tokens), never hardcoded 768!
+    b_128k = mgr.calculate_budget(
+        model_name="nvidia/nemotron-3.5-super-vl-120b-a12b",
+        base_prompt="System prompt",
+        task_instructions="Do task",
+        tool_schemas="",
+        history_messages=[],
+        user_query="Hello"
+    )
+    assert b_128k.output_reserve == 8192
+    assert b_128k.usable_context > 100000
+
+    # 8k context model scales appropriately
+    b_8k = mgr.calculate_budget(
+        model_name="small-model:8b",
+        base_prompt="System prompt",
+        task_instructions="",
+        tool_schemas="",
+        history_messages=[],
+        user_query="Hello"
+    )
+    assert b_8k.output_reserve >= 1024
+
+
+def test_openai_streaming_tool_call_accumulation(monkeypatch):
+    import requests
+    from unittest.mock import MagicMock
+
+    # Simulate SSE lines with fragmented OpenAI tool calls
+    sse_lines = [
+        b'data: {"choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call-123","type":"function","function":{"name":"files.read","arguments":""}}]}}]}\n',
+        b'data: {"choices":[{"delta":{"content":null,"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\": "}}]}}]}\n',
+        b'data: {"choices":[{"delta":{"content":null,"tool_calls":[{"index":0,"function":{"arguments":"\\"/home/kali/heretic/setup.py\\"}"}}]}}]}\n',
+        b'data: {"choices":[{"finish_reason":"tool_calls"}]}\n',
+        b'data: [DONE]\n'
+    ]
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.iter_lines.return_value = sse_lines
+    mock_resp.__enter__.return_value = mock_resp
+
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: mock_resp)
+
+    chunks = list(OnlineModelClient._stream_openai_compatible(
+        base_url="https://api.test.com/v1",
+        api_key="sk-test",
+        model_id="test-model",
+        messages=[{"role": "user", "content": "read setup.py"}]
+    ))
+
+    combined = b"".join(chunks).decode("utf-8")
+    assert 'files.read' in combined
+    assert '/home/kali/heretic/setup.py' in combined
+    # Extract SSE content JSON
+    for line in combined.splitlines():
+        if line.startswith("data: {"):
+            d = json.loads(line[6:])
+            content = d.get("content", "")
+            if "<tool_call>" in content:
+                assert '<tool_call>{"tool": "files.read", "kwargs": {"path": "/home/kali/heretic/setup.py"}}</tool_call>' == content
