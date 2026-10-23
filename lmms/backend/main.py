@@ -725,6 +725,15 @@ def run_cli():
         except Exception:
             pass
 
+    try:
+        from lmms.backend.core.registry.online_models import OnlineModelRegistry
+        if OnlineModelRegistry.get_active_type() == "online":
+            active_online = OnlineModelRegistry.get_active_model()
+            if active_online:
+                current_model = active_online.get("key")
+    except Exception:
+        pass
+
     current_pair = "None"
     current_mode = "/fast"
     current_permission_level = "medium"
@@ -1444,7 +1453,8 @@ def run_cli():
 [bold magenta]🧠 Core AI & Interaction[/bold magenta]
   [green]/fast, /deep, /code[/green]      Switch reasoning modes
   [green]/vision, /mic, /voice[/green]     Use vision OCR, microphone, and interactive voice [F4]
-  [green]/ml <model>[/green]              Swap AI models on the fly
+  [green]/addmodel[/green]                  Open PyQt6 GUI to add online models & webhooks
+  [green]/ml[/green]                        Swap between offline and online models
   [green]/chat, /newchat[/green]          Manage conversation threads
 
 [bold magenta]💻 Autonomous Coding Workflow[/bold magenta]
@@ -1897,81 +1907,154 @@ def run_cli():
                     if not found:
                         console.print(f"[red]Chat not found with ID: {target_id}[/red]")
 
+            elif base_cmd == "/addmodel":
+                has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+                if has_display:
+                    console.print("\n[bold cyan]🧠 Launching AI Models & Custom Webhook Hub (PyQt6 Desktop GUI)...[/bold cyan]")
+                    try:
+                        subprocess.Popen(
+                            [sys.executable, "-m", "lmms.gui.dialogs.model_manager_dialog"],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            start_new_session=True
+                        )
+                        console.print("[bold green]✓ Native GUI window opened![/bold green] [dim]Configure your API keys, Indian AI providers, or custom webhooks.[/dim]")
+                        console.print("[dim]Use [/dim][bold cyan]/ml[/bold cyan][dim] anytime to view and switch between offline & online models.[/dim]\n")
+                    except Exception as e:
+                        console.print(f"[red]Failed to launch GUI: {e}[/red]")
+                else:
+                    console.print("\n[yellow]No graphical display detected ($DISPLAY / $WAYLAND_DISPLAY).[/yellow]")
+                    console.print("[dim]You can configure models directly in [/dim][cyan]~/.lmms/config/online_models.json[/cyan]\n")
+
             elif base_cmd == "/ml":
+                from lmms.backend.core.registry.online_models import OnlineModelRegistry
+                online_models = OnlineModelRegistry.list_models(safe=True)
+                active_online = OnlineModelRegistry.get_active_model()
+                active_type = OnlineModelRegistry.get_active_type()
+
+                # Get offline models
+                offline_models = []
+                try:
+                    r = requests.get(f"{ENGINE_URL}/v1/models/list", timeout=3)
+                    offline_models = [m['name'] for m in r.json().get("models", [])]
+                except Exception:
+                    models_dir = os.path.expanduser("~/.lmms/models")
+                    if os.path.exists(models_dir):
+                        offline_models = [f[:-5] for f in os.listdir(models_dir) if f.endswith(".gguf")]
+
                 if len(parts) > 1:
                     if parts[1] == "-l":
-                        try:
-                            r = requests.get(f"{ENGINE_URL}/v1/models/list")
-                            data = r.json()
-                            console.print("[bold cyan]Downloaded Models:[/bold cyan]")
-                            for m in data.get("models", []):
-                                console.print(f"- {m['name']} ({m['size_gb']} GB)")
-                        except Exception as e:
-                            console.print(f"[red]Failed to list models: {e}[/red]")
-                            
+                        console.print("\n[bold cyan]=== Configured AI Models ===[/bold cyan]")
+                        console.print(f"[bold yellow]📁 Offline Models (Local GGUF / AirEngine):[/bold yellow]")
+                        if offline_models:
+                            for m in offline_models:
+                                is_act = (m == current_model and active_type == "offline")
+                                act_tag = " [bold green][ACTIVE][/bold green]" if is_act else ""
+                                console.print(f"  • {m}{act_tag}")
+                        else:
+                            console.print("  [dim]No downloaded models. Use `lmms pull <model>`[/dim]")
+
+                        console.print(f"\n[bold yellow]🌐 Online Models & Custom Webhooks:[/bold yellow]")
+                        if online_models:
+                            for om in online_models:
+                                is_act = (om.get("key") == (active_online.get("key") if active_online else None)) and active_type == "online"
+                                act_tag = " [bold green][ACTIVE][/bold green]" if is_act else ""
+                                console.print(f"  • {om.get('name')} ({om.get('provider_name')}){act_tag} [dim]Endpoint: {om.get('base_url')}[/dim]")
+                        else:
+                            console.print("  [dim]No online models configured. Type `/addmodel` to add Anthropic, OpenAI, Sarvam AI, or Custom Webhooks.[/dim]\n")
+                        continue
+
                     elif parts[1] == "-s" and len(parts) > 2:
-                        requested_model = parts[2]
-                        console.print(f"[dim]Loading {requested_model} into Engine...[/dim]")
+                        requested = parts[2].lower()
+                        # Check online models first
+                        found_online = None
+                        for om in online_models:
+                            if requested in om.get("name", "").lower() or requested in om.get("id", "").lower() or requested in om.get("key", "").lower():
+                                found_online = om
+                                break
+
+                        if found_online:
+                            OnlineModelRegistry.set_active_model(found_online.get("key"), "online")
+                            current_model = found_online.get("key")
+                            console.print(f"[bold green]✓ Active model switched to: [Online] {found_online.get('name')}[/bold green]")
+                            print_banner()
+                            continue
+
+                        # Check offline models
+                        match = next((m for m in offline_models if requested in m.lower()), requested)
                         try:
-                            # Fuzzy matching
-                            r_list = requests.get(f"{ENGINE_URL}/v1/models/list")
-                            available = [m['name'] for m in r_list.json().get("models", [])]
-                            match = next((m for m in available if requested_model.lower() in m.lower()), requested_model)
-                            
-                            r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": match})
+                            r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": match}, timeout=180)
                             if r.status_code == 200:
                                 current_model = match
-                                console.print(f"[bold green]Active model switched to: {current_model}[/bold green]")
-                                # Save default model
-                                try:
-                                    config_path = os.path.expanduser("~/.lmms/config.json")
-                                    config = {}
-                                    if os.path.exists(config_path):
-                                        with open(config_path, "r") as f:
-                                            config = json.load(f)
-                                    config["default_model"] = current_model
-                                    with open(config_path, "w") as f:
-                                        json.dump(config, f)
-                                except:
-                                    pass
+                                OnlineModelRegistry.set_active_model(None, "offline")
+                                console.print(f"[bold green]✓ Active model switched to: [Offline] {current_model}[/bold green]")
                             else:
-                                console.print(f"[red]Failed to load: {r.json()}[/red]")
+                                console.print(f"[red]Failed to load offline model: {r.json()}[/red]")
                         except Exception as e:
                             console.print(f"[red]Error loading model: {e}[/red]")
                         print_banner()
-                        
-                    else:
-                        console.print(f"[red]Invalid command. Use /ml -s <model_name>[/red]")
-                else:
-                    try:
-                        r = requests.get(f"{ENGINE_URL}/v1/models/list")
-                        models = [m['name'] for m in r.json().get("models", [])]
-                    except Exception as e:
-                        console.print(f"[red]Could not reach the engine to list models — check `lmms ps` or restart the engine.[/red]")
                         continue
-                        
-                    if not models:
-                        console.print("[red]No models downloaded. Use `lmms pull <model>`[/red]")
+
+                # Interactive Category Selector:
+                console.print("\n[bold cyan]╭─────────────────────────────────────────────────────────────╮[/bold cyan]")
+                console.print("[bold cyan]│[/bold cyan]                 [bold white]LMMs Model Switcher (/ml)[/bold white]                   [bold cyan]│[/bold cyan]")
+                console.print("[bold cyan]╰─────────────────────────────────────────────────────────────╯[/bold cyan]")
+                curr_desc = f"[Online] {active_online.get('name')}" if (active_type == 'online' and active_online) else f"[Offline] {current_model}"
+                console.print(f"[bold magenta]Current Active Model:[/bold magenta] [bold green]{curr_desc}[/bold green]\n")
+
+                console.print(f"[1] 📁 Offline Models (Local GGUF / AirEngine) [dim]({len(offline_models)} available)[/dim]")
+                console.print(f"[2] 🌐 Online Models (Anthropic, OpenAI, Sarvam AI, Webhooks) [dim]({len(online_models)} configured)[/dim]")
+                console.print(f"[3] ➕ Add Online Model / Webhook (Launch /addmodel GUI)")
+                console.print(f"[4] Cancel\n")
+
+                cat_choice = Prompt.ask("Select category", choices=["1", "2", "3", "4"], default="1")
+                if cat_choice == "1":
+                    if not offline_models:
+                        console.print("[yellow]No local models downloaded yet. Use `lmms pull <model>` (e.g. `lmms pull qwen3:8b`)[/yellow]")
                         continue
-                        
-                    console.print("\n[bold cyan]Available Models:[/bold cyan]")
-                    for i, m in enumerate(models):
-                        console.print(f"[{i+1}] {m}")
-                    choice = Prompt.ask("Select model number", choices=[str(i+1) for i in range(len(models))])
-                    if choice:
-                        selected_model = models[int(choice)-1]
+                    console.print("\n[bold cyan]Available Offline Models:[/bold cyan]")
+                    for idx, m in enumerate(offline_models):
+                        is_act = (m == current_model and active_type == "offline")
+                        tag = " [bold green][ACTIVE][/bold green]" if is_act else ""
+                        console.print(f"  [{idx+1}] {m}{tag}")
+                    sel = Prompt.ask("Select offline model number", choices=[str(i+1) for i in range(len(offline_models))])
+                    if sel:
+                        selected_offline = offline_models[int(sel)-1]
                         try:
-                            with console.status(f"[bold cyan]Loading {selected_model}... (Press Ctrl+C to cancel)[/bold cyan]", spinner="dots"):
-                                r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_model}, timeout=180)
+                            with console.status(f"[bold cyan]Loading {selected_offline}... (Press Ctrl+C to cancel)[/bold cyan]", spinner="dots"):
+                                r = requests.post(f"{ENGINE_URL}/v1/models/load", json={"model_name": selected_offline}, timeout=180)
                             if r.status_code == 200:
-                                current_model = selected_model
-                                console.print(f"[bold green]✓ Active model switched to: {current_model}[/bold green]")
+                                current_model = selected_offline
+                                OnlineModelRegistry.set_active_model(None, "offline")
+                                console.print(f"[bold green]✓ Active model switched to: [Offline] {current_model}[/bold green]")
                             else:
                                 console.print(f"[red]Failed to load: {r.json()}[/red]")
-                        except KeyboardInterrupt:
-                            console.print("\n[yellow]Model loading cancelled by user.[/yellow]")
                         except Exception as e:
                             console.print(f"[red]Error loading model: {e}[/red]")
+
+                elif cat_choice == "2":
+                    if not online_models:
+                        console.print("\n[yellow]No online models configured yet![/yellow]")
+                        console.print("[dim]Type [/dim][bold cyan]/addmodel[/bold cyan][dim] to launch the GUI and configure Anthropic, OpenAI, Sarvam AI, or Custom Webhooks.[/dim]\n")
+                        continue
+                    console.print("\n[bold cyan]Configured Online Models & Webhooks:[/bold cyan]")
+                    for idx, om in enumerate(online_models):
+                        is_act = (om.get("key") == (active_online.get("key") if active_online else None)) and active_type == "online"
+                        tag = " [bold green][ACTIVE][/bold green]" if is_act else ""
+                        console.print(f"  [{idx+1}] {om.get('name')} [dim]({om.get('provider_name')})[/dim]{tag}")
+                    sel = Prompt.ask("Select online model number", choices=[str(i+1) for i in range(len(online_models))])
+                    if sel:
+                        chosen_online = online_models[int(sel)-1]
+                        OnlineModelRegistry.set_active_model(chosen_online.get("key"), "online")
+                        current_model = chosen_online.get("key")
+                        console.print(f"[bold green]✓ Active model switched to: [Online] {chosen_online.get('name')}[/bold green]")
+
+                elif cat_choice == "3":
+                    if bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+                        subprocess.Popen([sys.executable, "-m", "lmms.gui.dialogs.model_manager_dialog"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                        console.print("[bold green]✓ Launched /addmodel GUI window![/bold green]")
+                    else:
+                        console.print("[yellow]No graphical display found. Configure in ~/.lmms/config/online_models.json[/yellow]")
 
             elif base_cmd == "/pair":
                 try:
@@ -2253,13 +2336,22 @@ def run_cli():
                         "After fixing, use git to commit the changes. "
                         f"User's extra context: {cmd.replace('@problem', '').strip()}"
                     )
-                if not check_engine_health():
+
+                from lmms.backend.core.registry.online_models import OnlineModelRegistry
+                is_online = OnlineModelRegistry.is_online_model(current_model) or (OnlineModelRegistry.get_active_type() == "online" and OnlineModelRegistry.get_active_model() is not None)
+
+                if not is_online and not check_engine_health():
                     console.print("[red]Engine is offline. Cannot generate response.[/red]")
                     continue
                     
                 if current_model == "None":
-                    console.print("[yellow]No model is currently selected! Use '/ml -l' to list models and '/ml -s <model_name>' to select one.[/yellow]")
-                    continue
+                    if is_online:
+                        act_m = OnlineModelRegistry.get_active_model()
+                        if act_m:
+                            current_model = act_m.get("key")
+                    if current_model == "None":
+                        console.print("[yellow]No model is currently selected! Use '/ml' to select an offline or online model, or '/addmodel' to add one.[/yellow]")
+                        continue
                     
                     
                 # Trigger background persona extraction
@@ -2422,20 +2514,35 @@ def run_cli():
                                     voice_msg_copy.insert(0, {"role": "system", "content": voice_instruction})
                                 req_messages = voice_msg_copy
 
-                            resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
-                                "model_name": current_model,
-                                "messages": req_messages,
-                                "stream": True,
-                                "temperature": req_temp,
-                                "top_p": req_top_p,
-                                "repetition_penalty": 1.15,
-                                "mode": req_mode,
-                                "think": req_think,
-                                "max_tokens": max(reserve, 2048) if intent_res.intent == IntentType.CODING else reserve
-                            }, stream=True, timeout=(10, 3600))
-                            resp.raise_for_status()
-                            
-                            chunks_iterator = resp.iter_lines()
+                            from lmms.backend.core.registry.online_models import OnlineModelRegistry
+                            is_online_call = OnlineModelRegistry.is_online_model(current_model) or (OnlineModelRegistry.get_active_type() == "online" and OnlineModelRegistry.get_active_model() is not None)
+
+                            if is_online_call:
+                                from lmms.backend.providers.online_client import OnlineModelClient
+                                chunks_iterator = OnlineModelClient.stream_chat(
+                                    model_name=current_model,
+                                    messages=req_messages,
+                                    temperature=req_temp,
+                                    top_p=req_top_p,
+                                    max_tokens=max(reserve, 2048) if intent_res.intent == IntentType.CODING else reserve,
+                                    mode=req_mode,
+                                    think=req_think
+                                )
+                                resp = None
+                            else:
+                                resp = requests.post(f"{ENGINE_URL}/v1/chat/completions", json={
+                                    "model_name": current_model,
+                                    "messages": req_messages,
+                                    "stream": True,
+                                    "temperature": req_temp,
+                                    "top_p": req_top_p,
+                                    "repetition_penalty": 1.15,
+                                    "mode": req_mode,
+                                    "think": req_think,
+                                    "max_tokens": max(reserve, 2048) if intent_res.intent == IntentType.CODING else reserve
+                                }, stream=True, timeout=(10, 3600))
+                                resp.raise_for_status()
+                                chunks_iterator = resp.iter_lines()
                         except requests.exceptions.ReadTimeout:
                             console.print(f"\n[bold red]❌ Engine Error: Model took too long to load or server died unexpectedly.[/bold red]")
                             break
@@ -2615,7 +2722,8 @@ def run_cli():
                             if live_view:
                                 live_view.stop()
                             try:
-                                resp.close()
+                                if resp is not None:
+                                    resp.close()
                             except:
                                 pass
 

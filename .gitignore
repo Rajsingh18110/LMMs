@@ -35,6 +35,7 @@ test_*.py
 !tests/test_event_bus.py
 !tests/test_safety_checks.py
 !tests/test_notifications_keyring.py
+!tests/test_online_models.py
 !tests/capture_panel_live_proof.py
 !tests/run_demo_benchmark.py
 

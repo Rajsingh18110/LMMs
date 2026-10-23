@@ -119,6 +119,48 @@ PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
         "description": "Large-scale inference engine.",
     },
 
+    # --- Indian AI Ecosystem Providers (🇮🇳 Bharat AI) ---
+    "sarvam": {
+        "name": "Sarvam AI (India 🇮🇳)",
+        "type": "openai_compatible",
+        "category": "indian_ai",
+        "base_url": "https://api.sarvam.ai/v1",
+        "api_key_required": True,
+        "default_model": "sarvam-2b",
+        "models": ["sarvam-2b", "sarvam-m", "sarvam-indic-chat", "sarvam-code-indic"],
+        "description": "Foundational Indian language AI models built by Sarvam AI.",
+    },
+    "krutrim": {
+        "name": "Krutrim Cloud (India 🇮🇳)",
+        "type": "openai_compatible",
+        "category": "indian_ai",
+        "base_url": "https://cloud.olakrutrim.com/v1",
+        "api_key_required": True,
+        "default_model": "Krutrim-spectre-v2",
+        "models": ["Krutrim-spectre-v2", "Meta-Llama-3.1-8B-Instruct", "Meta-Llama-3.1-70B-Instruct", "Mistral-7B-Instruct-v0.2"],
+        "description": "Ola Krutrim sovereign AI cloud and multilingual foundation models.",
+    },
+    "two_ai": {
+        "name": "Two AI (SUTRA 🇮🇳)",
+        "type": "openai_compatible",
+        "category": "indian_ai",
+        "base_url": "https://api.two.ai/v2",
+        "api_key_required": True,
+        "default_model": "sutra-9b-multilingual",
+        "models": ["sutra-9b-multilingual", "sutra-light", "sutra-turbo", "sutra-online"],
+        "description": "Multilingual foundation models optimized for 50+ languages and Indian dialects.",
+    },
+    "bharatgpt": {
+        "name": "BharatGPT / Hanooman (India 🇮🇳)",
+        "type": "openai_compatible",
+        "category": "indian_ai",
+        "base_url": "https://api.hanooman.ai/v1",
+        "api_key_required": True,
+        "default_model": "hanooman-7b",
+        "models": ["hanooman-7b", "hanooman-13b", "bharat-gpt-indic"],
+        "description": "CoRover & IIT Bombay consortium multi-lingual generative AI stack.",
+    },
+
     # --- Top Cloud Providers ---
     "openai": {
         "name": "OpenAI",
@@ -539,5 +581,15 @@ PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
         "default_model": "custom-model",
         "models": ["custom-model"],
         "description": "Any endpoint implementing the /v1/chat/completions specification.",
+    },
+    "custom_webhook": {
+        "name": "Custom Webhook & API Endpoint",
+        "type": "custom_webhook",
+        "category": "custom",
+        "base_url": "https://api.yourdomain.com/v1",
+        "api_key_required": False,
+        "default_model": "custom-agent-v1",
+        "models": ["custom-agent-v1"],
+        "description": "Connect any custom webhook, private reverse-proxy, vLLM, or self-hosted LLM endpoint.",
     },
 }
