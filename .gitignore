@@ -43,6 +43,8 @@ download_*.py
 list_*.py
 find_*.py
 *.png
+!assets/*.png
+!assets/**/*.png
 !docs/screenshots/*.png
 *.log
 recovered_*.txt
