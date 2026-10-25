@@ -35,6 +35,11 @@ class UnifiedToolExecutor:
         self.registry = registry
         self._execution_history: List[Dict[str, Any]] = []
         self._custom_handlers: Dict[str, Callable] = {}
+        try:
+            from .completion_guard import CompletionGuard
+            self.completion_guard = CompletionGuard()
+        except Exception:
+            self.completion_guard = None
         self._register_default_handlers()
 
     def register_handler(self, tool_id: str, handler: Callable):
@@ -121,18 +126,31 @@ class UnifiedToolExecutor:
 
         # 6. Browser
         try:
-            from lmms.backend.tools.browser import BrowserTool
-            bt = BrowserTool()
+            from lmms.backend.tools.browser import get_browser_tool
+            bt = get_browser_tool()
             self.register_handler("browser.open_url", lambda url, headless=False: bt.open_url(url, headless))
             self.register_handler("browser.get_interactive_dom", lambda url=None: bt.get_interactive_dom(url))
-            self.register_handler("browser.click_element", lambda selector, url=None, id=None: bt.click_element(selector=selector, url=url, id=id))
+            self.register_handler("browser.click_element", lambda selector=None, url=None, id=None: bt.click_element(selector=selector, url=url, id=id))
+            self.register_handler("browser.pointer_click", lambda selector=None, url=None, id=None: bt.pointer_click(selector=selector, url=url, id=id))
+            self.register_handler("browser.human_click", lambda url=None, selector=None: bt.human_click(url or "", selector or ""))
             self.register_handler("browser.fill_form", lambda fields, url=None: bt.fill_form(fields, url))
             self.register_handler("browser.type", lambda selector, text, press_enter=False, url=None: bt.type_text(selector, text, press_enter, url))
+            self.register_handler("browser.human_type", lambda url=None, selector=None, text="": bt.human_type(url or "", selector or "", text))
             self.register_handler("browser.scrape_live", lambda url, selector=None: bt.scrape_live(url, selector))
             self.register_handler("browser.screenshot", lambda save_path="/tmp/lmms_browser.png", url=None: bt.screenshot(save_path, url))
             self.register_handler("browser.scroll", lambda url=None, direction="down", amount=1000: bt.scroll(url or "", direction, amount))
-            self.register_handler("browser.press_key", lambda key="Enter": bt.press_key(key))
-            self.register_handler("browser.open_authenticated", lambda url, user_data_dir=None, profile_name="Default", headless=True: bt.open_authenticated(url, user_data_dir or os.path.expanduser("~/.lmms/browser_profile"), profile_name, headless))
+            self.register_handler("browser.press_key", lambda key="Enter", **kw: bt.press_key(key))
+            self.register_handler("browser.open_authenticated", lambda url="about:blank", user_data_dir=None, profile_name="Default", headless=False, cdp_url=None, **kw: bt.open_authenticated(url, user_data_dir, profile_name, headless, cdp_url))
+            self.register_handler("browser.connect_cdp", lambda endpoint_url="http://localhost:9222", **kw: bt.connect_cdp(endpoint_url))
+            self.register_handler("browser.open_persistent", lambda url="about:blank", headless=False, profile_dir=None, **kw: bt.open_persistent_browser(url, headless, profile_dir))
+            self.register_handler("browser.attach_existing_session", lambda url="about:blank", headless=False, preferred_profile=None, cdp_endpoint="http://localhost:9222", **kw: bt.attach_existing_chrome_session(url, headless, preferred_profile, cdp_endpoint))
+            self.register_handler("browser.observe_page", lambda url=None, **kw: bt.observe_page(url))
+            self.register_handler("browser.verify_editor_content", lambda selector=None, expected_substring=None, **kw: bt.verify_editor_content(selector, expected_substring))
+            self.register_handler("browser.save_draft", lambda button_selector=None, **kw: bt.save_draft(button_selector))
+            self.register_handler("browser.request_publication_approval", lambda target_selector="", action_type="publish_post", content_summary="", **kw: bt.request_publication_approval(target_selector, action_type, content_summary))
+            self.register_handler("browser.disconnect", lambda preserve_data=True, **kw: bt.disconnect_session(preserve_data))
+            self.register_handler("account.get_current_identity", lambda **kw: bt.get_account_context())
+            self.register_handler("browser.get_account_context", lambda **kw: bt.get_account_context())
         except Exception:
             pass
 
@@ -182,6 +200,10 @@ class UnifiedToolExecutor:
 
         # Normalize argument aliases
         clean_kwargs = dict(kwargs)
+        if normalized_name in ("browser.click_element", "browser.click", "click_element", "click", "browser.pointer_click", "pointer_click"):
+            for k in ["element", "target", "element_id", "btn"]:
+                if k in clean_kwargs and "selector" not in clean_kwargs:
+                    clean_kwargs["selector"] = clean_kwargs.pop(k)
         if normalized_name in ("patch.apply", "apply_patch", "apply_diff", "patch"):
             for k in ["diff", "patch_text", "code", "content", "patch_str"]:
                 if k in clean_kwargs and "patch" not in clean_kwargs:
@@ -225,10 +247,13 @@ class UnifiedToolExecutor:
             for k in ["link", "web_url", "target_url"]:
                 if k in clean_kwargs and "url" not in clean_kwargs:
                     clean_kwargs["url"] = clean_kwargs.pop(k)
-        if normalized_name == "message.send":
+        if normalized_name in ("message.send", "send_message", "notify"):
             for k in ["text", "msg", "body", "content"]:
                 if k in clean_kwargs and "message" not in clean_kwargs:
                     clean_kwargs["message"] = clean_kwargs.pop(k)
+            for k in ["title", "target", "channel", "chat_id", "to"]:
+                if k in clean_kwargs and "recipient" not in clean_kwargs:
+                    clean_kwargs["recipient"] = clean_kwargs.pop(k)
 
         return normalized_name, clean_kwargs
 
@@ -317,7 +342,7 @@ class UnifiedToolExecutor:
 
         # 1. Check required properties
         for req in required:
-            if req not in kwargs:
+            if req not in kwargs or kwargs[req] is None or (isinstance(kwargs[req], str) and not kwargs[req].strip()):
                 return False, f"Missing required parameter '{req}' for tool '{tool.id}'."
 
         # 2. Check types of provided arguments
@@ -409,6 +434,14 @@ class UnifiedToolExecutor:
         if not valid:
             duration_ms = int((time.time() - t0) * 1000)
             obs = f"<observation>\n[VALIDATION_ERROR] {err}\n</observation>"
+            if getattr(self, "completion_guard", None):
+                self.completion_guard.record_operation(
+                    tool_name=tool_name,
+                    kwargs=kwargs,
+                    status="failed",
+                    verified=False,
+                    reason_or_error=err
+                )
             return ExecutionResult(
                 tool_name=tool_name,
                 success=False,
@@ -423,6 +456,14 @@ class UnifiedToolExecutor:
         if not allowed:
             duration_ms = int((time.time() - t0) * 1000)
             obs = f"<observation>\n[PERMISSION_DENIED] {perm_err}\n</observation>"
+            if getattr(self, "completion_guard", None):
+                self.completion_guard.record_operation(
+                    tool_name=tool_name,
+                    kwargs=kwargs,
+                    status="denied",
+                    verified=False,
+                    reason_or_error=perm_err
+                )
             return ExecutionResult(
                 tool_name=tool_name,
                 success=False,
@@ -541,6 +582,41 @@ class UnifiedToolExecutor:
         except Exception as e:
             error_msg = str(e)
             success = False
+
+        # Verify file write operations specifically to prevent false success narratives
+        if success and tool.id in ("files.write", "file.write", "write_file", "write_to_file"):
+            if isinstance(data, str) and not data.startswith("[FILE_WRITE_VERIFIED]"):
+                success = False
+                error_msg = data
+
+        # Record operation into completion guard
+        if getattr(self, "completion_guard", None):
+            if not success:
+                st = "denied" if ("denied" in str(error_msg).lower() or "boundary" in str(error_msg).lower()) else "failed"
+                self.completion_guard.record_operation(
+                    tool_name=tool.id,
+                    kwargs=kwargs,
+                    status=st,
+                    verified=False,
+                    reason_or_error=error_msg,
+                    output_snippet=str(data or error_msg)
+                )
+            else:
+                is_verified = True
+                if tool.id in ("files.write", "file.write", "write_file", "write_to_file"):
+                    is_verified = isinstance(data, str) and data.startswith("[FILE_WRITE_VERIFIED]")
+                elif isinstance(data, dict) and "verified" in data:
+                    is_verified = bool(data.get("verified"))
+
+                st = "success" if is_verified else "unverified"
+                self.completion_guard.record_operation(
+                    tool_name=tool.id,
+                    kwargs=kwargs,
+                    status=st,
+                    verified=is_verified,
+                    reason_or_error="" if is_verified else "Operation could not be confirmed as verified by target system.",
+                    output_snippet=str(data)
+                )
 
         duration_ms = int((time.time() - t0) * 1000)
 

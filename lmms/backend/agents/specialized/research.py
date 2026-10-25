@@ -27,12 +27,12 @@ class ResearchAgent(BaseAgent):
         }
 
     async def execute(self, context: ExecutionContext) -> AsyncGenerator[str, None]:
-        from lmms.backend.tools.browser import BrowserTool
+        from lmms.backend.tools.browser import get_browser_tool
         from lmms.backend.tools.search import SearchTool
         
         yield "Starting ResearchAgent execution (INSPECT -> GATHER -> SYNTHESIZE)...\n"
         
-        browser = BrowserTool()
+        browser = get_browser_tool()
         search = SearchTool()
         
         active_model = "default"

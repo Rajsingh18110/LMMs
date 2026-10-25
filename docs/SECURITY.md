@@ -4,7 +4,7 @@
 
 LMMs employs a multi-tiered security model designed to provide safe offline tool and command execution for autonomous coding agents:
 
-1. **Permission Tiers (`/perm ask | allow | sandboxed | readonly`)**: High-level permission mode controlling tool access and gating dangerous actions.
+1. **Permission Tiers (`/perm sandboxed | low | medium | full`)**: High-level permission mode controlling tool access and gating dangerous actions.
 2. **Execution Policy (`~/.lmms/execpolicy.toml`)**: First-layer pre-execution heuristic filter.
 3. **OS-Level Sandbox Containment (Bubblewrap & Landlock LSM)**: Kernel isolation boundary providing genuine hardware/filesystem/network containment.
 4. **Git Worktree Isolation (`/worktree on`)**: Ephemeral workspace preventing direct modifications to the user's primary working tree.

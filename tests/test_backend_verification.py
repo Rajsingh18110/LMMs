@@ -115,24 +115,26 @@ def test_phase_4_surgical_file_tools_and_ast_guard():
 
     from lmms.backend.tools.files import view_file_outline, read_file_lines, replace_in_file
 
+    orig_ws = os.environ.get("LMMS_ACTIVE_WORKSPACE")
+    os.environ["LMMS_ACTIVE_WORKSPACE"] = workspace_root
     target_file = os.path.join(workspace_root, "lmms/backend/tools/files.py")
 
-    # 1. view_file_outline
-    outline = view_file_outline(target_file)
-    assert "def view_file_outline" in outline, "view_file_outline failed to extract symbols"
-    assert "class FileTool" in outline, "view_file_outline failed to extract class"
-
-    # 2. read_file_lines
-    lines = read_file_lines(target_file, 1, 15)
-    assert "1 |" in lines, "read_file_lines must prefix 1-indexed line numbers"
-    assert "10 |" in lines, "read_file_lines must slice exact line range"
-
-    # 3. AST Compile Guard on syntax error
     test_file = os.path.join(workspace_root, "lmms/backend/test_ast_guard_temp.py")
-    with open(test_file, "w") as f:
-        f.write("def calculate(x, y):\n    return x * y\n")
-
     try:
+        # 1. view_file_outline
+        outline = view_file_outline(target_file)
+        assert "def view_file_outline" in outline, "view_file_outline failed to extract symbols"
+        assert "class FileTool" in outline, "view_file_outline failed to extract class"
+
+        # 2. read_file_lines
+        lines = read_file_lines(target_file, 1, 15)
+        assert "1 |" in lines, "read_file_lines must prefix 1-indexed line numbers"
+        assert "10 |" in lines, "read_file_lines must slice exact line range"
+
+        # 3. AST Compile Guard on syntax error
+        with open(test_file, "w") as f:
+            f.write("def calculate(x, y):\n    return x * y\n")
+
         # Invalid syntax injection
         res_bad = replace_in_file(test_file, "return x * y", "return x * ")
         assert "SyntaxError" in res_bad or "REJECTED" in res_bad
@@ -150,6 +152,10 @@ def test_phase_4_surgical_file_tools_and_ast_guard():
             content = f.read()
         assert "return (x * y) + 1" in content
     finally:
+        if orig_ws is not None:
+            os.environ["LMMS_ACTIVE_WORKSPACE"] = orig_ws
+        else:
+            os.environ.pop("LMMS_ACTIVE_WORKSPACE", None)
         if os.path.exists(test_file):
             os.remove(test_file)
 

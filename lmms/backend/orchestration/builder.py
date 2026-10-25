@@ -69,12 +69,20 @@ class ContextBuilder:
         # 2. Browser navigation instructions (only if browser tools are active)
         if "browser" in instruction_modules or intent_result.intent == IntentType.BROWSER_AUTOMATION:
             sections.append(
-                "## Browser Interaction Rules\n"
-                "To interact with a webpage:\n"
-                "1. First open the URL or inspect the live DOM to see element IDs like [ID 1], [ID 2].\n"
-                "2. Click buttons or links using `browser.click_element` with the ID string.\n"
-                "3. Fill forms using `browser.fill_form` with field ID mappings.\n"
-                "4. Live JS content can be retrieved using `browser.scrape_live`."
+                "## Website-Independent Browser Agent (Observe-Act-Verify Loop)\n"
+                "You are controlling an autonomous browser agent on potentially unfamiliar websites. Never assume site-specific routes or hardcoded selectors.\n"
+                "Follow the strict Observe-Act-Verify cycle on every turn:\n"
+                "1. OBSERVE: Begin by calling `browser.get_interactive_dom` or `browser.observe_page` to inspect the actual live DOM, element IDs [ID 1], forms, and contenteditable editors. Never guess URLs or element IDs.\n"
+                "2. ACT: Choose one grounded action (e.g. `browser.click_element` to navigate, `browser.type` or `browser.fill_form` to populate fields).\n"
+                "   - For rich editors / contenteditable textareas, use `browser.type` with the editor's selector or ID.\n"
+                "3. VERIFY: After typing, verify editor content using `browser.verify_editor_content` to confirm that the text was populated in the DOM. Do NOT claim text was written based merely on sending keystrokes.\n"
+                "4. DRAFT PERSISTENCE: If saving a draft, use `browser.save_draft` or click the observed save button, and verify that page feedback indicates the draft was saved.\n"
+                "5. APPROVAL BEFORE PUBLIC ACTIONS: NEVER click 'Publish', 'Post', 'Submit Question', or submit public content without pausing and calling `browser.request_publication_approval` or requesting explicit user confirmation with the exact text and destination.\n"
+                "6. RECOVERY FROM STALE SELECTORS: If a click or type fails due to dynamic SPA re-rendering, use the fresh DOM returned in the observation to re-locate the element instead of repeating the same action.\n"
+                "7. HONEST REPORTING: Clearly differentiate between: (a) text generated in chat, (b) text entered into an editor, (c) draft saved and verified, (d) public content published, and (e) unverified actions. Never claim a login or draft succeeded without concrete DOM evidence.\n"
+                "8. EXISTING CHROME & LOGGED-IN SESSIONS: If the user asks to open Chrome specifically or use an already logged-in session, use `browser.open_authenticated(url='...')` to attach to their desktop Chrome profile or authenticated session bridge.\n"
+                "9. USER-AUTHORIZED REGISTRATION & WORKFLOWS: When the user explicitly requests you to open a website and perform signup, registration, or form filling with their provided email/credentials, you ARE authorized by the user to proceed. Open the website using `browser.open_url`, inspect the signup form with `browser.get_interactive_dom`, fill the requested fields with `browser.fill_form` or `browser.type`, and complete the action. Do NOT give boilerplate refusal messages about terms of service or privacy when the user explicitly commanded you to perform the task.\n"
+                "10. LOCAL HTML FILES & RUNNING PAGES: To view or run a local HTML or web page on the browser, use `browser.open_url` with the full absolute file URI (e.g. `file:///home/kali/docs/welcome.html`), or launch it directly on the user's desktop screen with `app.launch(app_name_or_target='google-chrome', args=['welcome.html'])`. Never use truncated paths like `file:///welcome.html` without the workspace folder."
             )
 
         # 2b. Web search & information retrieval guidelines

@@ -20,7 +20,25 @@ def is_engine_running() -> bool:
     except Exception:
         return False
 
+def is_engine_model_ready(model_name: str = "Qwen3-Coder-30B-A3B-Instruct-Q3_K_M") -> bool:
+    try:
+        r = requests.get("http://localhost:11435/health", timeout=1.0)
+        if r.status_code != 200:
+            return False
+        data = r.json()
+        loaded = data.get("manager", {}).get("loaded_models", [])
+        if model_name in loaded:
+            return True
+        r_models = requests.get("http://localhost:11435/v1/models", timeout=1.0)
+        if r_models.status_code == 200:
+            models = r_models.json().get("data", [])
+            return any(m.get("id") == model_name for m in models)
+        return False
+    except Exception:
+        return False
+
 ENGINE_RUNNING = is_engine_running()
+ENGINE_MODEL_READY = is_engine_model_ready("Qwen3-Coder-30B-A3B-Instruct-Q3_K_M")
 
 
 from lmms.backend.orchestration.router import IntentRouter, IntentType
@@ -470,7 +488,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
     # -------------------------------------------------------------------------
     # Task 7: End-to-End Real Engine Integration Tests (8 Scenarios)
     # -------------------------------------------------------------------------
-    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    @unittest.skipUnless(ENGINE_MODEL_READY, "Local engine with model Qwen3-Coder-30B-A3B-Instruct-Q3_K_M is not loaded on localhost:11435")
     def test_e2e_1_normal_chat_live_engine(self):
         """1. Normal Chat: Live model responds without injecting tool schemas."""
         ctx, intent, sel, budget = self.pipeline.prepare_request(
@@ -495,7 +513,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
             self.assertTrue(len(first_token) > 0)
             self.assertNotIn("<tool_call>", first_token)
 
-    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    @unittest.skipUnless(ENGINE_MODEL_READY, "Local engine with model Qwen3-Coder-30B-A3B-Instruct-Q3_K_M is not loaded on localhost:11435")
     def test_e2e_2_web_search_live_engine(self):
         """2. Web Search: Live engine with search query correctly selects web_search tool."""
         ctx, intent, sel, budget = self.pipeline.prepare_request(
@@ -520,7 +538,7 @@ class TestSmartContextOrchestration(unittest.TestCase):
                     break
             self.assertTrue(len(first_token) > 0)
 
-    @unittest.skipUnless(ENGINE_RUNNING, "LMMs Engine is not running on localhost:11435")
+    @unittest.skipUnless(ENGINE_MODEL_READY, "Local engine with model Qwen3-Coder-30B-A3B-Instruct-Q3_K_M is not loaded on localhost:11435")
     def test_e2e_3_browser_task_live_engine(self):
         """3. Browser Task: Live engine loads browser tools for URL navigation."""
         ctx, intent, sel, budget = self.pipeline.prepare_request(

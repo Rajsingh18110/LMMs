@@ -8,29 +8,45 @@ class SecureExecutor:
     def execute(self, request: ToolRequest, permission_result, timeout: int = 120) -> ToolResult:
         # We assume permission manager already vetted the request.
         if not permission_result.allowed:
-            record_tool_evidence(request, permission_result, ToolResult("", "", 1, was_denied=True, deny_reason=permission_result.reason))
-            return ToolResult("", "", 1, was_denied=True, deny_reason=permission_result.reason)
+            denial_msg = f"[TOOL_DENIED] {permission_result.reason}\nNotice: The command was NOT executed on the host."
+            record_tool_evidence(request, permission_result, ToolResult("", denial_msg, 1, was_denied=True, deny_reason=permission_result.reason))
+            return ToolResult("", denial_msg, 1, was_denied=True, deny_reason=permission_result.reason)
             
         # Sandbox logic for Terminal commands
         if request.tool_name == "terminal.run":
             cmd = request.kwargs.get("command", "")
             cwd = request.workspace if request.workspace and request.workspace != "None" else None
+            workspace_dir = cwd or os.getcwd()
 
-            if request.permission_level == "sandboxed":
+            # Enforce sandbox containment for restricted permission tiers (sandboxed, low, medium)
+            if request.permission_level in ("sandboxed", "low", "medium"):
                 from lmms_sandbox.runner import default_runner
-                workspace_dir = cwd or os.getcwd()
-                s_res = default_runner.run(cmd, workspace_dir=workspace_dir, cwd=cwd, timeout=timeout, enforce_sandbox=True)
-                result = ToolResult(stdout=s_res.stdout, stderr=s_res.stderr, exit_code=s_res.exit_code)
+                # Caller has already validated or user confirmed permission, so confirm_callback auto-accepts
+                s_res = default_runner.run(
+                    cmd,
+                    workspace_dir=workspace_dir,
+                    cwd=cwd,
+                    timeout=timeout,
+                    enforce_sandbox=True,
+                    confirm_callback=lambda cmd_str, reason: True
+                )
+                if not s_res.success and s_res.exit_code == -1 and s_res.backend_used == "none":
+                    result = ToolResult(stdout="", stderr=s_res.stderr, exit_code=-1, was_denied=True, deny_reason=s_res.stderr)
+                else:
+                    result = ToolResult(stdout=s_res.stdout, stderr=s_res.stderr, exit_code=s_res.exit_code)
                 record_tool_evidence(request, permission_result, result)
                 return result
 
-            # Use shell=False if possible, but the command parser already stripped dangerous bash tokens
-            # Wait, our parser guarantees no meta-characters. So we can use shell=True safely OR shell=False using shlex
+            # Full permission tier: explicit administrative override allows unconfined host execution
             import shlex
             try:
-                parts = shlex.split(cmd)
+                shell_meta = any(op in cmd for op in [">", "<", "|", "&&", "||", ";", "$(", "`"])
+                if shell_meta:
+                    parts = ["bash", "-c", cmd]
+                else:
+                    parts = shlex.split(cmd)
             except ValueError:
-                parts = cmd.split()
+                parts = ["bash", "-c", cmd]
                 
             try:
                 # Set a strict timeout to prevent hanging commands (e.g. reverse shells waiting)

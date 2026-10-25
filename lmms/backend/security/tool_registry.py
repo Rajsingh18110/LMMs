@@ -183,6 +183,13 @@ def register_default_tools():
     registry.register(ToolDefinition(name="browser.screenshot", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.scroll", category="internal", risk_level="safe"))
     registry.register(ToolDefinition(name="browser.open_authenticated", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
+    registry.register(ToolDefinition(name="browser.attach_existing_session", category="internal", risk_level="high", requires_network=True, requires_confirmation=True))
+    registry.register(ToolDefinition(name="browser.observe_page", category="internal", risk_level="safe", requires_network=True))
+    registry.register(ToolDefinition(name="browser.verify_editor_content", category="internal", risk_level="safe", requires_network=True))
+    registry.register(ToolDefinition(name="browser.save_draft", category="internal", risk_level="medium", requires_network=True))
+    registry.register(ToolDefinition(name="browser.request_publication_approval", category="internal", risk_level="medium", requires_network=True))
+    registry.register(ToolDefinition(name="account.get_current_identity", category="internal", risk_level="safe"))
+    registry.register(ToolDefinition(name="browser.get_account_context", category="internal", risk_level="safe"))
     
     # Search, RAG & System
     registry.register(ToolDefinition(name="web_search", category="internal", risk_level="safe", requires_network=True))

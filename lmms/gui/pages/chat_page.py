@@ -21,15 +21,18 @@ import re as _re
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QPushButton, QFrame, QFileDialog, QLabel, QComboBox
+    QPushButton, QFrame, QFileDialog, QLabel, QComboBox, QSplitter
 )
-from PyQt6.QtCore import Qt, pyqtSlot, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer, pyqtSignal, QObject
 
 from lmms.backend.services.chat_service import ChatService
 from lmms.backend.services.chat_event import ChatEvent
 from lmms.backend.agents.core_agents.agents.manager import AgentManager
 from lmms.gui.state.chat_message import ChatMessage
 from lmms.gui.widgets.chat import ChatInputEdit, MessageListWidget
+from lmms.gui.widgets.agent_activity_indicator import AgentActivityIndicator
+from lmms.gui.widgets.browser_live_panel import AgentBrowserLivePanel
+from lmms.backend.events.bus import get_event_bus
 from lmms.backend.config.config import ConfigManager
 
 
@@ -66,6 +69,17 @@ class ChatPage(QWidget):
         self._pending_content = ""
         self._pending_thought = ""
         self._has_pending = False
+
+        # Event bus bridge for threadsafe live agent indicator and browser panel updates
+        class _EventBusBridge(QObject):
+            event_received = pyqtSignal(dict)
+
+        self._bus_bridge = _EventBusBridge()
+        self._bus_bridge.event_received.connect(self._on_bus_event)
+        try:
+            get_event_bus().subscribe_callback(lambda evt: self._bus_bridge.event_received.emit(evt))
+        except Exception:
+            pass
 
         self.init_ui()
 
@@ -143,10 +157,30 @@ class ChatPage(QWidget):
             QPushButton:checked { background: #04395e; color: #ffffff; border: 1px solid #1f6feb; }
             QPushButton:hover:!checked { background: #30363d; }
         """)
+
+        # Live Browser Session Toggle
+        self.browser_toggle_btn = QPushButton("🌐 Browser")
+        self.browser_toggle_btn.setToolTip("Toggle Live Browser Session View")
+        self.browser_toggle_btn.setFixedHeight(24)
+        self.browser_toggle_btn.setCheckable(True)
+        self.browser_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.browser_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: #1f2937; border: 1px solid #374151; color: #93c5fd; font-size: 11px; border-radius: 4px; padding: 2px 8px; font-weight: 500;
+            }
+            QPushButton:checked { background: #0284c7; color: #ffffff; border: 1px solid #38bdf8; }
+            QPushButton:hover:!checked { background: #374151; }
+        """)
+        self.browser_toggle_btn.clicked.connect(self._toggle_browser_panel)
+
+        # Persistent Live Agent Activity Indicator
+        self.activity_indicator = AgentActivityIndicator()
         
         top_layout.addWidget(self.model_filter_combo)
         top_layout.addWidget(self.model_combo, 1) # Give it stretch
         top_layout.addWidget(self.agent_mode_toggle)
+        top_layout.addWidget(self.browser_toggle_btn)
+        top_layout.addWidget(self.activity_indicator)
         
         chat_layout.addWidget(top_toolbar_container)
 
@@ -260,10 +294,98 @@ class ChatPage(QWidget):
         action_row.addWidget(self.btn_review)
         chat_layout.addLayout(action_row)
 
-        main_layout.addWidget(chat_container)
+        # ── Side-by-side Layout (Main Conversation + Observable Browser Panel)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.addWidget(chat_container)
+
+        self.browser_panel = AgentBrowserLivePanel()
+        self.browser_panel.setVisible(False)
+        self.browser_panel.close_requested.connect(lambda: self._set_browser_panel_visible(False))
+        self.splitter.addWidget(self.browser_panel)
+
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+
+        main_layout.addWidget(self.splitter)
 
         self.refresh_models()
         self.start_new_chat()
+
+    def _toggle_browser_panel(self):
+        visible = not self.browser_panel.isVisible()
+        self._set_browser_panel_visible(visible)
+
+    def _set_browser_panel_visible(self, visible: bool):
+        self.browser_panel.setVisible(visible)
+        self.browser_toggle_btn.setChecked(visible)
+
+    @pyqtSlot(dict)
+    def _on_bus_event(self, evt: dict):
+        evt_type = evt.get("type", "")
+        if evt_type == "tool_start":
+            t_name = evt.get("tool", "")
+            kwargs = evt.get("kwargs", {})
+            if t_name == "browser.open_url":
+                url = kwargs.get("url", "")
+                self.activity_indicator.set_navigating(url)
+                self._set_browser_panel_visible(True)
+                self.browser_panel.set_status_overlay("navigating", "Waiting for navigation...")
+                self.browser_panel.add_timeline_event(f"NAVIGATE -> {url}")
+            elif t_name in ("browser.click_element", "browser.pointer_click", "browser.human_click"):
+                sel = kwargs.get("selector", "") or str(kwargs.get("id", ""))
+                mode = "POINTER" if ("pointer" in t_name or "human" in t_name) else "DOM"
+                label = f"Clicking '{sel}'..." if sel else "Clicking element..."
+                self.activity_indicator.set_clicking(f"[{mode}] '{sel}'")
+                self._set_browser_panel_visible(True)
+                self.browser_panel.set_status_overlay("clicking", label)
+                self.browser_panel.add_timeline_event(f"CLICK [{mode}] -> '{sel}'")
+            elif t_name in ("browser.fill_form", "browser.type", "browser.human_type"):
+                fields = kwargs.get("fields", {})
+                self.activity_indicator.set_typing(f"({len(fields)} fields)" if fields else "")
+                self._set_browser_panel_visible(True)
+                self.browser_panel.set_status_overlay("typing", "Entering credentials...")
+                self.browser_panel.add_timeline_event(f"FORM_FILL -> {list(fields.keys()) if fields else kwargs.get('selector', '')}")
+            elif t_name == "browser.get_interactive_dom":
+                self.activity_indicator.set_inspecting()
+                self._set_browser_panel_visible(True)
+                self.browser_panel.set_status_overlay("inspecting", "Inspecting DOM...")
+                self.browser_panel.add_timeline_event("DOM_INSPECT -> Extracted interactive elements")
+            elif t_name.startswith("files."):
+                p = os.path.basename(kwargs.get("path", ""))
+                self.activity_indicator.set_state("file_op", f"{t_name}({p})")
+        elif evt_type == "browser_frame_updated":
+            url = evt.get("url", "")
+            title = evt.get("title", "")
+            path = evt.get("screenshot_path", "")
+            action = evt.get("action", "")
+            self._set_browser_panel_visible(True)
+            self.browser_panel.update_frame(url, title, path, action)
+        elif evt_type == "browser_session_connected":
+            mode = evt.get("mode", "")
+            endpoint = evt.get("endpoint", "")
+            self._set_browser_panel_visible(True)
+            self.browser_panel.set_session_mode(mode, endpoint)
+        elif evt_type == "browser_session_disconnected":
+            self.browser_panel.set_session_mode("none")
+        elif evt_type == "browser_action_ended":
+            action = evt.get("action", "")
+            verified = evt.get("verified", False)
+            success = evt.get("success", True)
+            status_tag = "VERIFIED" if verified else ("FAILED" if not success else "COMPLETED")
+            if verified:
+                self.browser_panel.set_status_overlay("verified", "Action verified")
+            elif not success:
+                self.browser_panel.set_status_overlay("error", "Action failed")
+            self.browser_panel.add_timeline_event(f"[{status_tag}] {action}")
+        elif evt_type == "tool_end":
+            t_name = evt.get("tool", "")
+            success = evt.get("success", True)
+            if not success:
+                self.activity_indicator.set_error(f"{t_name} error")
+                self.browser_panel.set_status_overlay("error", f"{t_name} error")
+            else:
+                self.activity_indicator.set_verifying()
+                self.browser_panel.set_status_overlay("verifying", "Verifying result...")
 
     def set_dirty_count(self, count: int):
         """Update the Review Changes button with the number of dirty files."""
@@ -564,6 +686,7 @@ class ChatPage(QWidget):
         self._pending_thought = ""
         self._has_pending = False
         self.set_send_btn_stop()
+        self.activity_indicator.set_thinking("Initializing request...")
 
         # Start backend generation — pass message_id so ChatService can tag events
         agent_mode = self.agent_mode_toggle.isChecked()
@@ -571,6 +694,17 @@ class ChatPage(QWidget):
 
     def stop_generation(self):
         self.chat_service.cancel()
+        self.activity_indicator.set_cancelled("Cancelled by user")
+        self.browser_panel.set_status_overlay("cancelled", "Task cancelled")
+        try:
+            from lmms.backend.tools.browser import get_browser_tool
+            get_browser_tool()._notify_browser_event("browser_action_ended", {
+                "action": "session_cancelled",
+                "success": False,
+                "error": "Cancelled by user"
+            })
+        except Exception:
+            pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # Event routing
@@ -582,6 +716,8 @@ class ChatPage(QWidget):
             return  # Stale event from a cancelled generation
 
         if event.type == "reasoning_delta":
+            if self.activity_indicator.get_state() != "thinking":
+                self.activity_indicator.set_thinking()
             self._pending_thought += event.content
             self._has_pending = True
             if not self.update_timer.isActive():
@@ -656,10 +792,13 @@ class ChatPage(QWidget):
         if msg:
             if is_error:
                 msg.set_status("error")
+                self.activity_indicator.set_error("Operation failed")
             elif is_cancelled:
                 msg.set_status("cancelled")
+                self.activity_indicator.set_cancelled("Cancelled")
             else:
                 msg.set_status("done")
+                self.activity_indicator.set_success("Task completed")
             self.message_list.update_message(msg)
 
         self.active_message_id = None

@@ -38,7 +38,17 @@ test_*.py
 !tests/test_online_models.py
 !tests/test_dns_tool.py
 !tests/test_research_and_finalization.py
+!tests/test_context_budget_regression.py
+!tests/test_timeline_ui.py
+!tests/test_browser_agent_investigation.py
+!tests/test_terminal_escape_prevention.py
 !tests/capture_panel_live_proof.py
+!tests/test_generic_browser_agent.py
+!tests/test_audit_remediation_regression.py
+!tests/test_file_writing_reliability.py
+!tests/test_persistent_session_and_cdp.py
+!tests/test_completion_guard_regression.py
+!tests/test_gemini_permission_and_multimodal.py
 !tests/run_demo_benchmark.py
 
 patch_*.py

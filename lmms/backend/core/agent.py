@@ -13,7 +13,7 @@ from lmms.backend.models import ModelManager
 from lmms.backend.memory.core_memory import Memory
 from lmms.gui.widgets.canvas import get_canvas
 from lmms.backend.tools.search import web_search
-from lmms.backend.tools.browser import BrowserTool
+from lmms.backend.tools.browser import BrowserTool, get_browser_tool
 from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
 from lmms.backend.tools.app_launcher import AppLauncherTool
@@ -72,7 +72,7 @@ class HexAgent:
         self.memory = Memory()
         self.undo_stack = []
         self.redo_stack = []
-        self.browser_tool = BrowserTool()
+        self.browser_tool = get_browser_tool()
         self.file_tool = FileTool()
         self.file_tool.agent = self
         self.terminal_tool = TerminalTool()
@@ -175,10 +175,10 @@ class HexAgent:
             {"type": "function", "function": {
                 "name": "send_message", "description": "Send a message via native desktop notification, Telegram, Discord, or Slack webhook.",
                 "parameters": {"type": "object", "properties": {
-                    "platform": {"type": "string", "description": "'desktop', 'telegram', 'discord', or 'slack'"},
+                    "platform": {"type": "string", "description": "'desktop', 'telegram', 'discord', or 'slack'", "default": "desktop"},
                     "message": {"type": "string", "description": "Message text to send"},
                     "recipient": {"type": "string", "description": "Notification title or Telegram chat ID / Webhook URL"}
-                }, "required": ["platform", "message"]}}},
+                }, "required": ["message"]}}},
             {"type": "function", "function": {
                 "name": "read_file", "description": "Read contents of a local file",
                 "parameters": {"type": "object", "properties": {

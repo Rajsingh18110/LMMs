@@ -572,6 +572,115 @@ class ToolRegistry:
             )
         )
 
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.observe_page",
+                    name="Browser Observe Page",
+                    category="browser",
+                    summary="Extract comprehensive website-independent observation: URL, title, forms, inputs, contenteditable editors, and live action buttons.",
+                    tags=["browser", "dom", "observe", "editor", "form"],
+                    risk_level="safe",
+                    estimated_tokens=55
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Optional URL to observe"}
+                    }
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.verify_editor_content",
+                    name="Browser Verify Editor Content",
+                    category="browser",
+                    summary="Verifies whether an editor, textarea, or contenteditable area on the active page actually contains the drafted content.",
+                    tags=["browser", "editor", "verify", "content"],
+                    risk_level="safe",
+                    estimated_tokens=40
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "Element ID number or selector of editor"},
+                        "expected_substring": {"type": "string", "description": "Substring expected to be present in the editor"}
+                    }
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.save_draft",
+                    name="Browser Save Draft",
+                    category="browser",
+                    summary="Dynamically discovers and clicks the website's draft saving control, then verifies that the draft was persisted.",
+                    tags=["browser", "draft", "save", "persist"],
+                    risk_level="medium",
+                    estimated_tokens=45
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "button_selector": {"type": "string", "description": "Optional explicit selector or ID for the save button"}
+                    }
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="browser.request_publication_approval",
+                    name="Request Publication Approval",
+                    category="browser",
+                    summary="Pauses and asks for explicit human approval before clicking a public submit/publish button on any website.",
+                    tags=["browser", "publish", "approval", "confirm"],
+                    risk_level="medium",
+                    estimated_tokens=45
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "target_selector": {"type": "string", "description": "Selector or ID of the publish button"},
+                        "action_type": {"type": "string", "description": "Type of action (publish_post, ask_question, submit_form)", "default": "publish_post"},
+                        "content_summary": {"type": "string", "description": "Brief summary of the content to be published"}
+                    },
+                    "required": ["target_selector"]
+                },
+                instruction_module="browser"
+            )
+        )
+
+        self.register(
+            DynamicToolDefinition(
+                metadata=ToolMetadata(
+                    id="account.get_current_identity",
+                    name="Get Current Account Identity",
+                    category="system",
+                    summary="Safely retrieve the user's available browser profile accounts and environment identity (e.g. primary email, git config user, browser profiles). Does NOT expose passwords or session keys.",
+                    tags=["account", "identity", "email", "user", "profile"],
+                    risk_level="low",
+                    estimated_tokens=35
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                },
+                instruction_module="browser"
+            ),
+            aliases=["browser.get_account_context"]
+        )
+
         # 3. File Operations
         self.register(
             DynamicToolDefinition(

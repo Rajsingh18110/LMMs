@@ -189,12 +189,13 @@ def test_tool_approval_timeout_and_disconnect_default_deny(temp_runtime_dir):
                 return ["I will use a tool:\n<tool_call>rm -rf /tmp/test</tool_call>"]
 
             server.dispatcher.stream_generator = mock_tool_call_gen
+            new_session = server.dispatcher.store.create_session("Deny Test Session")
 
             req_payload = {
                 "jsonrpc": "2.0",
                 "id": 10,
                 "method": "message.send",
-                "params": {"content": "Trigger tool call", "permission_tier": "medium"},
+                "params": {"session_id": new_session.session_id, "content": "Trigger tool call", "permission_tier": "medium"},
             }
             writer.write((json.dumps(req_payload) + "\n").encode("utf-8"))
             await writer.drain()

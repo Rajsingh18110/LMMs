@@ -339,7 +339,7 @@ Exécutez des modèles massifs dépassant la VRAM physique grâce au déchargeme
 | `/status` | Vérifier la santé en temps réel du moteur et du matériel |
 | `/doctor` | Lancer un diagnostic complet du système et des tests d'autoréparation |
 | `/pair` | Activer le mode de programmation en binôme interactif |
-| `/perm <level>` | Régler le niveau de permission du bac à sable (`strict`, `ask`, `full`) |
+| `/perm <level>` | Régler le niveau de permission du bac à sable (`sandboxed`, `low`, `medium`, `full`) |
 | `/agent` | Créer et gérer des sous-agents autonomes pour l'exécution parallèle |
 | `/orchestrate` | Superviser les flux de travail coordonnés multi-agents |
 

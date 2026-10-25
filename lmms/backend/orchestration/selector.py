@@ -153,37 +153,83 @@ class ToolSelector:
         """
         Progressively discover and add an extra tool capability during multi-step execution
         without reloading the model.
+        Also resolves declared dependencies and bundles essential browser companion tools.
         """
         tool = self.registry.get(missing_capability)
         if not tool:
-            # Search by tag or category
+            # Search by ID, tag, or category
+            missing_lower = missing_capability.lower()
             for t in self.registry._tools.values():
-                if missing_capability.lower() in t.id or missing_capability.lower() in t.metadata.tags:
+                if (missing_lower in t.id
+                    or any(tag in missing_lower for tag in t.metadata.tags)
+                    or any(missing_lower in tag for tag in t.metadata.tags)
+                    or missing_lower in t.category):
                     tool = t
                     break
 
         if not tool:
             return current_selection
 
-        if tool.id in current_selection.selected_ids:
+        candidates_to_add: List[DynamicToolDefinition] = []
+        if tool.id not in current_selection.selected_ids:
+            candidates_to_add.append(tool)
+
+        # 1. Resolve declared dependencies
+        for dep_id in tool.metadata.dependencies:
+            if dep_id not in current_selection.selected_ids and not any(c.id == dep_id for c in candidates_to_add):
+                dep_tool = self.registry.get(dep_id)
+                if dep_tool and dep_tool.enabled:
+                    candidates_to_add.append(dep_tool)
+
+        # 2. Companion bundling: If a browser navigation tool is added, bundle interactive DOM companions
+        if tool.category == "browser" or tool.id.startswith("browser."):
+            browser_companions = [
+                "browser.get_interactive_dom",
+                "browser.observe_page",
+                "browser.click_element",
+                "browser.fill_form",
+                "browser.type",
+                "browser.verify_editor_content",
+                "browser.save_draft",
+                "browser.request_publication_approval"
+            ]
+            for comp_id in browser_companions:
+                if comp_id not in current_selection.selected_ids and not any(c.id == comp_id for c in candidates_to_add):
+                    comp_tool = self.registry.get(comp_id)
+                    if comp_tool and comp_tool.enabled:
+                        candidates_to_add.append(comp_tool)
+
+        # 3. Account / Identity companion bundling
+        if any(k in missing_capability.lower() for k in ("account", "identity", "email", "profile", "user")):
+            for acc_id in ["account.get_current_identity", "browser.get_account_context"]:
+                if acc_id not in current_selection.selected_ids and not any(c.id == acc_id for c in candidates_to_add):
+                    acc_tool = self.registry.get(acc_id)
+                    if acc_tool and acc_tool.enabled:
+                        candidates_to_add.append(acc_tool)
+
+        if not candidates_to_add:
             return current_selection
 
         new_selected = list(current_selection.selected_tools)
         new_ids = list(current_selection.selected_ids)
         new_rationale = dict(current_selection.rationale)
         new_modules = set(current_selection.instruction_modules)
+        accumulated_tokens = current_selection.total_estimated_tokens
 
-        new_selected.append(tool)
-        new_ids.append(tool.id)
-        new_rationale[tool.id] = f"Dynamically discovered during execution: needed capability '{missing_capability}'"
-        if tool.instruction_module:
-            new_modules.add(tool.instruction_module)
+        for candidate in candidates_to_add:
+            if accumulated_tokens + candidate.metadata.estimated_tokens <= max_tool_tokens:
+                new_selected.append(candidate)
+                new_ids.append(candidate.id)
+                new_rationale[candidate.id] = f"Dynamically discovered during execution: '{candidate.id}'"
+                accumulated_tokens += candidate.metadata.estimated_tokens
+                if candidate.instruction_module:
+                    new_modules.add(candidate.instruction_module)
 
         return SelectionResult(
             selected_tools=new_selected,
             selected_ids=new_ids,
             rejected_ids=current_selection.rejected_ids,
             rationale=new_rationale,
-            total_estimated_tokens=current_selection.total_estimated_tokens + tool.metadata.estimated_tokens,
+            total_estimated_tokens=accumulated_tokens,
             instruction_modules=new_modules
         )

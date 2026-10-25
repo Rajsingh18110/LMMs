@@ -41,6 +41,7 @@ class InteractiveChat:
         ]
         self.mode = "deep"
         self.think = True
+        self.permission_level = "medium"
 
     def _on_context_changed(self, new_messages: List[Dict[str, Any]]) -> None:
         """Callback triggered when session switches, forks, or is compacted/restored."""
@@ -245,9 +246,12 @@ class InteractiveChat:
 
 
         elif cmd == "/perm":
+            SUPPORTED_PERMISSION_LEVELS = ["sandboxed", "low", "medium", "full"]
             if len(parts) > 1:
                 level = parts[1].lower()
-                if level == "sandboxed":
+                if level not in SUPPORTED_PERMISSION_LEVELS:
+                    sys.stdout.write(f"  {COLOR_RED}Invalid permission level '{level}'. Supported levels: sandboxed, low, medium, full.{COLOR_RESET}\n\n")
+                elif level == "sandboxed":
                     from lmms_sandbox.runner import default_runner
                     s_status = default_runner.get_status()
                     if s_status["isolation_status"] == "NOT isolated":
@@ -256,11 +260,24 @@ class InteractiveChat:
                     else:
                         self.permission_level = "sandboxed"
                         sys.stdout.write(f"  {COLOR_GREEN}✓ Permission tier set to: sandboxed ({s_status['isolation_status']}){COLOR_RESET}\n\n")
-                elif level in ["low", "medium", "full"]:
+                elif level == "full":
+                    sys.stdout.write(f"\n  {COLOR_YELLOW}⚠️  SECURITY WARNING: UNRESTRICTED FULL PERMISSION MODE{COLOR_RESET}\n")
+                    sys.stdout.write(f"  {COLOR_RED}Full mode completely bypasses OS sandbox containment and workspace boundary restrictions.{COLOR_RESET}\n")
+                    sys.stdout.write(f"  {COLOR_YELLOW}Commands can modify, read, or delete files anywhere on the host without sandbox isolation.{COLOR_RESET}\n")
+                    force_flag = any(p in parts[2:] for p in ("--force", "-y", "yes"))
+                    if not force_flag:
+                        try:
+                            ans = input("  Enable unconfined full host execution? (yes/no): ").strip().lower()
+                        except (EOFError, KeyboardInterrupt):
+                            ans = "no"
+                        if ans not in ("yes", "y"):
+                            sys.stdout.write(f"  {COLOR_RED}Aborted: Full permission mode not enabled. Retaining: {getattr(self, 'permission_level', 'medium')}{COLOR_RESET}\n\n")
+                            return False
+                    self.permission_level = "full"
+                    sys.stdout.write(f"  {COLOR_RED}⚠️ Permission tier set to: full (UNCONFINED HOST EXECUTION){COLOR_RESET}\n\n")
+                else:  # low or medium
                     self.permission_level = level
                     sys.stdout.write(f"  {COLOR_GREEN}✓ Permission tier set to: {level}{COLOR_RESET}\n\n")
-                else:
-                    sys.stdout.write(f"  {COLOR_RED}Invalid permission level. Use: sandboxed, low, medium, full.{COLOR_RESET}\n\n")
             else:
                 cur = getattr(self, "permission_level", "medium")
                 sys.stdout.write(f"  Active permission tier: {COLOR_CYAN}{cur}{COLOR_RESET} (available: sandboxed, low, medium, full)\n\n")

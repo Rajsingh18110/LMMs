@@ -4,7 +4,8 @@ import shutil
 import ast
 import re
 import difflib
-from typing import Dict, Any, Optional, List
+import hashlib
+from typing import Dict, Any, Optional, List, Tuple
 
 from lmms.backend.tools.core import default_registry, default_executor, ToolDefinition, Permission
 from lmms.backend.config.config import ConfigManager
@@ -43,22 +44,95 @@ def canonical_file_read(path: str) -> Dict[str, Any]:
         content = f.read()
     return {"content": content, "path": path}
 
+def _write_and_verify(resolved_path: str, content: str, max_retries: int = 1) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Writes file content to disk with fsync and performs read-back verification (character count, byte count, SHA256).
+    Performs bounded recovery retry on integrity mismatch.
+    Returns (success, message_or_error, stats_dict).
+    """
+    if content is None:
+        content = ""
+    elif not isinstance(content, str):
+        content = str(content)
+
+    expected_bytes = content.encode("utf-8")
+    expected_sha = hashlib.sha256(expected_bytes).hexdigest()
+    expected_chars = len(content)
+    expected_lines = len(content.splitlines()) if content else 0
+
+    attempt = 0
+    while attempt <= max_retries:
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(resolved_path)), exist_ok=True)
+            with open(resolved_path, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+
+            # Read-back verification
+            with open(resolved_path, "r", encoding="utf-8") as rf:
+                persisted = rf.read()
+
+            persisted_bytes = persisted.encode("utf-8")
+            persisted_sha = hashlib.sha256(persisted_bytes).hexdigest()
+
+            if persisted == content and persisted_sha == expected_sha:
+                stats = {
+                    "lines": expected_lines,
+                    "chars": expected_chars,
+                    "bytes": len(expected_bytes),
+                    "sha256": expected_sha
+                }
+                msg = f"[FILE_WRITE_VERIFIED] Successfully wrote and verified {resolved_path} ({expected_lines} lines, {expected_chars} chars, {len(expected_bytes)} bytes, sha256:{expected_sha[:8]})."
+                return True, msg, stats
+            else:
+                attempt += 1
+                if attempt <= max_retries:
+                    continue
+                err_msg = (
+                    f"FILE_WRITE_INTEGRITY_ERROR: Read-back verification failed for {resolved_path}. "
+                    f"Expected {expected_chars} chars ({len(expected_bytes)} bytes, sha256:{expected_sha[:8]}), "
+                    f"but read back {len(persisted)} chars ({len(persisted_bytes)} bytes, sha256:{persisted_sha[:8]})."
+                )
+                return False, err_msg, {}
+        except Exception as e:
+            attempt += 1
+            if attempt > max_retries:
+                return False, f"Error writing file {resolved_path}: {str(e)}", {}
+
+    return False, f"FILE_WRITE_INTEGRITY_ERROR: Failed to verify {resolved_path} after retries.", {}
+
 def canonical_file_write(path: str, content: str) -> Dict[str, Any]:
-    resolved_path = enforce_boundary(path)
+    try:
+        resolved_path = enforce_boundary(path)
+    except Exception as e:
+        return {
+            "status": "error",
+            "verified": False,
+            "error": f"[FILE_WRITE_ERROR] Boundary violation: {str(e)}",
+            "path": path
+        }
     if path.endswith(".py"):
         try:
             ast.parse(content, filename=resolved_path)
         except SyntaxError as e:
             return {
                 "status": "error",
+                "verified": False,
                 "error": f"SyntaxError on line {e.lineno}: {e.msg}. File was NOT saved.",
                 "path": path
             }
     _record_pre_state(resolved_path)
-    os.makedirs(os.path.dirname(os.path.abspath(resolved_path)), exist_ok=True)
-    with open(resolved_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return {"status": "success", "path": path}
+    success, msg, stats = _write_and_verify(resolved_path, content)
+    if not success:
+        return {"status": "error", "verified": False, "error": msg, "path": path}
+    return {
+        "status": "success",
+        "path": path,
+        "verified": True,
+        "message": msg,
+        **stats
+    }
 
 def canonical_view_file_outline(path: str) -> Dict[str, Any]:
     ft = FileTool()
@@ -302,7 +376,7 @@ class FileTool:
         try:
             path = enforce_boundary(path)
         except Exception as e:
-            return f"Error: {str(e)}"
+            return f"[FILE_WRITE_ERROR] Error: Workspace boundary violation: {str(e)}"
 
         old_content = None
         if os.path.exists(path):
@@ -323,22 +397,21 @@ class FileTool:
                 )
 
         _record_pre_state(path)
-        try:
-            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-            
-            if hasattr(self, "agent") and self.agent:
-                self.agent.push_action({
-                    "type": "file_write",
-                    "path": path,
-                    "old_content": old_content,
-                    "new_content": content
-                })
-            
-            return f"Successfully wrote to {path}"
-        except Exception as e:
-            return f"Error writing file: {str(e)}"
+        success, msg, stats = _write_and_verify(path, content)
+        if not success:
+            return msg
+
+        if hasattr(self, "agent") and self.agent:
+            self.agent.push_action({
+                "type": "file_write",
+                "path": path,
+                "old_content": old_content,
+                "new_content": content,
+                "verified": True,
+                **stats
+            })
+
+        return msg
 
     def edit_in_vscode(self, path: str) -> str:
         try:

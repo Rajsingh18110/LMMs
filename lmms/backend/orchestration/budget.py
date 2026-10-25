@@ -91,6 +91,17 @@ class TokenBudgetManager:
         self._token_cache: Dict[tuple, int] = {}
         self._engine_offline = (engine_url in self._global_offline_urls)
 
+    @classmethod
+    def clear_global_cache(cls):
+        """Clears the global limit cache (e.g. on provider or model switch)."""
+        cls._global_limit_cache.clear()
+
+    def clear_cache(self):
+        """Clears instance and global token/limit caches."""
+        self._limit_cache.clear()
+        self._token_cache.clear()
+        TokenBudgetManager.clear_global_cache()
+
     def get_effective_context_limit(self, model_name: str) -> int:
         """
         Determines the true context window limit dynamically:
@@ -108,13 +119,22 @@ class TokenBudgetManager:
             return limit
 
         # 1. Online Model Registry & Dynamic Cloud Limits
+        # STRICT ISOLATION: Only apply cloud/online provider context limits if the requested model
+        # is explicitly registered or matches a well-known cloud API model family.
+        # Never hijack local/offline model requests like Qwen-1.5B!
         try:
             from lmms.backend.core.registry.online_models import OnlineModelRegistry
             online_model = OnlineModelRegistry.get_model(model_name)
-            if online_model is None and OnlineModelRegistry.get_active_type() == "online":
-                online_model = OnlineModelRegistry.get_active_model()
+            is_explicit_online = (online_model is not None)
 
-            if online_model is not None or OnlineModelRegistry.is_online_model(model_name):
+            m_lower = model_name.lower().strip()
+            is_well_known_cloud = (
+                m_lower.startswith(("gemini", "claude", "gpt-4", "gpt-3.5", "o1", "o3", "nvidia/"))
+                or "gemini-" in m_lower
+                or "claude-" in m_lower
+            )
+
+            if is_explicit_online or is_well_known_cloud:
                 # Check user explicit context config
                 if online_model and online_model.get("context_window"):
                     cw = int(online_model["context_window"])
@@ -124,7 +144,7 @@ class TokenBudgetManager:
                         return cw
 
                 # Check model name or configured model id
-                mid = f"{model_name.lower()} {(online_model.get('id', '') if online_model else '').lower()}"
+                mid = f"{m_lower} {(online_model.get('id', '') if online_model else '').lower()}"
                 p_id = (online_model.get("provider_id", "") if online_model else "").lower()
 
                 if "gemini" in mid or "gemini" in p_id:
@@ -133,7 +153,7 @@ class TokenBudgetManager:
                     limit = 200000   # 200k context
                 elif any(k in mid for k in ["gpt-4", "gpt-4o", "o1", "o3", "chatgpt"]):
                     limit = 128000   # 128k context
-                elif any(k in mid for k in ["nemotron", "llama-3", "llama3", "deepseek", "qwen", "mistral"]):
+                elif any(k in mid for k in ["nemotron", "llama-3", "llama3", "deepseek", "mistral"]):
                     limit = 131072   # 128k context
                 else:
                     limit = 131072   # Standard 128k context for modern cloud webhooks
@@ -293,10 +313,11 @@ class TokenBudgetManager:
             elif context_limit >= 8000:       # 8k
                 output_reserve = 2048
             else:                             # <= 4k
-                output_reserve = min(1024, max(512, context_limit // 4))
+                output_reserve = self.default_output_reserve
 
         safety = self.safety_margin
-        usable_context = max(512, context_limit - output_reserve - safety)
+        usable_context = max(0, context_limit - output_reserve - safety)
+        usable_context = min(usable_context, context_limit)
 
         base_tokens = self.count_tokens(base_prompt, model_name)
         task_tokens = self.count_tokens(task_instructions, model_name)

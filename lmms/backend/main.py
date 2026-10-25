@@ -13,7 +13,7 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from lmms.backend.memory.persona import get_persona, auto_extract_persona
 from lmms.backend.tools.search import web_search
-from lmms.backend.tools.browser import BrowserTool
+from lmms.backend.tools.browser import BrowserTool, get_browser_tool
 from lmms.backend.tools.files import FileTool
 from lmms.backend.tools.terminal import TerminalTool
 from lmms.backend.tools.app_launcher import AppLauncherTool
@@ -60,7 +60,10 @@ def _patched_ask(message, choices=None, default=None, **kwargs):
     ansi_str = sio.getvalue()
     
     while True:
-        ans = prompt(ANSI(ansi_str)).strip()
+        try:
+            ans = prompt(ANSI(ansi_str)).strip()
+        except (KeyboardInterrupt, EOFError):
+            return default or ""
         if not ans and default is not None:
             return default
         if not choices or ans in choices:
@@ -179,10 +182,17 @@ def should_force_tool_mode(prompt: str) -> bool:
     if any(sig in lowered for sig in explicit_tool_signals):
         return True
 
-    if len(cleaned.split()) <= 8 and any(word in lowered for word in [
-        "hello", "hi", "hey", "thanks", "good morning", "good evening",
-        "what is", "who are you", "how are you", "can you help", "who are",
-    ]):
+    # Check for pure conversational greetings (with strict word boundaries to avoid matching substrings like 'hi' in 'which')
+    greeting_words = ["hello", "hi", "hey", "thanks", "thank you", "good morning", "good evening", "good afternoon"]
+    is_greeting = any(re.search(rf"\b{re.escape(w)}\b", lowered) for w in greeting_words)
+    is_common_qa = any(lowered.startswith(p) for p in ["what is", "who are you", "how are you", "can you help", "who are"])
+
+    # If it's a greeting/QA but explicitly mentions action verbs or file/tool operations, it's NOT casual chat
+    has_action = any(re.search(rf"\b{re.escape(a)}\b", lowered) for a in [
+        "run", "open", "file", "html", "read", "write", "create", "launch", "execute", "browse", "test", "check", "code", "terminal", "login"
+    ])
+
+    if len(cleaned.split()) <= 8 and (is_greeting or is_common_qa) and not has_action:
         return False
 
     # Tool-driven commands are typically imperative and task-like rather than casual chat.
@@ -263,141 +273,13 @@ def get_clean_model_display_name(model_key_or_name: str) -> str:
     return model_key_or_name
 
 
-def render_tool_execution_panel(t_name: str, t_kwargs: Dict[str, Any], step: int = 0, max_steps: int = 0):
-    """
-    Renders sleek, modern, Gemini-inspired timeline tree nodes for tool executions.
-    Features connected vertical branches (│ ├──) without cartoon stickers or bulky boxes.
-    """
-    clean_kwargs = dict(t_kwargs or {})
-
-    # Connected vertical timeline trunk
-    console.print("[dim]  │[/dim]")
-
-    if t_name in ("files.write", "file.write", "write_file"):
-        path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
-        content = clean_kwargs.get("content") or clean_kwargs.get("data") or clean_kwargs.get("text") or clean_kwargs.get("code") or ""
-        lines = content.splitlines() if content else []
-        line_count = len(lines)
-        byte_count = len(content.encode("utf-8")) if content else 0
-
-        console.print(f"[dim]  ├──[/dim] [bold green]✍️ Writing[/bold green] [cyan]{path}[/cyan] [dim]({line_count} lines · {byte_count:,} bytes)[/dim]")
-        if lines:
-            preview = [f"[dim]  │   │  {l}[/dim]" for l in lines[:3]]
-            if len(lines) > 3:
-                preview.append(f"[dim]  │   │  ... +{len(lines) - 3} more lines[/dim]")
-            console.print("\n".join(preview))
-
-    elif t_name in ("files.read", "file.read", "read_file"):
-        path = clean_kwargs.get("path") or clean_kwargs.get("file_path") or clean_kwargs.get("filename") or ""
-        console.print(f"[dim]  ├──[/dim] [bold blue]📄 Reading[/bold blue] [cyan]{path}[/cyan]")
-
-    elif t_name in ("files.list", "list_folder"):
-        path = clean_kwargs.get("path") or "."
-        console.print(f"[dim]  ├──[/dim] [bold yellow]📂 Scanning[/bold yellow] [cyan]{path}[/cyan]")
-
-    elif t_name == "terminal.run":
-        cmd_str = clean_kwargs.get("command") or clean_kwargs.get("cmd") or ""
-        console.print(f"[dim]  ├──[/dim] [bold magenta]💻 Terminal[/bold magenta] [dim white]$ {cmd_str}[/dim white]")
-
-    elif t_name in ("patch.apply", "apply_patch"):
-        path = clean_kwargs.get("path") or ""
-        console.print(f"[dim]  ├──[/dim] [bold cyan]⚡ Patching[/bold cyan] [cyan]{path}[/cyan]")
-
-    elif t_name in ("web_search", "web.search"):
-        query = clean_kwargs.get("query") or clean_kwargs.get("q") or ""
-        console.print(f"[dim]  ├──[/dim] [bold cyan]🔍 Searching[/bold cyan] [white]\"{query}\"[/white]")
-
-    elif t_name in ("browser.open_url", "open_url"):
-        url = clean_kwargs.get("url") or ""
-        console.print(f"[dim]  ├──[/dim] [bold cyan]🌐 Opening URL[/bold cyan] [dim cyan]{url}[/dim cyan]")
-
-    elif t_name in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
-        domain = clean_kwargs.get("domain") or clean_kwargs.get("target") or clean_kwargs.get("host") or ""
-        qtype = clean_kwargs.get("query_type", "all")
-        console.print(f"[dim]  ├──[/dim] [bold cyan]🌐 Resolving DNS[/bold cyan] [white]{domain}[/white] [dim]({qtype})[/dim]")
-
-    else:
-        filtered = {k: v for k, v in clean_kwargs.items() if k not in ("content", "patch")}
-        arg_str = f" [dim]{json.dumps(filtered)}[/dim]" if filtered else ""
-        console.print(f"[dim]  ├──[/dim] [bold cyan]⚙️ {t_name}[/bold cyan]{arg_str}")
-
-
-def render_tool_observation_panel(t_name: str, observation: str, step: int = 0, max_steps: int = 0):
-    """
-    Renders Gemini-style connected branches with source pills for web searches and clean tree leaves for tool results.
-    Prevents scroll lock and terminal flooding.
-    """
-    import re
-    import urllib.parse
-
-    obs_str = str(observation).strip()
-    if not obs_str:
-        return
-
-    # Special handling for Web Search / Browser: Render Domain Pill Badges connected to the tree
-    if t_name in ("web_search", "web.search", "browser.open_url", "open_url"):
-        urls = re.findall(r'https?://[^\s)\]\'"]+', obs_str)
-        domains = []
-        for u in urls:
-            try:
-                d = urllib.parse.urlparse(u).netloc.replace("www.", "")
-                if d and d not in domains and "." in d and len(d) > 3:
-                    domains.append(d)
-            except Exception:
-                pass
-
-        if domains:
-            # Rounded pill style in dark slate background: [domain.com]
-            pills = "[dim]  │   [/dim]  " + "  ".join(f"[bold white on #262626]  {d}  [/]" for d in domains[:5])
-            console.print(pills)
-        else:
-            first_line = obs_str.splitlines()[0][:85]
-            console.print(f"[dim]  │   └── {first_line}[/dim]")
-        return
-
-    # DNS tool observation: render verified records / discovered subdomains
-    if t_name in ("dns.enumerate", "dns_enumerate", "dns.lookup", "dns_lookup", "enumerate_subdomains"):
-        verified_lines = [l.strip() for l in obs_str.splitlines() if "[VERIFIED]" in l or "• A" in l or "• MX" in l or "• NS" in l or "• TXT" in l]
-        if verified_lines:
-            for vl in verified_lines[:5]:
-                console.print(f"[dim]  │   ├──[/dim] [green]{vl}[/green]")
-        else:
-            first_line = obs_str.splitlines()[0][:85]
-            console.print(f"[dim]  │   └── {first_line}[/dim]")
-        return
-
-    # For Terminal Run: Show clean 1-2 line summary of output
-    if t_name == "terminal.run":
-        lines = [l.strip() for l in obs_str.splitlines() if l.strip()]
-        if lines:
-            summary = lines[0] if len(lines) == 1 else lines[-1]
-            if len(summary) > 90:
-                summary = summary[:88] + "..."
-            console.print(f"[dim]  │   └── ✓ {summary}[/dim]")
-        return
-
-    # For File Write:
-    if t_name in ("files.write", "file.write", "write_file"):
-        console.print(f"[dim]  │   └── ✓ Saved successfully[/dim]")
-        return
-
-    # For File Read / List:
-    if t_name in ("files.read", "file.read", "read_file"):
-        line_count = len(obs_str.splitlines())
-        console.print(f"[dim]  │   └── {line_count} lines loaded[/dim]")
-        return
-
-    if t_name in ("files.list", "list_folder"):
-        items = len(obs_str.splitlines())
-        console.print(f"[dim]  │   └── Found {items} items[/dim]")
-        return
-
-    # Generic tool output
-    lines = obs_str.splitlines()
-    first_line = lines[0][:85] if lines else obs_str[:85]
-    console.print(f"[dim]  │   └── {first_line}[/dim]")
-    first = lines[0][:80] if lines else "Done."
-    console.print(f"    [dim]└── {first}[/dim]")
+from lmms.backend.cli.timeline import (
+    TimelineRenderer,
+    get_timeline_renderer,
+    render_tool_execution_panel,
+    render_tool_observation_panel,
+    extract_domain_pills,
+)
 
 
 async def ipc_handshake():
@@ -676,21 +558,33 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
         return {}
 
     raw_tc = raw_tc.strip()
+    # Strip any outer tool_call tag wrappers immediately
+    raw_tc = re.sub(r'</?tool_call>', '', raw_tc).strip()
 
     # 1. XML-style function calling (Nemotron / Hermes / Qwen / Command-R)
     # Examples:
     # <function=files.list><kwargs>{"path":"..."}</parameter></function>
     # <function=terminal.run><parameter=command>ls -la</parameter></function>
-    fn_match = re.search(r'<function(?:=|\s+name=[\"\']?)([^>\s\"\']+)[\"\']?>', raw_tc, re.IGNORECASE)
-    if not fn_match:
-        fn_match = re.search(r'<function>([^<]+)</function>', raw_tc, re.IGNORECASE)
+    # <function_call>="terminal.run" tool="terminal.run"><parameter>command>ls -la</parameter></function_call>
+    tool_name = ""
+    attr_match = re.search(r'\b(?:tool|name)=[\"\']([^\"\']+)[\"\']', raw_tc, re.IGNORECASE)
+    if attr_match:
+        tool_name = attr_match.group(1).strip()
 
-    if fn_match:
-        tool_name = fn_match.group(1).strip()
+    if not tool_name:
+        fn_match = re.search(r'<(?:function|function_call)>?[=\s]+[\"\']?([a-zA-Z0-9_.\-]+)[\"\']?>?', raw_tc, re.IGNORECASE)
+        if not fn_match:
+            fn_match = re.search(r'<(?:function|function_call)\s+name=[\"\']?([a-zA-Z0-9_.\-]+)[\"\']?>', raw_tc, re.IGNORECASE)
+        if not fn_match:
+            fn_match = re.search(r'<(?:function|function_call)>([a-zA-Z0-9_.\-]+)</(?:function|function_call)>', raw_tc, re.IGNORECASE)
+        if fn_match:
+            tool_name = fn_match.group(1).strip()
+
+    if tool_name and tool_name not in ('<tool_name>', 'tool_name'):
         kwargs = {}
 
         # Look for JSON payload in <kwargs> or <arguments>
-        kw_json = re.search(r'<(?:kwargs|arguments)>(.*?)(?:</(?:kwargs|arguments)>|</parameter>|</function>|$)', raw_tc, re.DOTALL | re.IGNORECASE)
+        kw_json = re.search(r'<(?:kwargs|arguments)>(.*?)(?:</(?:kwargs|arguments)>|</parameter>|</function>|</function_call>|$)', raw_tc, re.DOTALL | re.IGNORECASE)
         if kw_json:
             j_str = kw_json.group(1).strip()
             j_obj = re.search(r'(\{.*\})', j_str, re.DOTALL)
@@ -700,7 +594,7 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
                 except Exception:
                     pass
 
-        # Look for <parameter=key>value</parameter>
+        # Look for <parameter=key>value</parameter> or <parameter name="key">value</parameter>
         for p_m in re.finditer(r'<parameter(?:=|\s+name=[\"\']?)([^>\s\"\']+)[\"\']?>(.*?)(?:</parameter>|$)', raw_tc, re.DOTALL | re.IGNORECASE):
             k = p_m.group(1).strip()
             v = p_m.group(2).strip()
@@ -711,6 +605,25 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
                     pass
             kwargs[k] = v
 
+        # Look for <parameter>key>value</parameter> (Nemotron XML format)
+        if not kwargs:
+            for p_m in re.finditer(r'<parameter>\s*([a-zA-Z_0-9]+)\s*>(.*?)(?:</parameter>|$)', raw_tc, re.DOTALL | re.IGNORECASE):
+                k = p_m.group(1).strip()
+                v = p_m.group(2).strip()
+                if (v.startswith('{') and v.endswith('}')) or (v.startswith('[') and v.endswith(']')):
+                    try:
+                        v = json.loads(v, strict=False)
+                    except Exception:
+                        pass
+                kwargs[k] = v
+
+        # Look for direct parameter tags: <(command|path|url|query|content|code)>(.*?)</...>
+        if not kwargs:
+            for p_m in re.finditer(r'<([a-zA-Z_0-9]+)>(.*?)</\1>', raw_tc, re.DOTALL | re.IGNORECASE):
+                tag = p_m.group(1).strip().lower()
+                if tag not in ("function", "function_call", "tool_call", "parameter", "kwargs", "arguments"):
+                    kwargs[p_m.group(1).strip()] = p_m.group(2).strip()
+
         # Look for <parameter>\nkey\nvalue\n</parameter>
         if not kwargs:
             for p_m in re.finditer(r'<parameter>\s*([a-zA-Z_0-9]+)\s*\n\s*(.*?)\s*(?:</parameter>|$)', raw_tc, re.DOTALL | re.IGNORECASE):
@@ -718,7 +631,7 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
                 v = p_m.group(2).strip()
                 kwargs[k] = v
 
-        if tool_name and tool_name not in ('<tool_name>', 'tool_name'):
+        if kwargs or tool_name:
             return {'tool': tool_name, 'kwargs': kwargs}
 
     # 2. Strip tags & markdown fences if present
@@ -834,6 +747,7 @@ def robust_parse_tool_call(raw_tc: str) -> dict:
 def run_cli():
     import nest_asyncio
     nest_asyncio.apply()
+    from lmms.backend.cli.checkpoints import create_checkpoint, list_checkpoints, rollback_checkpoint
     console = Console()
     console.clear()
 
@@ -955,7 +869,7 @@ def run_cli():
         with open(PAIRS_FILE, "w") as f: json.dump({}, f)
         
     # Tools Initialization
-    browser_tool = BrowserTool()
+    browser_tool = get_browser_tool()
     file_tool = FileTool()
     terminal_tool = TerminalTool()
     app_launcher = AppLauncherTool()
@@ -1037,6 +951,36 @@ def run_cli():
         lambda **kwargs: browser_tool.scroll(kwargs.get("url", ""), kwargs.get("direction", "down"), kwargs.get("amount", 1000))
     )
     orchestration_pipeline.executor.register_handler(
+        "account.get_current_identity",
+        lambda **kwargs: browser_tool.get_account_context()
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.get_account_context",
+        lambda **kwargs: browser_tool.get_account_context()
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.connect_cdp",
+        lambda **kwargs: browser_tool.connect_cdp(str(kwargs.get("endpoint_url") or "http://localhost:9222"))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.open_persistent",
+        lambda **kwargs: browser_tool.open_persistent_browser(url=str(kwargs.get("url") or "about:blank"), headless=bool(kwargs.get("headless", False)))
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.disconnect",
+        lambda **kwargs: browser_tool.disconnect_session(preserve_data=True)
+    )
+    orchestration_pipeline.executor.register_handler(
+        "browser.open_authenticated",
+        lambda **kwargs: browser_tool.open_authenticated(
+            url=str(kwargs.get("url") or "about:blank"),
+            user_data_dir=kwargs.get("user_data_dir"),
+            profile_name=str(kwargs.get("profile_name") or "Default"),
+            headless=bool(kwargs.get("headless", False)),
+            cdp_url=kwargs.get("cdp_url")
+        )
+    )
+    orchestration_pipeline.executor.register_handler(
         "files.read",
         lambda **kwargs: file_tool.read(kwargs.get("path", ""))
     )
@@ -1095,31 +1039,70 @@ def run_cli():
         perm = permission_manager.check_permission(req)
         
         if not perm.allowed:
-            console.print(f"[bold red]Tool Execution Denied:[/bold red] {perm.reason}")
-            # Evidence recording handled in execution loop or executor
-            return False
+            # Check if this is a shell construct or policy denial that the interactive user can review and approve
+            is_construct_denial = any(term in perm.reason for term in [
+                "logical AND chaining", "semicolon command chaining", "logical OR chaining",
+                "shell pipeline", "redirection", "subshell command substitution", "backtick", "execpolicy",
+                "not in the allowed tool registry"
+            ])
+            if is_construct_denial and tool_name == "terminal.run":
+                from lmms.cli.permission_prompt import ask_permission_interactive, PermissionAction
+                cmd_str = kwargs.get("command", "")
+                perm_res = ask_permission_interactive(
+                    cmd_str,
+                    target_type="command",
+                    details=f"Policy notice: {perm.reason.split('Remedy:')[0].strip()}"
+                )
+                action = perm_res[0]
+                if action in (PermissionAction.ALLOW_ONCE, PermissionAction.ALLOW_SESSION, PermissionAction.ALLOW_PERSIST):
+                    perm.allowed = True
+                    if hasattr(perm_res, "command") and perm_res.command:
+                        kwargs["command"] = perm_res.command
+                    return True
+                else:
+                    return False
+            else:
+                console.print(f"[bold red]Tool Execution Denied:[/bold red] {perm.reason}")
+                return False
             
         if perm.requires_confirmation:
-            console.print(f"[bold yellow]Tool Policy Requires Confirmation: {perm.reason}[/bold yellow]")
-            approved = Prompt.ask(f"[bold yellow]Allow {tool_name} with args {kwargs}? (y/n)[/bold yellow]").lower() == "y"
-            if not approved:
+            from lmms.cli.permission_prompt import ask_permission_interactive, PermissionAction
+            if tool_name == "terminal.run":
+                cmd_str = kwargs.get("command", "")
+                perm_res = ask_permission_interactive(cmd_str, target_type="command", details=perm.reason)
+                action = perm_res[0]
+                if hasattr(perm_res, "command") and perm_res.command:
+                    kwargs["command"] = perm_res.command
+            elif tool_name in ("files.write", "file.write"):
+                f_path = kwargs.get("path", "")
+                perm_res = ask_permission_interactive(f"files.write {f_path}", target_type="file write", details=perm.reason)
+                action = perm_res[0]
+            elif tool_name == "browser.open_authenticated":
+                # Will present profile account selection directly in the execution loop
+                action = PermissionAction.ALLOW_ONCE
+            else:
+                perm_res = ask_permission_interactive(f"{tool_name} {kwargs}", target_type="tool action", details=perm.reason)
+                action = perm_res[0]
+
+            if action == PermissionAction.DENY:
                 return False
 
-        # Workspace boundary check for files.write
-        if tool_name == "files.write":
+        # Workspace boundary check and diff preview for files.write
+        if tool_name in ("files.write", "file.write"):
             path = kwargs.get("path", "")
             content = kwargs.get("content", "")
-            eff_ws = current_workspace if current_workspace != "None" else os.getcwd()
-            if not is_within_workspace(path, eff_ws):
-                return Prompt.ask(f"[bold red]AI wants to write outside the active workspace: {path}. Allow? (y/n)[/bold red]").lower() == "y"
-
             diff = preview_file_change(path, content)
-            console.print(Panel(diff, title=f"Proposed change: {path}", border_style="yellow"))
-            approved = Prompt.ask("[bold yellow]Apply this file change? (y/n)[/bold yellow]").lower() == "y"
-            if approved and not checkpoint_created_this_session:
-                create_checkpoint(current_workspace, "Auto Checkpoint before write")
-                checkpoint_created_this_session = True
-            return approved
+            if diff:
+                console.print(Panel(diff, title=f"Proposed change: {path}", border_style="yellow"))
+            if not checkpoint_created_this_session:
+                try:
+                    from lmms.backend.cli.checkpoints import create_checkpoint
+                    target_ws = current_workspace if current_workspace != "None" else os.getcwd()
+                    create_checkpoint(target_ws, "Auto Checkpoint before write")
+                    checkpoint_created_this_session = True
+                except Exception:
+                    pass
+            return True
             
         return True
 
@@ -1324,12 +1307,14 @@ def run_cli():
             status_text = "ONLINE" if is_online else "OFFLINE"
         
         display_m = get_clean_model_display_name(current_model)
+        img_badge = f"│ <ansimagenta>📷 {len(pending_images)} attached</ansimagenta> " if pending_images else "│ <ansigray>📷 /image</ansigray> "
         return HTML(
             f' <ansigray>Engine:</ansigray> <{status_color}>{status_text}</{status_color}> │ '
             f'<ansigray>Model:</ansigray> <ansigreen>{display_m}</ansigreen> │ '
             f'<ansigray>Mode:</ansigray> <ansicyan>{current_mode}</ansicyan> │ '
             f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
-            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> │ '
+            f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> '
+            f'{img_badge}│ '
             f'<ansiyellow>[F4]</ansiyellow> <ansigray>🎙️ Voice</ansigray> '
         )
 
@@ -1355,8 +1340,9 @@ def run_cli():
             if new_health != _cached_engine_health[0]:
                 _cached_engine_health[0] = new_health
                 try:
-                    if hasattr(session, "app") and session.app and hasattr(session.app, "loop") and session.app.loop:
-                        session.app.loop.call_soon_threadsafe(session.app.invalidate)
+                    if hasattr(session, "app") and session.app and getattr(session.app, "is_running", False):
+                        if hasattr(session.app, "loop") and session.app.loop and not session.app.loop.is_closed():
+                            session.app.loop.call_soon_threadsafe(session.app.invalidate)
                 except Exception:
                     pass
 
@@ -1366,13 +1352,26 @@ def run_cli():
     context_manager = ContextManager()
     cap_manager = CapabilityManager()
     vsession = None
+    pending_images = []
 
     while True:
         voice_mode_active = False
         vsession = None
+        cmd = ""
+        if pending_images:
+            for p_img in pending_images:
+                im_name = os.path.basename(p_img)
+                console.print(f"[dim cyan]📷 Attached Image:[/dim cyan] [bold green]{im_name}[/bold green] [dim]({p_img})[/dim]")
         try:
-            with patch_stdout():
-                cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
+            try:
+                with patch_stdout():
+                    cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
+            except (KeyboardInterrupt, EOFError):
+                raise
+            except Exception:
+                sys.stdout.write("❯ ")
+                sys.stdout.flush()
+                cmd = sys.stdin.readline().strip()
 
             # --- Audio & Mic Logic ---
             if not cmd:
@@ -1908,7 +1907,59 @@ def run_cli():
                 else:
                     console.print("[dim]Executing generic Engine bridge hook...[/dim]")
 
-            elif base_cmd in ["/fast", "/deep", "/code", "/research", "/vision", "/image"]:
+            elif base_cmd in ["/image", "/img", "/attach"]:
+                parts = cmd.split(maxsplit=2)
+                if len(parts) == 1:
+                    console.print("\n[bold cyan]📷 Attach Image:[/bold cyan] Drag & drop image file into terminal, or type image path:")
+                    sys.stdout.write("  \033[1;36mPath:\033[0m ")
+                    sys.stdout.flush()
+                    try:
+                        entered_p = input().strip().strip("'\"@ ")
+                    except (KeyboardInterrupt, EOFError):
+                        entered_p = ""
+                    if not entered_p:
+                        console.print("[dim]Image attach cancelled.[/dim]")
+                        continue
+                    raw_path = entered_p
+                    parts = ["/image", raw_path]
+                else:
+                    raw_path = parts[1].strip("'\"@ ")
+                img_path = os.path.expanduser(raw_path)
+                if not os.path.isabs(img_path) and current_workspace != "None":
+                    cand = os.path.join(current_workspace, img_path)
+                    if os.path.exists(cand):
+                        img_path = cand
+                if not os.path.exists(img_path):
+                    console.print(f"[bold red]Image file not found:[/bold red] {img_path}")
+                    continue
+                valid_exts = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp')
+                if not img_path.lower().endswith(valid_exts):
+                    console.print(f"[bold red]File is not a supported image format:[/bold red] {img_path}")
+                    continue
+                if img_path not in pending_images:
+                    pending_images.append(img_path)
+                dim_info = ""
+                try:
+                    from PIL import Image
+                    with Image.open(img_path) as im:
+                        dim_info = f" ({im.width}x{im.height}, {im.format})"
+                except Exception:
+                    dim_info = f" ({os.path.getsize(img_path)} bytes)"
+                console.print(f"[bold green]📷 Image attached:[/bold green] {img_path}{dim_info}")
+                if len(parts) > 2:
+                    cmd = parts[2].strip()
+                    # Will fall through to processing prompt with attached image
+                else:
+                    console.print("[dim]Now enter your prompt or question about this image.[/dim]")
+                    continue
+
+            elif base_cmd in ["/detach", "/clear_images", "/clear_image", "/rmimage"]:
+                count = len(pending_images)
+                pending_images.clear()
+                console.print(f"[bold green]✓ Cleared {count} attached image(s).[/bold green]")
+                continue
+
+            elif base_cmd in ["/fast", "/deep", "/code", "/research", "/vision"]:
                 current_mode = base_cmd
                 console.print(f"[bold green]AI Mode switched to: {current_mode}[/bold green]")
                 
@@ -2181,9 +2232,12 @@ def run_cli():
                     console.print("Usage: /pair <id> | /pair -n <id> <config> | /pair -l | /pair -d <id>")
 
             elif base_cmd == "/perm":
+                SUPPORTED_PERMISSION_LEVELS = ["sandboxed", "low", "medium", "full"]
                 if len(parts) > 1:
                     level = parts[1].lower()
-                    if level == "sandboxed":
+                    if level not in SUPPORTED_PERMISSION_LEVELS:
+                        console.print(f"[red]Invalid permission level '{level}'. Supported levels: sandboxed, low, medium, or full.[/red]")
+                    elif level == "sandboxed":
                         from lmms_sandbox.runner import default_runner
                         s_status = default_runner.get_status()
                         if s_status["isolation_status"] == "NOT isolated":
@@ -2192,18 +2246,34 @@ def run_cli():
                         else:
                             current_permission_level = "sandboxed"
                             console.print(f"[green]Permission level set to: sandboxed ({s_status['isolation_status']})[/green]")
-                    elif level in ["low", "medium", "full"]:
+                    elif level == "full":
+                        # Full mode requires an explicit security warning and user confirmation
+                        console.print("\n[bold yellow]⚠️  SECURITY WARNING: UNRESTRICTED FULL PERMISSION MODE[/bold yellow]")
+                        console.print("[bold red]Full mode completely bypasses OS sandbox containment and workspace boundary restrictions.[/bold red]")
+                        console.print("[yellow]Arbitrary shell commands will execute directly on the host operating system with your user account privileges, and can access, modify, or delete files outside the workspace.[/yellow]")
+                        force_flag = any(p in parts[2:] for p in ("--force", "-y", "yes"))
+                        if not force_flag:
+                            try:
+                                sys.stdout.write("Enable unconfined full host execution? (yes/no): ")
+                                sys.stdout.flush()
+                                confirm = sys.stdin.readline().strip().lower()
+                            except (EOFError, KeyboardInterrupt):
+                                confirm = "no"
+                            if confirm not in ("yes", "y"):
+                                console.print(f"[bold red]Aborted: Full permission mode not enabled. Retaining: {current_permission_level}[/bold red]\n")
+                                continue
+                        current_permission_level = "full"
+                        console.print("[bold red]⚠️ Permission level set to: full (UNCONFINED HOST EXECUTION)[/bold red]\n")
+                    else:  # low or medium
                         current_permission_level = level
                         console.print(f"[green]Permission level set to: {current_permission_level}[/green]")
-                    else:
-                        console.print("[red]Invalid permission level. Use: sandboxed, low, medium, or full.[/red]")
                 else:
                     console.print(f"[bold cyan]Current Permission Level:[/bold cyan] {current_permission_level}")
                     console.print("Available tiers:")
                     console.print("  • [yellow]sandboxed[/yellow]: Unprivileged bwrap/Landlock containment (isolated /home, masked secrets, workspace read-write only)")
-                    console.print("  • [cyan]low[/cyan]: Read-only inspection; all mutating actions require confirmation")
-                    console.print("  • [green]medium[/green]: Standard developer freedom inside workspace")
-                    console.print("  • [magenta]full[/magenta]: Unrestricted system commands")
+                    console.print("  • [cyan]low[/cyan]: Read-only inspection; all mutating actions require confirmation (sandboxed)")
+                    console.print("  • [green]medium[/green]: Standard developer freedom inside sandboxed workspace (isolated /home, workspace read-write only)")
+                    console.print("  • [bold red]full[/bold red]: [bold]UNRESTRICTED HOST EXECUTION[/bold]. Bypasses sandbox and workspace boundaries. Arbitrary commands execute directly on host.")
 
             elif base_cmd == "/worktree":
                 from lmms_worktree.cli import handle_worktree_cli
@@ -2480,28 +2550,43 @@ def run_cli():
                         pass
 
                     # Multimodal parsing
-                    valid_img_paths = []
-                    potential_path = cmd.strip("'\" ")
-                    if os.path.exists(potential_path) and potential_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                        valid_img_paths.append(potential_path)
+                    valid_img_paths = list(pending_images)
+                    pending_images.clear()
+
+                    # Also detect image paths inside prompt (e.g. /path/to/shot.png, ~/shot.png, @shot.png)
+                    potential_path = os.path.expanduser(cmd.strip("'\"@ "))
+                    if not os.path.isabs(potential_path) and current_workspace != "None":
+                        cand = os.path.join(current_workspace, potential_path)
+                        if os.path.exists(cand):
+                            potential_path = cand
+                    valid_exts = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp')
+                    if os.path.exists(potential_path) and potential_path.lower().endswith(valid_exts):
+                        if potential_path not in valid_img_paths:
+                            valid_img_paths.append(potential_path)
                     else:
-                        img_paths = re.findall(r"'(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))'", cmd)
-                        if not img_paths:
-                            img_paths = re.findall(r"(/[a-zA-Z0-9_./\-\s]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]))", cmd)
-                        for p in img_paths:
-                            if os.path.exists(p.strip()):
-                                valid_img_paths.append(p.strip())
+                        img_regex = r"(?:@|'|\")?([a-zA-Z0-9_./\-\s~]+(?:\.[pP][nN][gG]|\.[jJ][pP][gG]|\.[jJ][pP][eE][gG]|\.[wW][eE][bB][pP]|\.[gG][iI][fF]))(?:'|\")?"
+                        for raw_p in re.findall(img_regex, cmd):
+                            clean_p = os.path.expanduser(raw_p.strip("'\"@ "))
+                            if not os.path.isabs(clean_p) and current_workspace != "None":
+                                cand = os.path.join(current_workspace, clean_p)
+                                if os.path.exists(cand):
+                                    clean_p = cand
+                            if os.path.exists(clean_p) and clean_p not in valid_img_paths:
+                                valid_img_paths.append(clean_p)
 
                     user_content = cmd
                     if valid_img_paths:
                         user_content = [{"type": "text", "text": cmd}]
                         for p in valid_img_paths:
                             try:
+                                ext = os.path.splitext(p)[1].lower().lstrip(".")
+                                mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp", "gif": "gif"}
+                                mime = mime_map.get(ext, "jpeg")
                                 with open(p, "rb") as img_file:
                                     b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                    user_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-                            except Exception:
-                                pass
+                                    user_content.append({"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{b64}"}})
+                            except Exception as img_err:
+                                console.print(f"[dim yellow]Warning: Failed to encode image {p}: {img_err}[/dim yellow]")
 
                     if valid_img_paths and messages and messages[-1]["role"] == "user":
                         messages[-1]["content"] = user_content
@@ -2511,6 +2596,8 @@ def run_cli():
                     MAX_ITERATIONS = 150
 
                     iter_count = 0
+                    advice_pushback_count = 0
+                    json_error_count = 0
                 except Exception as e:
                     console.print(f"[red]Error preparing messages: {e}[/red]")
                     continue
@@ -2540,8 +2627,12 @@ def run_cli():
                 reply = ""
                 full_reply = ""
                 executed_tool_calls = []
+                duplicate_tool_counts = {}
                 search_tool_count = 0
                 model_header_printed = False
+                get_timeline_renderer(console=console).start_turn(prompt=cmd, model_name=current_model)
+                if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                    orchestration_pipeline.completion_guard.start_turn()
                 while iter_count < MAX_ITERATIONS:
                     iter_count += 1
                     
@@ -2668,7 +2759,7 @@ def run_cli():
                             leak_check_done = False
 
                             clean_model_name = get_clean_model_display_name(current_model)
-                            spin_label = f"[dim cyan]Thinking...[/dim cyan] [dim]({clean_model_name})[/dim]"
+                            spin_label = f"[dim cyan]Thinking...[/dim cyan] [dim]({clean_model_name}) · Press Ctrl+C to stop[/dim]"
 
                             with console.status(spin_label, spinner="dots") as spin_status:
                                 for line_bytes in chunks_iterator:
@@ -2776,8 +2867,7 @@ def run_cli():
                                                     spin_status.stop()
                                                     if not model_header_printed:
                                                         elapsed_s = max(1, int(time.time() - turn_start_time))
-                                                        console.print(f"[dim]::: Thought for {elapsed_s}s[/dim]")
-                                                        console.print(f"[bold cyan]Model : {get_clean_model_display_name(current_model)}[/bold cyan]")
+                                                        get_timeline_renderer(console=console).finish_thinking(elapsed_s, get_clean_model_display_name(current_model))
                                                         model_header_printed = True
                                                     live_view = Live(Markdown(display_reply), console=console, refresh_per_second=15, auto_refresh=True)
                                                     live_view.start()
@@ -2816,13 +2906,15 @@ def run_cli():
                                 pass
 
                     except KeyboardInterrupt:
-                        if not check_engine_health():
+                        from lmms.backend.core.registry.online_models import OnlineModelRegistry
+                        is_online = (OnlineModelRegistry.get_active_type() == "online" and OnlineModelRegistry.get_active_model() is not None) or is_online_active or ("/" in current_model and not current_model.endswith(".gguf"))
+                        if not is_online and not check_engine_health():
                             msg = "\n\n[bold red]-- Engine process died unexpectedly during generation --[/bold red]"
                             full_reply += msg
                             console.print(Markdown(msg))
                         else:
-                            full_reply += "\n\n[dim]-- Generation Interrupted by User --[/dim]"
-                            console.print(Markdown("\n[dim]-- Generation Interrupted by User --[/dim]"))
+                            full_reply += "\n\n[dim]-- Generation Stopped by User (Ctrl+C / ESC) --[/dim]"
+                            console.print(Markdown("\n[dim]-- Generation Stopped by User (Ctrl+C / ESC) --[/dim]"))
                         reply = full_reply
                         # We break out of the tool iteration loop so it goes back to the user prompt
                         break
@@ -2852,6 +2944,13 @@ def run_cli():
                                         messages[idx]["content"] = m["content"][:500] + "\n...[Force Truncated]\n</observation>"
                             iter_count -= 1
                             continue
+
+                        if iter_count > 1 and not getattr(orchestration_pipeline, "_retried_empty_response", False):
+                            setattr(orchestration_pipeline, "_retried_empty_response", True)
+                            console.print(f"[dim yellow]↻ Network/API response was empty after tool execution, retrying once...[/dim yellow]")
+                            messages.append({"role": "user", "content": "Please provide your response or next step based on the observation above."})
+                            continue
+                        setattr(orchestration_pipeline, "_retried_empty_response", False)
 
                         full_reply = "No response from AI."
                         clean_disp_name = get_clean_model_display_name(current_model)
@@ -2884,7 +2983,16 @@ def run_cli():
                     # We only suppress/strip tool calls when the reply is PURELY a tool call
                     # with NO other text AND the user's message is clearly conversational.
                     is_pure_tool_only = tool_call_match and not full_reply.replace(tool_call_match.group(0), "").strip()
-                    is_casual_chat = not force_tool_mode and len(cmd.split()) <= 8
+                    cmd_has_action = any(re.search(rf"\b{re.escape(a)}\b", cmd.lower()) for a in [
+                        "run", "open", "file", "html", "read", "write", "create", "launch", "execute", "browse", "test", "check", "code", "terminal", "login", "chrome", "app"
+                    ])
+                    cmd_is_greeting = any(re.search(rf"\b{re.escape(g)}\b", cmd.lower()) for g in ["hello", "hi", "hey", "how are you", "who are you"])
+                    is_casual_chat = (
+                        intent_res.intent == IntentType.NORMAL_CHAT
+                        and not force_tool_mode
+                        and not cmd_has_action
+                        and cmd_is_greeting
+                    )
                     
                     if tool_call_match and is_pure_tool_only and is_casual_chat:
                         # Casual chat like "hello" that triggered a spurious tool call — strip it
@@ -2901,7 +3009,7 @@ def run_cli():
                         try:
                             raw_tc = tool_call_match.group(1).strip() if tool_call_match.groups() else tool_call_match.group(0).strip()
                             # Only extract raw JSON if this is NOT an XML function call
-                            if not re.search(r'<function[=>\s]', raw_tc, re.IGNORECASE):
+                            if not re.search(r'<function[=>\s_]', raw_tc, re.IGNORECASE):
                                 json_match = re.search(r"(\{.*\})", raw_tc, re.DOTALL)
                                 if json_match:
                                     raw_tc = json_match.group(1).strip()
@@ -2964,7 +3072,32 @@ def run_cli():
                                     break
 
                             if is_duplicate:
-                                if iter_count >= 2:
+                                dup_count = duplicate_tool_counts.get(tool_sig, 0) + 1
+                                duplicate_tool_counts[tool_sig] = dup_count
+
+                                if dup_count >= 3:
+                                    console.print(f"\n[bold red]🛑 Loop breaker triggered: {t_name} repeated {dup_count} times. Halting tool loop.[/bold red]")
+                                    final_ans = clean_text_before_tool if len(clean_text_before_tool) > 50 else full_reply
+                                    final_ans = re.sub(r"<tool_call>.*?(</tool_call>|$)", "", final_ans, flags=re.DOTALL).strip()
+                                    if not final_ans:
+                                        final_ans = f"Execution stopped: tool '{t_name}' was repeatedly called with identical arguments ({dup_count} times) without new evidence. Verified steps have been recorded."
+                                    reply = final_ans
+                                    break
+                                elif dup_count == 2:
+                                    console.print(f"\n[dim yellow]⚠️ Model repeated identical tool call {t_name} (attempt {dup_count}). Enforcing bounded stop warning...[/dim yellow]")
+                                    messages.append({"role": "assistant", "content": full_reply})
+                                    messages.append({
+                                        "role": "user",
+                                        "content": (
+                                            f"<observation>\n"
+                                            f"[STOP_LOOP_WARNING: Tool '{t_name}' was repeated with identical arguments {dup_count} times. "
+                                            f"Further identical execution is blocked. Please synthesize observed results, report any errors honestly, "
+                                            f"or proceed to the next step without repeating this tool call.]\n"
+                                            f"</observation>"
+                                        )
+                                    })
+                                    continue
+                                else:
                                     console.print(f"\n[dim yellow]⚠️ Model repeated tool call: {t_name}. Providing feedback to advance reasoning...[/dim yellow]")
                                     messages.append({"role": "assistant", "content": full_reply})
                                     messages.append({
@@ -2985,6 +3118,13 @@ def run_cli():
                             # Append assistant's partial reply
                             messages.append({"role": "assistant", "content": full_reply})
                             
+                            # Security hardening: Prevent model-generated permission escalation
+                            for forbidden_key in ("permission_level", "permission", "perm"):
+                                if forbidden_key in t_kwargs:
+                                    del t_kwargs[forbidden_key]
+                            if current_permission_level != "full":
+                                t_kwargs["sandboxed"] = True
+
                             req = ToolRequest(
                                 tool_name=t_name,
                                 command_line=t_kwargs.get("command", ""),
@@ -3017,32 +3157,67 @@ def run_cli():
                                 if t_name == "terminal.run":
                                     res = executor.execute(req, perm)
                                     observation = (res.stdout + "\n" + res.stderr).strip() or "Command completed with no output."
-                                elif t_name == "browser.open_authenticated":
-                                    if current_permission_level == "low":
-                                        observation = "Permission denied: Requires medium or full permission for authenticated browsing."
-                                    else:
-                                        console.print("[bold yellow]AI requested access to your Browser Cookies (Authenticated Session).[/bold yellow]")
-                                        allow = prompt(HTML('<ansiyellow>Allow? (y/n): </ansiyellow>')).strip().lower()
-                                        if allow != "y":
-                                            observation = "User denied access to browser profile."
+                                    if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                                        from lmms.backend.orchestration.completion_guard import ToolExecutionStatus
+                                        if getattr(res, "was_denied", False):
+                                            c_st = ToolExecutionStatus.DENIED
+                                            c_ver = False
+                                        elif getattr(res, "exit_code", 0) != 0:
+                                            c_st = ToolExecutionStatus.FAILED
+                                            c_ver = False
                                         else:
-                                            profiles = browser_tool.get_browser_profiles()
-                                            if not profiles:
-                                                observation = "No browser profiles found on the system."
-                                            else:
-                                                console.print("[bold cyan]Available Profiles:[/bold cyan]")
-                                                for idx, pname in enumerate(profiles.keys()):
-                                                    console.print(f"[{idx}] {pname}")
-                                                sel_idx = prompt(HTML('<ansicyan>Select profile number: </ansicyan>')).strip()
-                                                try:
-                                                    sel_name = list(profiles.keys())[int(sel_idx)]
-                                                    profile_data = profiles[sel_name]
-                                                    sel_path = profile_data["base_path"]
-                                                    profile_dir_name = profile_data["dir_name"]
-                                                    is_headless = t_kwargs.get("headless", True)
-                                                    observation = browser_tool.open_authenticated(t_kwargs.get("url", ""), sel_path, profile_dir_name, is_headless)
-                                                except (ValueError, IndexError):
-                                                    observation = "Invalid profile selection."
+                                            c_st = ToolExecutionStatus.SUCCESS
+                                            c_ver = True
+                                        orchestration_pipeline.completion_guard.record_operation(
+                                            tool_name=t_name,
+                                            kwargs=t_kwargs,
+                                            status=c_st,
+                                            verified=c_ver,
+                                            reason_or_error=getattr(res, "stderr", "") or getattr(res, "deny_reason", ""),
+                                            output_snippet=str(observation)[:500]
+                                        )
+                                elif t_name == "browser.open_authenticated":
+                                    profiles = browser_tool.get_browser_profiles()
+                                    if not profiles:
+                                        observation = "No browser profiles found on the system."
+                                    else:
+                                        from lmms.cli.permission_prompt import ask_browser_profile_interactive
+                                        chosen_profile = ask_browser_profile_interactive(profiles)
+                                        if not chosen_profile:
+                                            observation = "User denied or cancelled browser profile selection."
+                                        else:
+                                            sel_path = chosen_profile["base_path"]
+                                            profile_dir_name = chosen_profile["dir_name"]
+                                            is_headless = t_kwargs.get("headless", False)
+                                            chosen_id = chosen_profile.get("email") or chosen_profile.get("user_name") or profile_dir_name
+                                            console.print(f"[bold green]✓ Opening authenticated session with account:[/bold green] {chosen_id}")
+                                            observation = browser_tool.open_authenticated(
+                                                t_kwargs.get("url", ""),
+                                                sel_path,
+                                                profile_dir_name,
+                                                is_headless
+                                            )
+                                    if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                                        from lmms.backend.orchestration.completion_guard import ToolExecutionStatus
+                                        is_denied = "permission denied" in str(observation).lower() or "user denied" in str(observation).lower()
+                                        is_err = "invalid" in str(observation).lower() or "not found" in str(observation).lower()
+                                        if is_denied:
+                                            b_st = ToolExecutionStatus.DENIED
+                                            b_ver = False
+                                        elif is_err:
+                                            b_st = ToolExecutionStatus.FAILED
+                                            b_ver = False
+                                        else:
+                                            b_st = ToolExecutionStatus.SUCCESS
+                                            b_ver = True
+                                        orchestration_pipeline.completion_guard.record_operation(
+                                            tool_name=t_name,
+                                            kwargs=t_kwargs,
+                                            status=b_st,
+                                            verified=b_ver,
+                                            reason_or_error=str(observation) if not b_ver else "",
+                                            output_snippet=str(observation)[:500]
+                                        )
                                 elif t_name == "vector_db.search":
                                     import hashlib
                                     from lmms.backend.tools.rag import RAGTool
@@ -3098,9 +3273,27 @@ def run_cli():
                                 # Render clean, bounded observation panel (prevents terminal flooding/scroll lock)
                                 render_tool_observation_panel(t_name, observation, iter_count, MAX_ITERATIONS)
                             else:
-                                record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason="Denied by interactive check or policy"))
-                                observation = "Tool execution denied by user or policy."
-                                console.print(f"\n[bold red]Denied tool execution: {t_name}[/bold red]")
+                                deny_reason = perm.reason if (perm and not perm.allowed) else "Denied by interactive check or policy"
+                                if t_name in ("files.write", "file.write") and not is_within_workspace(t_kwargs.get("path", ""), current_workspace if current_workspace != "None" else os.getcwd()):
+                                    deny_reason = f"Target path '{t_kwargs.get('path', '')}' is outside the allowed workspace boundary ('{current_workspace}')."
+
+                                record_tool_evidence(req, perm, ToolResult("", "", 1, was_denied=True, deny_reason=deny_reason))
+                                observation = (
+                                    f"[TOOL_DENIED] Tool '{t_name}' execution was denied by security policy.\n"
+                                    f"Reason: {deny_reason}\n"
+                                    f"Notice: The requested operation was NOT performed. No files or system state were modified."
+                                )
+                                console.print(f"\n[bold red]Denied tool execution: {t_name}[/bold red] - {deny_reason}")
+                                if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                                    from lmms.backend.orchestration.completion_guard import ToolExecutionStatus
+                                    orchestration_pipeline.completion_guard.record_operation(
+                                        tool_name=t_name,
+                                        kwargs=t_kwargs,
+                                        status=ToolExecutionStatus.DENIED,
+                                        verified=False,
+                                        reason_or_error=str(deny_reason),
+                                        output_snippet=""
+                                    )
                                 
                             obs_cmd_hint = t_kwargs.get("command", "") if t_name == "terminal.run" else ""
                             exit_code = 0
@@ -3140,6 +3333,11 @@ def run_cli():
                         except Exception as e:
                             with open("/tmp/ai_json_crash.txt", "a") as f:
                                 f.write(f"FAILED RAW_TC:\n{raw_tc}\nEXCEPTION: {e}\nFULL_REPLY:\n{full_reply}\n------\n")
+                            json_error_count += 1
+                            if json_error_count > 2:
+                                console.print(f"  [dim yellow]⚠️ Unable to parse tool call after retries: {e}. Presenting response to user.[/dim yellow]")
+                                reply = full_reply
+                                break
                             console.print("  [dim]↻ Self-correcting JSON format...[/dim]")
                             messages.append({"role": "assistant", "content": full_reply})
                             messages.append({"role": "user", "content": f"<observation>\nError parsing tool JSON: {e}. Ensure you use valid JSON, double quotes for keys, and escape internal quotes.\n</observation>"})
@@ -3147,29 +3345,63 @@ def run_cli():
                             continue
                             
                     # If no tool call: check if the task was agentic and the model gave
-                    # advice text instead of acting. If so, push back and continue.
-                    if force_tool_mode and iter_count < MAX_ITERATIONS:
-                        # Check if model gave advice (contains action verbs) but no tool call
-                        advice_indicators = [
-                            "docker-compose", "npm install", "pip install", "npm start",
-                            "python app.py", "you can run", "you should run", "run the",
-                            "to start", "would you like me", "here's how", "follow these",
-                            "step 1", "step 2", "1.", "2."
+                    # advice text instead of acting. If so, push back at most ONCE with intent-appropriate tools.
+                    if force_tool_mode and iter_count < MAX_ITERATIONS and advice_pushback_count < 1:
+                        refusal_markers = [
+                            "nahi kar sakta", "cannot perform", "i cannot", "i am unable to",
+                            "privacy violation", "terms of service", "against policy", "not allowed to"
                         ]
-                        gave_advice = any(ind in full_reply.lower() for ind in advice_indicators)
-                        if gave_advice:
-                            messages.append({"role": "assistant", "content": full_reply})
-                            messages.append({"role": "user", "content": (
-                                "<observation>\n"
-                                "SYSTEM: You gave text advice instead of running the commands yourself. "
-                                "This is NOT acceptable. You MUST use terminal.run to execute every command. "
-                                "DO NOT write instructions for the user. RUN the commands now using tool_call.\n"
-                                "</observation>"
-                            )})
-                            continue
+                        is_explicit_refusal = any(rm in full_reply.lower() for rm in refusal_markers)
 
-                    reply = full_reply
+                        if not is_explicit_refusal:
+                            advice_indicators = [
+                                "docker-compose", "npm install", "pip install", "npm start",
+                                "python app.py", "you can run", "you should run", "here is how",
+                                "follow these steps", "execute the following command"
+                            ]
+                            gave_advice = any(ind in full_reply.lower() for ind in advice_indicators)
+                            if gave_advice:
+                                advice_pushback_count += 1
+                                if intent_res.intent == IntentType.BROWSER_AUTOMATION:
+                                    prompt_msg = (
+                                        "<observation>\n"
+                                        "SYSTEM: You gave text instructions instead of performing the action directly. "
+                                        "Please use browser tools (such as browser.open_url, browser.fill_form, browser.click_element) "
+                                        "to navigate and perform the requested web task directly on behalf of the user.\n"
+                                        "</observation>"
+                                    )
+                                else:
+                                    prompt_msg = (
+                                        "<observation>\n"
+                                        "SYSTEM: You gave text advice instead of running the actions yourself. "
+                                        "Please use the available tools (e.g. terminal.run, files.write) to perform the task directly.\n"
+                                        "</observation>"
+                                    )
+                                messages.append({"role": "assistant", "content": full_reply})
+                                messages.append({"role": "user", "content": prompt_msg})
+                                continue
+
+                    if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                        guarded_reply, guard_res = orchestration_pipeline.completion_guard.validate_and_guard(
+                            proposed_response=full_reply,
+                            user_prompt=cmd,
+                            workspace=current_workspace if current_workspace != "None" else os.getcwd()
+                        )
+                        reply = guarded_reply
+                    else:
+                        reply = full_reply
                     break
+                    
+                if not reply and full_reply:
+                    if hasattr(orchestration_pipeline, "completion_guard") and orchestration_pipeline.completion_guard:
+                        guarded_reply, guard_res = orchestration_pipeline.completion_guard.validate_and_guard(
+                            proposed_response=full_reply,
+                            user_prompt=cmd,
+                            workspace=current_workspace if current_workspace != "None" else os.getcwd()
+                        )
+                        reply = guarded_reply
+                    else:
+                        reply = full_reply
                     
                 # Note: we only store text in the history so we don't blow up context limits with multiple images.
                 now_str = datetime.now().isoformat()

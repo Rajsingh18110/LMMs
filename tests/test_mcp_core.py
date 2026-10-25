@@ -184,6 +184,10 @@ def test_mcp_terminal_dashboard(temp_config_file):
 
 def test_mcp_manager_live_stdio(temp_config_file):
     """Starts lmms_mcp.server via python3 stdio, connects, discovers tools, and calls a tool."""
+    workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    orig_ws = os.environ.get("LMMS_ACTIVE_WORKSPACE")
+    os.environ["LMMS_ACTIVE_WORKSPACE"] = workspace_root
+
     async def _live_test():
         cfg = MCPConfig(config_path=temp_config_file)
         cfg.add_server(
@@ -218,5 +222,11 @@ def test_mcp_manager_live_stdio(temp_config_file):
         finally:
             await manager.stop_all()
 
-    asyncio.run(_live_test())
+    try:
+        asyncio.run(_live_test())
+    finally:
+        if orig_ws is not None:
+            os.environ["LMMS_ACTIVE_WORKSPACE"] = orig_ws
+        else:
+            os.environ.pop("LMMS_ACTIVE_WORKSPACE", None)
 

@@ -261,6 +261,14 @@ class OnlineModelClient:
                             elif not reasoning and not content and "content" in d:
                                 text_to_emit = d.get("content", "")
 
+                            if reasoning:
+                                # Stream reasoning tokens so thinking timeline receives model thought
+                                r_chunk = {
+                                    "content": f"<thought>{reasoning}</thought>",
+                                    "choices": [{"delta": {"content": f"<thought>{reasoning}</thought>"}}]
+                                }
+                                yield f"data: {json.dumps(r_chunk)}\n\n".encode("utf-8")
+
                             # Yield dual-compatible SSE chunk (only emit when there is real user-facing content)
                             if text_to_emit:
                                 norm_chunk = {

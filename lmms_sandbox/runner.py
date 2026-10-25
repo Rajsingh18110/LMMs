@@ -6,6 +6,7 @@ Evaluates ~/.lmms/execpolicy.toml and executes commands through Bubblewrap or La
 import os
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -153,15 +154,19 @@ class SandboxRunner:
             if confirm_callback:
                 confirmed = confirm_callback(cmd_str, pol_res.reason)
             else:
-                prompt_text = f"Policy requires confirmation for `{cmd_str}` ({pol_res.reason}). Allow? (y/n): "
-                try:
-                    ans = input(prompt_text).strip().lower()
-                    confirmed = (ans == "y")
-                except (EOFError, KeyboardInterrupt):
+                # Check if running in unattended / non-interactive environment
+                if not sys.stdin or not hasattr(sys.stdin, "isatty") or not sys.stdin.isatty():
                     confirmed = False
+                else:
+                    prompt_text = f"Policy requires confirmation for `{cmd_str}` ({pol_res.reason}). Allow? (y/n): "
+                    try:
+                        ans = input(prompt_text).strip().lower()
+                        confirmed = (ans == "y")
+                    except (EOFError, KeyboardInterrupt):
+                        confirmed = False
 
             if not confirmed:
-                err_msg = "Command cancelled: user denied execution confirmation."
+                err_msg = f"Command cancelled: policy requires confirmation for `{cmd_str}` ({pol_res.reason}) and confirmation was denied or unavailable in unattended environment."
                 return SandboxResult(
                     stdout="",
                     stderr=err_msg,
@@ -228,8 +233,8 @@ class SandboxRunner:
             )
 
         else:
-            # Fallback: direct execution with workspace boundary validation
-            backend = "direct_boundary"
+            # Explicit unconfined host execution (enforce_sandbox=False)
+            backend = "unconfined_host"
             fallback_cmd = ["bash", "-c", command] if isinstance(command, str) else list(command)
             try:
                 proc = subprocess.run(

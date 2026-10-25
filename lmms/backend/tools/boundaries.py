@@ -4,7 +4,11 @@ import os
 
 
 def is_within_workspace(path: str, workspace: str) -> bool:
-    """Return whether path resolves inside workspace, including symlink resolution."""
+    """
+    Return whether path resolves inside workspace, including symlink resolution.
+    Note: This validates a discrete filesystem path (e.g. cwd or target filepath).
+    It does NOT constrain arbitrary shell commands or redirection on an unconfined host.
+    """
     if not path or not workspace:
         return False
 

@@ -372,7 +372,7 @@ These interactive commands are typed directly inside an active LMMs CLI chat ses
 | `/status` | Check real-time engine and system hardware health |
 | `/doctor` | Run comprehensive system diagnostics and repair checks |
 | `/pair` | Enter interactive pair-programming mode |
-| `/perm <level>` | Adjust sandbox permission level (`strict`, `ask`, `full`) |
+| `/perm <level>` | Adjust sandbox permission level (`sandboxed`, `low`, `medium`, `full`) |
 | `/agent` | Spawn and manage autonomous subagents for parallel execution |
 | `/orchestrate` | Manage multi-agent coordination workflows and handoffs |
 

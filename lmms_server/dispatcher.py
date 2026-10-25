@@ -310,7 +310,10 @@ class MethodDispatcher:
 
             # 2. Check for generator override (e.g. test harness) or real inference engine
             generator = self.stream_generator or params.get("mock_stream_generator")
-            tier = params.get("permission_tier") or self.default_permission_tier
+            raw_tier = params.get("permission_tier") or self.default_permission_tier
+            tier = raw_tier.lower() if isinstance(raw_tier, str) and raw_tier.lower() in ("sandboxed", "low", "medium", "full") else self.default_permission_tier
+            if tier == "full" and not getattr(self, "allow_full_tier", False):
+                tier = "medium"
 
             full_response = ""
             try:

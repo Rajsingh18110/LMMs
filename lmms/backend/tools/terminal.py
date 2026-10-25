@@ -32,7 +32,19 @@ def get_workspace_dir() -> str:
     except Exception:
         return base_ws
 
-def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandboxed: bool = True) -> Dict[str, Any]:
+def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandboxed: Optional[bool] = None, permission_level: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Executes a terminal shell command according to the active permission tier and sandbox policy.
+
+    Security Contract:
+    - In restricted tiers ('sandboxed', 'low', 'medium'), execution is strictly sandboxed.
+      Filesystem writes are constrained to the workspace boundary via OS container isolation.
+      Shell redirection ('>') or chaining ('cd .. && ...') outside the workspace is denied.
+      If OS sandbox isolation is unavailable, execution fails closed.
+    - In 'full' tier, execution is privileged and unconfined on the host when sandboxed=False.
+      Validating cwd sets the initial process directory, but does NOT provide filesystem isolation.
+      Full tier execution returns backend='unconfined_host' and sandboxed=False.
+    """
     # Check if dangerous
     for blocked in BLOCKED_COMMANDS:
         if blocked in command:
@@ -41,7 +53,7 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
     workspace_dir = get_workspace_dir()
     target_cwd = cwd if cwd else workspace_dir
     
-    # Boundary enforcement
+    # Boundary enforcement for cwd parameter
     is_valid_cwd = is_within_workspace(target_cwd, workspace_dir)
     if not is_valid_cwd:
         try:
@@ -57,10 +69,19 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
     if not is_valid_cwd:
         raise PermissionError("CWD is outside the allowed workspace boundary.")
 
-    if sandboxed or config.get("permission_level") == "sandboxed":
+    # Resolve permission level: explicit argument or runtime config, strictly normalized
+    raw_perm = permission_level if permission_level is not None else config.get("permission_level", "medium")
+    perm_level = raw_perm.lower() if isinstance(raw_perm, str) and raw_perm.lower() in ("sandboxed", "low", "medium", "full") else "medium"
+
+    effective_sandboxed = True if sandboxed is None else bool(sandboxed)
+    if perm_level != "full":
+        # In restricted modes (sandboxed, low, medium), execution MUST be sandboxed
+        effective_sandboxed = True
+
+    if effective_sandboxed:
         from lmms_sandbox.runner import default_runner
         res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, enforce_sandbox=True)
-        if not res.success and res.exit_code == -1:
+        if not res.success and res.exit_code == -1 and res.backend_used == "none":
             raise PermissionError(
                 "REFUSED: Sandbox isolation unavailable (bubblewrap/bwrap not found on system).\n"
                 "Reason: LMMS operates in fail-closed security mode; commands will not execute on host without container isolation.\n"
@@ -76,7 +97,7 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
         }
 
     # Fail-closed: Direct host execution blocked unless permission level is 'full'
-    if config.get("permission_level") != "full":
+    if perm_level != "full":
         raise PermissionError(
             "REFUSED: Direct un-sandboxed execution on host is blocked.\n"
             "Reason: Unsandboxed execution can mutate host environment.\n"
@@ -85,7 +106,11 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
 
     try:
         if isinstance(command, str):
-            command_args = shlex.split(command)
+            shell_meta = any(op in command for op in [">", "<", "|", "&&", "||", ";", "$(", "`"])
+            if shell_meta:
+                command_args = ["bash", "-c", command]
+            else:
+                command_args = shlex.split(command)
         else:
             command_args = list(command)
 
@@ -96,13 +121,15 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
             command_args.insert(1, "-n")
 
         result = subprocess.run(
-            command_args, shell=False, capture_output=True, text=True, timeout=15, cwd=target_cwd, stdin=subprocess.DEVNULL
+            command_args, shell=False, capture_output=True, text=True, timeout=120, cwd=target_cwd, stdin=subprocess.DEVNULL
         )
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,
             "exit_code": result.returncode,
-            "output": result.stdout + result.stderr or "Command executed successfully with no output."
+            "output": result.stdout + result.stderr or "Command executed successfully with no output.",
+            "sandboxed": False,
+            "backend": "unconfined_host",
         }
     except subprocess.TimeoutExpired:
         raise TimeoutError("Command timed out after 120 seconds.")
@@ -111,7 +138,7 @@ def canonical_terminal_callback(command: str, cwd: Optional[str] = None, sandbox
 
 default_registry.register(ToolDefinition(
     name="system.terminal",
-    description="Execute shell commands safely within the workspace boundary.",
+    description="Execute shell commands. In restricted mode (default), commands are strictly isolated to the workspace via container sandbox. In full mode, commands execute with unconfined host privileges.",
     category="system",
     parameters={"command": "str", "cwd": "str"},
     permissions=[Permission.TERMINAL],
@@ -126,7 +153,15 @@ class TerminalTool:
     def __init__(self, agent: Any = None):
         self.agent = agent
 
-    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False, sandboxed: bool = True) -> Any:
+    def run(self, command: str, require_confirm=False, cwd=None, return_exit_code=False, sandboxed: Optional[bool] = None, permission_level: Optional[str] = None) -> Any:
+        """
+        Executes a terminal shell command.
+
+        Security Contract:
+        - Restricted tiers ('sandboxed', 'low', 'medium'): execution is strictly container-isolated.
+          Shell redirection outside the workspace is denied. Fail-closed if sandbox unavailable.
+        - 'full' tier: privileged host execution (unconfined_host) when sandboxed=False.
+        """
         # Check if dangerous
         for blocked in BLOCKED_COMMANDS:
             if blocked in command:
@@ -146,8 +181,6 @@ class TerminalTool:
                 "command": command
             })
 
-        # The configured workspace is the authority boundary. A caller-supplied
-        # cwd selects a directory within that boundary; it must never redefine it.
         workspace_dir = get_workspace_dir()
         target_cwd = cwd if cwd else workspace_dir
 
@@ -167,10 +200,26 @@ class TerminalTool:
             msg = "CWD is outside the allowed workspace boundary."
             return (-1, msg) if return_exit_code else msg
 
-        if sandboxed or config.get("permission_level") == "sandboxed":
+        # Resolve permission level: explicit argument or runtime config, strictly normalized
+        raw_perm = permission_level if permission_level is not None else config.get("permission_level", "medium")
+        perm_level = raw_perm.lower() if isinstance(raw_perm, str) and raw_perm.lower() in ("sandboxed", "low", "medium", "full") else "medium"
+
+        effective_sandboxed = True if sandboxed is None else bool(sandboxed)
+        if perm_level != "full":
+            # In restricted modes (sandboxed, low, medium), execution MUST be sandboxed
+            effective_sandboxed = True
+
+        if effective_sandboxed:
             from lmms_sandbox.runner import default_runner
-            res = default_runner.run(command, workspace_dir=workspace_dir, cwd=target_cwd, require_confirm=False, enforce_sandbox=True)
-            if not res.success and res.exit_code == -1:
+            res = default_runner.run(
+                command,
+                workspace_dir=workspace_dir,
+                cwd=target_cwd,
+                require_confirm=False,
+                confirm_callback=(lambda c, r: True),
+                enforce_sandbox=True
+            )
+            if not res.success and res.exit_code == -1 and res.backend_used == "none":
                 msg = (
                     "REFUSED: Sandbox containment unavailable (bubblewrap/bwrap not found on system).\n"
                     "Reason: LMMS operates in fail-closed security mode; commands will not execute on host without container isolation.\n"
@@ -182,7 +231,7 @@ class TerminalTool:
             return res.output
 
         # Fail-closed: refusing un-sandboxed execution unless permission_level is explicitly 'full'
-        if config.get("permission_level") != "full":
+        if perm_level != "full":
             msg = (
                 "REFUSED: Direct un-sandboxed execution on host is blocked.\n"
                 "Reason: Unsandboxed execution can mutate host environment.\n"
@@ -192,7 +241,11 @@ class TerminalTool:
 
         try:
             if isinstance(command, str):
-                command_args = shlex.split(command)
+                shell_meta = any(op in command for op in [">", "<", "|", "&&", "||", ";", "$(", "`"])
+                if shell_meta:
+                    command_args = ["bash", "-c", command]
+                else:
+                    command_args = shlex.split(command)
             else:
                 command_args = command
 

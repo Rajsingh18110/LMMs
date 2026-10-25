@@ -57,6 +57,7 @@ class OrchestrationPipeline:
         self.prompt_cache = PromptCacheManager()
         self.adapter = InferenceAdapter(engine_url=engine_url)
         self.executor = UnifiedToolExecutor(self.registry)
+        self.completion_guard = getattr(self.executor, "completion_guard", None)
         self.trace_logger = get_trace_logger(debug_mode=debug_mode)
 
     def prepare_request(
@@ -76,6 +77,9 @@ class OrchestrationPipeline:
         """
         if is_planning_mode and active_mode == "/fast":
             active_mode = "/plan"
+
+        if self.completion_guard is not None:
+            self.completion_guard.start_turn()
 
         # 1. Intent Routing (Fast deterministic check)
         t_route_start = time.time()

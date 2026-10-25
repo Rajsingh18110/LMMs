@@ -118,7 +118,14 @@ class IntentRouter:
 
         # Browser automation action patterns
         self._browser_patterns = [
-            r"\b(open|navigate\s+to|browse\s+to|visit)\s+(https?://|www\.|this\s+website|the\s+website|webpage|[a-zA-Z0-9.-]+\.(org|com|net|io|edu|gov))\b",
+            r"\b(open|navigate\s+to|browse\s+to|visit)\s+(https?://|www\.|this\s+website|the\s+website|webpage|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b",
+            r"\b(open|launch)\s+(a\s+)?(chrome|chromium|firefox|brave|edge|browser)\b",
+            r"\b(open\s+(a\s+)?(chrome|chromium|firefox|brave|edge)?\s*browser)\b",
+            r"\b(use|using|by\s+using)\s+(existing|saved|current|cureent|my)?\s*(browser|chrome|login|loggedin|logged-in|session|profile|cookies)\b",
+            r"\b(logged\s*in|current|existing|saved)\s+(id|account|session|profile|browser|cookies)\b",
+            r"\blogin\s+(?:to\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b",
+            r"\b[a-zA-Z0-9.-]+\.(?:in|com|org|net|io|ai|co|app|dev|edu|gov)\b",
+            r"\b(inspect\s+(the\s+)?(site|website|webpage|page|dom))\b",
             r"\b(click\s+(on\s+)?(the\s+)?([a-zA-Z0-9_-]+\s+)?(button|link|element|tab|id|selector))\b",
             r"\b(fill\s+(in\s+)?(the\s+)?(form|input|field|login|password|email|username))\b",
             r"\b(take\s+(a\s+)?screenshot\b.*)",
@@ -195,6 +202,7 @@ class IntentRouter:
         q = re.sub(r"\bopn\b", "open", q)
         q = re.sub(r"\bfiel\b|\bflie\b", "file", q)
         q = re.sub(r"\bchekc\b|\bchck\b", "check", q)
+        q = re.sub(r"\bcureent\b|\bcurret\b", "current", q)
         q = re.sub(r"\bbrower\b|\bborwser\b|\bbroswer\b", "browser", q)
         q = re.sub(r"\brepot\b|\breprt\b", "report", q)
         q = re.sub(r"\bfnd\b", "find", q)
@@ -267,11 +275,16 @@ class IntentRouter:
         if not is_discussion:
             for pattern in self._browser_patterns:
                 if re.search(pattern, norm_query, re.IGNORECASE):
+                    suggested_cats = ["browser"]
+                    if any(k in norm_query for k in ["write", "blog", "file", "save", "create", "edit"]):
+                        suggested_cats.append("files")
+                    if any(k in norm_query for k in ["email", "account", "profile", "identity", "user"]):
+                        suggested_cats.append("system")
                     return IntentResult(
                         intent=IntentType.BROWSER_AUTOMATION,
                         confidence=0.92,
                         requires_tools=True,
-                        suggested_categories=["browser"],
+                        suggested_categories=suggested_cats,
                         task_instructions="The user requested browser navigation or interaction. Inspect the live DOM and interact cleanly.",
                         reason="Matched browser navigation/automation action"
                     )
