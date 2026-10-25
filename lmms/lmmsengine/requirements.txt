@@ -12,7 +12,6 @@ plotext
 textual
 huggingface_hub
 watchdog
-transformers
 
 fastapi
 uvicorn
@@ -22,7 +21,6 @@ PyQt6
 qasync
 markdown
 sqlite-vec
-sentence-transformers
 
 fastapi
 uvicorn[standard]

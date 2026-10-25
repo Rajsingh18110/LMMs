@@ -277,3 +277,24 @@ def test_arrow_key_detection():
     assert _is_up_key("k") is True
     assert _is_down_key("j") is True
 
+
+def test_cli_installer_lightweight_engine_mapping():
+    from lmms.cli.installer import CLIInstaller, ENGINE1_PACKAGES, CLI_PACKAGES
+    installer = CLIInstaller(["--cli"])
+    assert "cli" in installer.selected_components
+    assert "engine1" in installer.selected_components
+    assert "engine2" not in installer.selected_components
+
+    # Verify Engine 1 has llama-cpp-python and no torch/transformers bloat
+    specs1 = [p["spec"] for p in ENGINE1_PACKAGES]
+    assert "llama-cpp-python" in specs1
+    assert "transformers" not in specs1
+    assert "sentence-transformers" not in specs1
+    assert "torch" not in specs1
+
+    # Verify CLI packages include PyQt6 and qasync for /addmodel dialog
+    cli_specs = [p["spec"] for p in CLI_PACKAGES]
+    assert "PyQt6" in cli_specs
+    assert "qasync" in cli_specs
+
+

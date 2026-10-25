@@ -15,10 +15,9 @@ plotext
 textual
 huggingface_hub
 watchdog
-transformers
 
 # =========================================
-# LMMs GUI (PyQt6) Dependencies
+# LMMs GUI (PyQt6) & Model Manager (/addmodel)
 # =========================================
 PyQt6
 PyQt6-WebEngine
@@ -39,10 +38,9 @@ nest_asyncio
 psutil
 
 # =========================================
-# AI / ML & Inference
+# Lightweight AI / ML Inference (llama.cpp + AirEngine)
 # =========================================
 llama-cpp-python
-sentence-transformers
 numpy
 
 # =========================================

@@ -52,6 +52,8 @@ CLI_PACKAGES: List[Dict[str, str]] = [
     {"name": "requests", "spec": "requests", "desc": "HTTP network transport layer"},
     {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
     {"name": "pydantic", "spec": "pydantic", "desc": "Data validation & type schemas"},
+    {"name": "PyQt6", "spec": "PyQt6", "desc": "Model manager dialog & Webhook Hub (/addmodel)"},
+    {"name": "qasync", "spec": "qasync", "desc": "Asyncio loop bridge for Qt dialogs"},
 ]
 
 GUI_PACKAGES: List[Dict[str, str]] = [
@@ -66,6 +68,7 @@ ENGINE_PACKAGES: List[Dict[str, str]] = [
     {"name": "uvicorn", "spec": "uvicorn", "desc": "Lightning-fast ASGI server"},
     {"name": "nest-asyncio", "spec": "nest_asyncio", "desc": "Concurrent event loop patcher"},
     {"name": "huggingface-hub", "spec": "huggingface_hub", "desc": "Hugging Face Model Hub API"},
+    {"name": "llama-cpp-python", "spec": "llama-cpp-python", "desc": "Lightweight GGUF inference runtime (llama.cpp)"},
     {"name": "safetensors", "spec": "safetensors", "desc": "Fast & safe tensor serialization"},
     {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
 ]
@@ -75,6 +78,7 @@ ENGINE1_PACKAGES: List[Dict[str, str]] = [
     {"name": "uvicorn", "spec": "uvicorn", "desc": "Lightning-fast ASGI server"},
     {"name": "nest-asyncio", "spec": "nest_asyncio", "desc": "Concurrent event loop patcher"},
     {"name": "huggingface-hub", "spec": "huggingface_hub", "desc": "Hugging Face Model Hub API"},
+    {"name": "llama-cpp-python", "spec": "llama-cpp-python", "desc": "Lightweight GGUF inference runtime (llama.cpp)"},
     {"name": "psutil", "spec": "psutil", "desc": "Hardware profiler & memory map"},
 ]
 
@@ -310,8 +314,8 @@ def interactive_flowchart_wizard(action_verb: str = "Install") -> List[str]:
         {
             "id": "cli",
             "title": "Terminal Studio (CLI)",
-            "desc": "Interactive AI Shell + Developer Toolchain + Local Engine Client (cli/ branch)",
-            "components": ["cli", "engine"],
+            "desc": "Interactive AI Shell + Developer Toolchain + Lightweight Engine 1 (llama.cpp + AirEngine)",
+            "components": ["cli", "engine1"],
         },
         {
             "id": "all",
@@ -524,9 +528,14 @@ class CLIInstaller:
         has_all = "--all" in self.args or "-a" in self.args
 
         if has_all:
-            self.selected_components = {"cli", "gui", "engine", "voice"}
+            self.selected_components = {"cli", "gui", "engine1", "voice"}
         else:
-            if has_cli: self.selected_components.add("cli")
+            if has_cli:
+                self.selected_components.add("cli")
+                # When installing CLI, default to the lightweight Engine 1 (llama.cpp + AirEngine)
+                # unless heavy PyTorch engine (--engine2) or full super engine (--engine) was explicitly specified
+                if not has_engine and not has_engine2:
+                    self.selected_components.add("engine1")
             if has_gui: self.selected_components.add("gui")
             if has_engine: self.selected_components.add("engine")
             if has_engine1: self.selected_components.add("engine1")
