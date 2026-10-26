@@ -6,7 +6,11 @@ Minimalist, high-throughput streaming interface for local and remote models.
 from __future__ import annotations
 
 import os
-import readline  # enables arrow key navigation & command history
+try:
+    import readline  # enables arrow key navigation & command history (Linux/macOS)
+except ImportError:
+    readline = None  # Windows fallback
+
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -24,6 +28,25 @@ COLOR_GREEN = "\033[32m"
 COLOR_BOLD_WHITE = "\033[1;37m"
 COLOR_RED = "\033[31m"
 COLOR_YELLOW = "\033[33m"
+
+
+def _reset_windows_console():
+    """Restores standard cooked console input mode on Windows and enables VT output."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        hIn = kernel32.GetStdHandle(-10)
+        mode_in = 0x0001 | 0x0002 | 0x0004 | 0x0080 | 0x0040
+        kernel32.SetConsoleMode(hIn, mode_in)
+
+        hOut = kernel32.GetStdHandle(-11)
+        out_mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hOut, ctypes.byref(out_mode)):
+            kernel32.SetConsoleMode(hOut, out_mode.value | 0x0004)
+    except Exception:
+        pass
 
 
 class InteractiveChat:
@@ -67,10 +90,13 @@ class InteractiveChat:
         sys.stdout.write(f"  {COLOR_DIM}Type /help for session controls, /exit to quit.{COLOR_RESET}\n\n")
         sys.stdout.flush()
 
+        _reset_windows_console()
+
         while True:
             try:
-                # Prompt
-                user_input = input(f"{COLOR_BOLD_CYAN}❯{COLOR_RESET} ").strip()
+                # Safe plain prompt on Windows to avoid ANSI SGR 'm' byte buffer pollution
+                prompt_str = "> " if os.name == "nt" else f"{COLOR_BOLD_CYAN}❯{COLOR_RESET} "
+                user_input = input(prompt_str).strip()
             except (KeyboardInterrupt, EOFError):
                 sys.stdout.write(f"\n{COLOR_DIM}Exiting session.{COLOR_RESET}\n")
                 break

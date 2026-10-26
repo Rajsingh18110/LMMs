@@ -252,7 +252,8 @@ def _run_interactive_engine_chat(runtime, model_name: str) -> None:
 
     while True:
         try:
-            user_input = input(f"{COLOR_BOLD_CYAN}>>> {COLOR_RESET}").strip()
+            prompt_str = ">>> " if os.name == "nt" else f"{COLOR_BOLD_CYAN}>>> {COLOR_RESET}"
+            user_input = input(prompt_str).strip()
         except (KeyboardInterrupt, EOFError):
             sys.stdout.write(f"\n{COLOR_DIM}Exiting session.{COLOR_RESET}\n")
             break

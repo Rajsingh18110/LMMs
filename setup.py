@@ -50,7 +50,8 @@ setup(
         "keyring", "debugpy>=1.8.0",
 
         # Voice & Audio
-        "SpeechRecognition", "PyAudio", "gTTS", "pygame",
+        "SpeechRecognition", "PyAudio", "gTTS", "pygame-ce",
+        "pyreadline3; platform_system == 'Windows'",
     ],
     extras_require={
         "pytorch": ["torch", "transformers", "accelerate"],

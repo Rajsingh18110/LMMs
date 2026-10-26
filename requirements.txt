@@ -68,9 +68,10 @@ debugpy>=1.8.0
 SpeechRecognition
 PyAudio
 gTTS
-pygame
+pygame-ce
 edge-tts
 sounddevice
+pyreadline3; platform_system == 'Windows'
 
 # =========================================
 # Model Context Protocol (MCP) Subsystem

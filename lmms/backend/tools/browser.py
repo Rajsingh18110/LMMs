@@ -88,22 +88,42 @@ except ImportError:
 
 def get_chrome_executable_path() -> Optional[str]:
     """
-    Locates the host's official Google Chrome or Chromium executable.
-    Required on Linux so that libsecret/keyring matches the binary identity
-    and decrypts v11 SQLite cookies (like auth_token).
+    Locates the host's official Google Chrome or Chromium executable cross-platform (Linux, macOS, Windows).
     """
     import shutil
-    candidate_paths = [
-        "/opt/google/chrome/chrome",
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium"
-    ]
+    system = platform.system()
+    candidate_paths = []
+    if system == "Linux":
+        candidate_paths = [
+            "/opt/google/chrome/chrome",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium"
+        ]
+    elif system == "Darwin":
+        candidate_paths = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+        ]
+    elif system == "Windows":
+        prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser(r"~\AppData\Local"))
+        candidate_paths = [
+            os.path.join(prog_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(prog_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_app_data, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(prog_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(prog_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+        ]
+
     for p in candidate_paths:
-        if os.path.exists(p) and os.access(p, os.X_OK):
+        if os.path.exists(p) and (system == "Windows" or os.access(p, os.X_OK)):
             return p
-    return shutil.which("google-chrome") or shutil.which("chromium")
+    return shutil.which("google-chrome") or shutil.which("chrome") or shutil.which("chromium")
 
 
 def is_profile_locked(profile_dir: str) -> Tuple[bool, Optional[int]]:
@@ -510,7 +530,15 @@ class BrowserTool:
         # 2. Chrome Session Bridge
         import shutil
         home = os.path.expanduser("~")
-        src_base = os.path.join(home, ".config/google-chrome")
+        system = platform.system()
+        if system == "Windows":
+            local_app_data = os.environ.get("LOCALAPPDATA", f"{home}\\AppData\\Local")
+            src_base = os.path.join(local_app_data, "Google", "Chrome", "User Data")
+        elif system == "Darwin":
+            src_base = os.path.join(home, "Library", "Application Support", "Google", "Chrome")
+        else:
+            src_base = os.path.join(home, ".config/google-chrome")
+
         bridge_dir = os.path.expanduser("~/.lmms/chrome_session_bridge")
         os.makedirs(bridge_dir, exist_ok=True)
         # Safely clear any stale lock in the bridge directory from prior terminated runs

@@ -64,7 +64,10 @@ def get_server_metadata() -> Dict[str, Any]:
 
 def get_ai_python_executable() -> str:
     """Finds the Python interpreter that has AI engine dependencies (llama_cpp, torch) installed."""
-    venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
+    if os.name == "nt":
+        venv_py = os.path.expanduser("~/.lmms/app/venv/Scripts/python.exe")
+    else:
+        venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
     if os.path.exists(venv_py):
         return venv_py
 

@@ -26,6 +26,55 @@ def check_for_updates():
     # Note: LMMs handles updates natively via git pull now
     pass
 
+def _reset_windows_console():
+    """Restores standard cooked console input mode on Windows and enables VT output."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        hIn = kernel32.GetStdHandle(-10)
+        mode_in = 0x0001 | 0x0002 | 0x0004 | 0x0080 | 0x0040
+        kernel32.SetConsoleMode(hIn, mode_in)
+
+        hOut = kernel32.GetStdHandle(-11)
+        out_mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hOut, ctypes.byref(out_mode)):
+            kernel32.SetConsoleMode(hOut, out_mode.value | 0x0004)
+    except Exception:
+        pass
+
+def ensure_lmms_dir() -> str:
+    """Ensures ~/.lmms exists with proper read/write permissions on all platforms."""
+    base = os.path.expanduser("~/.lmms")
+    os.makedirs(base, exist_ok=True)
+    if os.name == "nt":
+        try:
+            username = os.environ.get("USERNAME", "")
+            if username:
+                subprocess.run(
+                    f'icacls "{base}" /grant "{username}:(OI)(CI)F" /T /Q',
+                    shell=True, capture_output=True
+                )
+        except Exception:
+            pass
+    return base
+
+def check_windows_path():
+    """Notifies Windows users if Python Scripts directory is missing from PATH."""
+    if os.name != "nt":
+        return
+    try:
+        scripts_dir = os.path.normpath(os.path.join(site.getusersitepackages(), '..', 'Scripts'))
+        path_dirs = [os.path.normcase(os.path.normpath(p)) for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+        if os.path.normcase(scripts_dir) not in path_dirs:
+            print(f"\n\033[1;33m[LMMs Windows Notice]\033[0m Python Scripts directory is not in your PATH:")
+            print(f"  {scripts_dir}")
+            print(f"  To fix, run in PowerShell (as User):")
+            print(f"  $p = [Environment]::GetEnvironmentVariable('PATH', 'User'); [Environment]::SetEnvironmentVariable('PATH', $p + ';{scripts_dir}', 'User')\n")
+    except Exception:
+        pass
+
 CONFIG_PATH = os.path.expanduser("~/.lmms/config/config.json")
 LEGACY_CONFIG_PATH = os.path.expanduser("~/.lmms/config.json")
 
@@ -80,18 +129,22 @@ def save_config(config):
         pass
 
 def uninstall_main():
+    import shutil
     args = [a.lower() for a in sys.argv[1:]]
-    src_dir = os.path.expanduser("~/.lmms/app/src")
+    lmms_dir = os.path.expanduser("~/.lmms")
+    src_dir = os.path.join(lmms_dir, "app", "src")
     if "--purge" in args or "-purge" in args or "purge" in args:
         print("\033[91m[WARNING]\033[0m Factory reset initiated. Deleting all data, models, and code...")
-        subprocess.run("rm -rf ~/.lmms", shell=True)
+        if os.path.exists(lmms_dir):
+            shutil.rmtree(lmms_dir, ignore_errors=True)
         print("\033[92m[SUCCESS]\033[0m Total Purge complete. LMMs is fully uninstalled.")
     else:
         if not os.path.exists(src_dir):
             print("\033[92m[SUCCESS]\033[0m LMMs source code is already uninstalled. Nothing to remove.")
             return
         print("\033[91m[WARNING]\033[0m Removing LMMs source code. User data (models, chats) is kept safe.")
-        subprocess.run(f"rm -rf {src_dir}", shell=True)
+        if os.path.exists(src_dir):
+            shutil.rmtree(src_dir, ignore_errors=True)
         reg_path = os.path.expanduser("~/.lmms/config/installed_components.json")
         if os.path.exists(reg_path):
             try:
@@ -235,6 +288,9 @@ def get_installed_components():
     return installed
 
 def main():
+    ensure_lmms_dir()
+    _reset_windows_console()
+    check_windows_path()
     threading.Thread(target=check_for_updates, daemon=True).start()
     args = sys.argv[1:]
     config = load_config()
@@ -395,7 +451,10 @@ def launch(mode, forward_args=None, ensure_engine=True):
         from lmms.api.service import get_ai_python_executable
         py_exe = get_ai_python_executable()
     except Exception:
-        venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
+        if os.name == "nt":
+            venv_py = os.path.expanduser("~/.lmms/app/venv/Scripts/python.exe")
+        else:
+            venv_py = os.path.expanduser("~/.lmms/app/venv/bin/python")
         py_exe = venv_py if os.path.exists(venv_py) else sys.executable
 
     # Check if an online model is actively configured; if so, skip local heavy engine startup

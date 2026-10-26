@@ -471,6 +471,16 @@ def sync_lmms_config(installed_components: List[str]) -> None:
     try:
         config_dir = os.path.expanduser("~/.lmms")
         os.makedirs(config_dir, exist_ok=True)
+        if os.name == "nt":
+            try:
+                username = os.environ.get("USERNAME", "")
+                if username:
+                    subprocess.run(
+                        f'icacls "{config_dir}" /grant "{username}:(OI)(CI)F" /T /Q',
+                        shell=True, capture_output=True
+                    )
+            except Exception:
+                pass
         config_path = os.path.join(config_dir, "config.json")
 
         config: Dict[str, object] = {}
@@ -753,6 +763,23 @@ class CLIInstaller:
             sys.stdout.write(f"\n{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms gui{COLOR_RESET}{COLOR_DIM}' to open Desktop Studio GUI.{COLOR_RESET}\n\n")
         elif "cli" in self.selected_components:
             sys.stdout.write(f"\n{COLOR_DIM}Next step: Run '{COLOR_BOLD_CYAN}lmms{COLOR_RESET}{COLOR_DIM}' or '{COLOR_BOLD_CYAN}lmms run <model>{COLOR_RESET}{COLOR_DIM}' to launch Interactive Shell.{COLOR_RESET}\n\n")
+
+        # Windows PATH notification
+        if os.name == "nt":
+            try:
+                import site
+                scripts_dir = os.path.normpath(os.path.join(site.getusersitepackages(), '..', 'Scripts'))
+                path_dirs = [os.path.normcase(os.path.normpath(p)) for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+                if os.path.normcase(scripts_dir) not in path_dirs:
+                    sys.stdout.write(
+                        f"\n{COLOR_YELLOW}[NOTICE] Add Python Scripts to PATH to use the 'lmms' command from any terminal:{COLOR_RESET}\n"
+                        f"  {scripts_dir}\n"
+                        f"  PowerShell command:\n"
+                        f"  $p = [Environment]::GetEnvironmentVariable('PATH', 'User'); [Environment]::SetEnvironmentVariable('PATH', $p + ';{scripts_dir}', 'User')\n\n"
+                    )
+            except Exception:
+                pass
+
         sys.stdout.flush()
 
     def _render_interactive(self) -> None:

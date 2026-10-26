@@ -165,8 +165,56 @@ def extract_base_command_prefix(command_str: str) -> str:
     return first
 
 
-def _read_single_key(fd) -> str:
-    """Reads a single key or ANSI escape sequence from stdin."""
+def _flush_input_buffer(fd: Optional[int] = None) -> None:
+    """Flushes any leftover keystrokes in stdin to prevent buffer bleeding into subsequent prompts."""
+    if os.name == "nt":
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                msvcrt.getch()
+        except Exception:
+            pass
+    else:
+        try:
+            import termios
+            if fd is not None:
+                termios.tcflush(fd, termios.TCIFLUSH)
+        except Exception:
+            pass
+
+
+def _read_single_key(fd: Optional[int] = None) -> str:
+    """Reads a single key or ANSI escape sequence from stdin cross-platform."""
+    if os.name == "nt":
+        try:
+            import msvcrt
+            ch = msvcrt.getch()
+            if ch in (b"\x00", b"\xe0"):
+                ch2 = msvcrt.getch()
+                if ch2 == b"H": return "\x1b[A"
+                elif ch2 == b"P": return "\x1b[B"
+                elif ch2 == b"K": return "\x1b[D"
+                elif ch2 == b"M": return "\x1b[C"
+                return ""
+            elif ch in (b"\r", b"\n"):
+                return "\n"
+            elif ch == b"\x1b":
+                return "\x1b"
+            elif ch == b"\t":
+                return "\t"
+            elif ch == b"\x07":
+                return "\x07"
+            elif ch == b"\x12":
+                return "\x12"
+            elif ch == b"\x03":
+                return "\x03"
+            try:
+                return ch.decode("latin1", errors="ignore")
+            except Exception:
+                return ""
+        except Exception:
+            return ""
+
     try:
         raw = os.read(fd, 32).decode("utf-8", errors="ignore")
     except Exception:
@@ -175,14 +223,14 @@ def _read_single_key(fd) -> str:
         return ""
     if raw == "\x1b":
         # Check if more characters are immediately available (escape sequence)
-        import select
-        r, _, _ = select.select([fd], [], [], 0.08)
-        if r:
-            try:
+        try:
+            import select
+            r, _, _ = select.select([fd], [], [], 0.08)
+            if r:
                 more = os.read(fd, 31).decode("utf-8", errors="ignore")
                 raw += more
-            except Exception:
-                pass
+        except Exception:
+            pass
     return raw
 
 
@@ -255,11 +303,16 @@ def ask_permission_interactive(
             return PermissionResult(PermissionAction.DENY, prefix, clean_cmd)
 
     # Interactive TTY mode with ANSI navigation
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    old_settings = None
+    fd = None
+    if os.name != "nt":
+        try:
+            import termios
+            import tty
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+        except Exception:
+            pass
 
     selected_idx = 0
     num_options = len(options)
@@ -292,8 +345,13 @@ def ask_permission_interactive(
         sys.stdout.flush()
 
     try:
-        termios.tcflush(fd, termios.TCIFLUSH)
-        tty.setcbreak(fd)
+        _flush_input_buffer(fd)
+        if os.name != "nt" and fd is not None:
+            try:
+                import tty
+                tty.setcbreak(fd)
+            except Exception:
+                pass
         render_menu(selected_idx, first_time=True)
 
         while True:
@@ -313,28 +371,45 @@ def ask_permission_interactive(
                 render_menu(selected_idx)
                 break
             elif key in ("\t", "\x07"):  # Tab (Amend) or Ctrl+G (edit/expand)
-                # Restore terminal temporarily to prompt for amended command
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                if os.name != "nt" and old_settings is not None and fd is not None:
+                    try:
+                        import termios
+                        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    except Exception:
+                        pass
                 sys.stdout.write("\n\033[1;33mAmend command:\033[0m ")
                 sys.stdout.flush()
                 try:
-                    import readline
-                    readline.set_startup_hook(lambda: readline.insert_text(clean_cmd))
+                    try:
+                        import readline
+                        readline.set_startup_hook(lambda: readline.insert_text(clean_cmd))
+                    except ImportError:
+                        readline = None
                     amended = input().strip()
-                    readline.set_startup_hook(None)
+                    if readline:
+                        readline.set_startup_hook(None)
                     if amended:
                         clean_cmd = amended
                         prefix = extract_base_command_prefix(clean_cmd)
                         options = build_options(prefix)
                 except Exception:
                     pass
-                # Re-enter cbreak mode and re-render header & menu
-                tty.setcbreak(fd)
+                if os.name != "nt" and fd is not None:
+                    try:
+                        import tty
+                        tty.setcbreak(fd)
+                    except Exception:
+                        pass
                 print_header(clean_cmd)
                 render_menu(selected_idx, first_time=True)
 
             elif key == "\x12":  # Ctrl+R (Review)
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                if os.name != "nt" and old_settings is not None and fd is not None:
+                    try:
+                        import termios
+                        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    except Exception:
+                        pass
                 sys.stdout.write("\n\033[1;34m─── Command Review ───────────────────────────\033[0m\n")
                 sys.stdout.write(f"  \033[1;37mCommand:\033[0m   {clean_cmd}\n")
                 sys.stdout.write(f"  \033[1;37mPrefix:\033[0m    {prefix}\n")
@@ -345,7 +420,12 @@ def ask_permission_interactive(
                 sys.stdout.write("\033[1;34m──────────────────────────────────────────────\033[0m\n")
                 sys.stdout.write("\033[dim]Press any key to return to menu...\033[0m")
                 sys.stdout.flush()
-                tty.setcbreak(fd)
+                if os.name != "nt" and fd is not None:
+                    try:
+                        import tty
+                        tty.setcbreak(fd)
+                    except Exception:
+                        pass
                 _read_single_key(fd)
                 print_header(clean_cmd)
                 render_menu(selected_idx, first_time=True)
@@ -356,7 +436,13 @@ def ask_permission_interactive(
     except Exception:
         selected_idx = 3
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if os.name != "nt" and old_settings is not None and fd is not None:
+            try:
+                import termios
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+        _flush_input_buffer(fd)
         sys.stdout.write("\n")
         sys.stdout.flush()
 
@@ -405,11 +491,17 @@ def ask_browser_profile_interactive(profiles: dict) -> Optional[dict]:
             pass
         return None
 
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    # Interactive TTY mode with ANSI navigation
+    old_settings = None
+    fd = None
+    if os.name != "nt":
+        try:
+            import termios
+            import tty
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+        except Exception:
+            pass
 
     selected_idx = 0
     num_options = len(options)
@@ -466,8 +558,13 @@ def ask_browser_profile_interactive(profiles: dict) -> Optional[dict]:
         last_drawn_lines[0] = lines_printed
 
     try:
-        termios.tcflush(fd, termios.TCIFLUSH)
-        tty.setcbreak(fd)
+        _flush_input_buffer(fd)
+        if os.name != "nt" and fd is not None:
+            try:
+                import tty
+                tty.setcbreak(fd)
+            except Exception:
+                pass
         render_menu(selected_idx, first_time=True)
 
         num_buffer = ""
@@ -506,7 +603,13 @@ def ask_browser_profile_interactive(profiles: dict) -> Optional[dict]:
     except Exception:
         selected_idx = cancel_idx
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if os.name != "nt" and old_settings is not None and fd is not None:
+            try:
+                import termios
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+        _flush_input_buffer(fd)
         sys.stdout.write("\n")
         sys.stdout.flush()
 

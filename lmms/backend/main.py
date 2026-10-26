@@ -38,6 +38,24 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.live import Live
+
+def _reset_windows_console():
+    """Restores standard cooked console input mode on Windows and enables VT output."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        hIn = kernel32.GetStdHandle(-10)
+        mode_in = 0x0001 | 0x0002 | 0x0004 | 0x0080 | 0x0040
+        kernel32.SetConsoleMode(hIn, mode_in)
+
+        hOut = kernel32.GetStdHandle(-11)
+        out_mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hOut, ctypes.byref(out_mode)):
+            kernel32.SetConsoleMode(hOut, out_mode.value | 0x0004)
+    except Exception:
+        pass
 from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.formatted_text import HTML, ANSI
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -1275,7 +1293,14 @@ def run_cli():
     from prompt_toolkit.key_binding import KeyBindings
     kb = KeyBindings()
 
+    # Windows & Cross-Platform: explicitly bind Enter and Ctrl+M to accept input buffer
+    @kb.add('enter')
+    @kb.add('c-m')
+    def _(event):
+        event.current_buffer.validate_and_handle()
+
     @kb.add('f4')
+    @kb.add('c-space')
     def _(event):
         event.app.current_buffer.text = '/voice'
         event.app.current_buffer.validate_and_handle()
@@ -1296,6 +1321,7 @@ def run_cli():
     _cached_engine_health = [check_engine_health()]
 
     def get_bottom_toolbar():
+        import platform
         from lmms.backend.core.registry.online_models import OnlineModelRegistry
         is_cloud_active = (OnlineModelRegistry.get_active_type() == "online")
         if is_cloud_active:
@@ -1308,6 +1334,7 @@ def run_cli():
         
         display_m = get_clean_model_display_name(current_model)
         img_badge = f"│ <ansimagenta>📷 {len(pending_images)} attached</ansimagenta> " if pending_images else "│ <ansigray>📷 /image</ansigray> "
+        voice_hint = "[/voice]" if platform.system() == "Windows" else "[F4]"
         return HTML(
             f' <ansigray>Engine:</ansigray> <{status_color}>{status_text}</{status_color}> │ '
             f'<ansigray>Model:</ansigray> <ansigreen>{display_m}</ansigreen> │ '
@@ -1315,12 +1342,12 @@ def run_cli():
             f'<ansigray>Workspace:</ansigray> <ansigreen>{current_workspace}</ansigreen> │ '
             f'<ansigray>Perms:</ansigray> <ansicyan>{current_permission_level}</ansicyan> '
             f'{img_badge}│ '
-            f'<ansiyellow>[F4]</ansiyellow> <ansigray>🎙️ Voice</ansigray> '
+            f'<ansiyellow>{voice_hint}</ansiyellow> <ansigray>🎙️ Voice</ansigray> '
         )
 
     session = PromptSession(
         completer=ThreadedCompleter(CommandCompleter()),
-        complete_while_typing=True,
+        complete_while_typing=False,
         bottom_toolbar=get_bottom_toolbar,
         key_bindings=kb,
         reserve_space_for_menu=8
@@ -1354,6 +1381,8 @@ def run_cli():
     vsession = None
     pending_images = []
 
+    _reset_windows_console()
+
     while True:
         voice_mode_active = False
         vsession = None
@@ -1365,11 +1394,13 @@ def run_cli():
         try:
             try:
                 with patch_stdout():
-                    cmd = session.prompt(HTML('<ansicyan>❯</ansicyan> ')).strip()
+                    prompt_str = HTML('> ' if os.name == 'nt' else '<ansicyan>❯</ansicyan> ')
+                    cmd = session.prompt(prompt_str).strip()
             except (KeyboardInterrupt, EOFError):
                 raise
             except Exception:
-                sys.stdout.write("❯ ")
+                prompt_mark = "> " if os.name == "nt" else "❯ "
+                sys.stdout.write(prompt_mark)
                 sys.stdout.flush()
                 cmd = sys.stdin.readline().strip()
 
@@ -1381,7 +1412,10 @@ def run_cli():
             if cmd_raw in ["/mic", "/voice"]:
                 import platform
                 if platform.system() == "Windows":
-                    console.print("[yellow]Microphone/Voice recording natively on Windows is not yet supported. Please use text input.[/yellow]")
+                    console.print("[yellow]Microphone/Voice recording is currently supported on Linux. On Windows, please use text input or install sox/ffmpeg.[/yellow]")
+                    continue
+                if platform.system() == "Darwin":
+                    console.print("[yellow]Microphone/Voice recording via arecord is Linux-specific. On macOS, please use text input or sox/rec.[/yellow]")
                     continue
                     
                 import speech_recognition as sr
